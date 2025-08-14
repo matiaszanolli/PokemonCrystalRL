@@ -723,9 +723,9 @@ TEAM: {len(party)} Pokemon"""
             datetime.now().isoformat(),
             visual_context.screen_type,
             visual_context.game_phase,
-            json.dumps([{"text": t.text, "location": t.location, "confidence": t.confidence} 
+            json.dumps([{"text": t.text, "location": t.location, "confidence": float(t.confidence)} 
                        for t in visual_context.detected_text]),
-            json.dumps([{"type": e.element_type, "confidence": e.confidence} 
+            json.dumps([{"type": e.element_type, "confidence": float(e.confidence)} 
                        for e in visual_context.ui_elements]),
             json.dumps(visual_context.dominant_colors),
             visual_context.visual_summary

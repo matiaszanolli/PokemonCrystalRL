@@ -8,13 +8,25 @@ and game state analysis.
 
 import cv2
 import numpy as np
-import easyocr
+# import easyocr  # Replaced with custom Pokemon font decoder
 from PIL import Image, ImageEnhance, ImageFilter
 from typing import Dict, List, Tuple, Optional, Any
 import base64
 import io
 from dataclasses import dataclass
 import re
+
+# Import our custom Pokemon font decoder
+try:
+    from enhanced_font_decoder import ROMFontDecoder
+    print("📚 Using ROM-based font decoder")
+except ImportError:
+    try:
+        from pokemon_font_decoder import PokemonFontDecoder as ROMFontDecoder
+        print("📚 Using fallback font decoder")
+    except ImportError:
+        print("⚠️ No font decoder available, text recognition disabled")
+        ROMFontDecoder = None
 
 
 @dataclass
@@ -52,9 +64,16 @@ class PokemonVisionProcessor:
     
     def __init__(self):
         """Initialize the vision processor"""
-        # Initialize EasyOCR with English language
+        # Initialize custom Pokemon Crystal font decoder
         print("🔍 Initializing vision processor...")
-        self.ocr_reader = easyocr.Reader(['en'], gpu=True)
+        
+        if ROMFontDecoder is not None:
+            self.font_decoder = ROMFontDecoder()
+            print("📚 Using ROM-based font decoder for improved accuracy")
+        else:
+            # Fallback to basic text recognition
+            self.font_decoder = None
+            print("⚠️ No font decoder available, using basic text detection")
         
         # Game-specific color definitions (Game Boy Color palette)
         self.pokemon_colors = {
@@ -151,32 +170,74 @@ class PokemonVisionProcessor:
         return upscaled
     
     def _detect_text(self, image: np.ndarray) -> List[DetectedText]:
-        """Detect and extract text from the screenshot"""
+        """Detect and extract text using Pokemon Crystal font decoder"""
+        detected_texts = []
+        
+        if self.font_decoder is None:
+            # No font decoder available, return empty list
+            return detected_texts
+        
         try:
-            # OCR detection
-            results = self.ocr_reader.readtext(image, paragraph=False, width_ths=0.9)
+            # Extract text regions using ROM font decoder
+            height, width = image.shape[:2]
             
-            detected_texts = []
-            for (bbox, text, confidence) in results:
-                if confidence > 0.5 and len(text.strip()) > 1:  # Filter low confidence
-                    # Convert bbox format
-                    x1, y1 = int(bbox[0][0]), int(bbox[0][1])
-                    x2, y2 = int(bbox[2][0]), int(bbox[2][1])
+            # Define text regions to scan
+            text_regions = {
+                'dialogue': image[int(height * 0.7):, :],  # Bottom 30%
+                'ui': image[:int(height * 0.3), int(width * 0.6):],  # Top-right
+                'menu': image[:, int(width * 0.7):],  # Right side
+                'world': image[int(height * 0.3):int(height * 0.7), :int(width * 0.6)]  # Center-left
+            }
+            
+            for region_name, region_img in text_regions.items():
+                if region_img.size == 0:
+                    continue
+                
+                # Use ROM font decoder to extract text from this region
+                try:
+                    decoded_text = self.font_decoder.decode_text_region(region_img)
                     
-                    # Classify text location
-                    location = self._classify_text_location((x1, y1, x2, y2), image.shape)
-                    
-                    detected_texts.append(DetectedText(
-                        text=text.strip(),
-                        confidence=confidence,
-                        bbox=(x1, y1, x2, y2),
-                        location=location
-                    ))
+                    if decoded_text and len(decoded_text.strip()) > 0:
+                        # Calculate bbox for this region in full image coordinates
+                        if region_name == 'dialogue':
+                            bbox = (0, int(height * 0.7), width, int(height * 0.3))
+                        elif region_name == 'ui':
+                            bbox = (int(width * 0.6), 0, int(width * 0.4), int(height * 0.3))
+                        elif region_name == 'menu':
+                            bbox = (int(width * 0.7), 0, int(width * 0.3), height)
+                        else:  # world
+                            bbox = (0, int(height * 0.3), int(width * 0.6), int(height * 0.4))
+                        
+                        # Split into lines and add each line
+                        lines = decoded_text.split('\n')
+                        for i, line in enumerate(lines):
+                            line = line.strip()
+                            if len(line) > 0:
+                                # Adjust bbox for individual lines
+                                line_height = bbox[3] // max(1, len(lines))
+                                line_bbox = (
+                                    bbox[0], 
+                                    bbox[1] + i * line_height,
+                                    bbox[2],
+                                    min(line_height, bbox[3] - i * line_height)
+                                )
+                                
+                                detected_texts.append(DetectedText(
+                                    text=line,
+                                    confidence=0.8,  # High confidence for ROM decoder
+                                    bbox=line_bbox,
+                                    location=region_name
+                                ))
+                        
+                except Exception as region_e:
+                    # If ROM decoder fails, try basic text detection
+                    print(f"⚠️ ROM decoder failed for {region_name}: {region_e}")
+                    continue
             
             return detected_texts
             
         except Exception as e:
-            print(f"⚠️ OCR detection failed: {e}")
+            print(f"⚠️ Text detection failed: {e}")
             return []
     
     def _classify_text_location(self, bbox: Tuple[int, int, int, int], 
