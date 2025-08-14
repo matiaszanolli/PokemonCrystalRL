@@ -373,15 +373,15 @@ class PokemonVisionProcessor:
         return None
     
     def _detect_health_bars(self, image: np.ndarray, hsv_image: np.ndarray) -> List[GameUIElement]:
-        """Detect Pokemon health bars with improved criteria"""
+        """Detect Pokemon health bars with strict battle-specific criteria"""
         health_bars = []
         
         try:
-            # Define more restrictive color ranges for actual health bars
+            # Very restrictive color ranges for actual health bars only
             health_colors = [
-                ((40, 120, 120), (80, 255, 255)),  # Green (more restrictive)
-                ((20, 120, 120), (40, 255, 255)),  # Yellow (more restrictive)
-                ((0, 120, 120), (20, 255, 255))    # Red (more restrictive)
+                ((45, 150, 150), (75, 255, 255)),  # Green (very restrictive)
+                ((25, 150, 150), (35, 255, 255)),  # Yellow (very restrictive)
+                ((0, 150, 150), (15, 255, 255))    # Red (very restrictive)
             ]
             
             height, width = image.shape[:2]
@@ -393,24 +393,27 @@ class PokemonVisionProcessor:
                 for contour in contours:
                     x, y, w, h = cv2.boundingRect(contour)
                     
-                    # More restrictive criteria for health bars
+                    # Very strict criteria for health bars
                     aspect_ratio = w / h if h > 0 else 0
                     area = w * h
                     rel_y = y / height
+                    rel_x = x / width
                     
-                    # Health bars should be:
-                    # 1. Horizontal rectangles with aspect ratio 3:1 to 8:1
-                    # 2. Reasonable size (not tiny UI elements)
-                    # 3. In specific screen areas (top 40% for battle UI)
-                    if (3 <= aspect_ratio <= 8 and 
-                        w >= 30 and h >= 6 and 
-                        area >= 200 and
-                        rel_y <= 0.4):  # Only in top portion of screen
+                    # Health bars must be:
+                    # 1. Horizontal rectangles with aspect ratio 4:1 to 10:1 (more strict)
+                    # 2. Substantial size (not decorative elements)
+                    # 3. In battle UI areas (top 35% and not center)
+                    # 4. Not in home/building interior areas (center region)
+                    if (4 <= aspect_ratio <= 10 and 
+                        w >= 40 and h >= 4 and h <= 12 and
+                        area >= 160 and area <= 1000 and
+                        rel_y <= 0.35 and
+                        not (0.2 <= rel_x <= 0.8 and 0.3 <= rel_y <= 0.7)):  # Exclude center area (home interior)
                         
                         health_bars.append(GameUIElement(
                             element_type='healthbar',
                             bbox=(x, y, x + w, y + h),
-                            confidence=0.8
+                            confidence=0.9
                         ))
         
         except Exception as e:
@@ -457,7 +460,9 @@ class PokemonVisionProcessor:
     
     def _classify_screen_type(self, image: np.ndarray, detected_text: List[DetectedText], 
                              ui_elements: List[GameUIElement]) -> str:
-        """Classify what type of screen is being shown"""
+        """Classify what type of screen is being shown with improved accuracy"""
+        
+        all_text = ' '.join([t.text.lower() for t in detected_text])
         
         # Check for dialogue FIRST and with higher priority
         dialogue_texts = [t for t in detected_text if t.location == 'dialogue']
@@ -466,11 +471,14 @@ class PokemonVisionProcessor:
         if dialogue_texts or dialogue_boxes:
             return 'dialogue'
         
-        # Check for actual battle context (requires multiple indicators)
-        health_bars = [e for e in ui_elements if e.element_type == 'healthbar']
-        all_text = ' '.join([t.text.lower() for t in detected_text])
+        # Check for indoor/home environment indicators first
+        if self._is_indoor_environment(image, detected_text, all_text):
+            return 'overworld'  # Indoor areas are part of overworld
         
-        # Battle detection requires health bars AND battle-specific text/context
+        # Check for actual battle context (requires multiple strong indicators)
+        health_bars = [e for e in ui_elements if e.element_type == 'healthbar']
+        
+        # Battle detection requires health bars AND battle-specific context
         if health_bars and self._is_actual_battle(image, detected_text, health_bars):
             return 'battle'
         
@@ -488,32 +496,83 @@ class PokemonVisionProcessor:
         # Default to overworld
         return 'overworld'
     
+    def _is_indoor_environment(self, image: np.ndarray, detected_text: List[DetectedText], all_text: str) -> bool:
+        """Detect if we're in an indoor environment (home, building, etc.)"""
+        
+        # Check for indoor environment indicators
+        indoor_keywords = ['home', 'house', 'room', 'inside', 'mom', 'bed', 'pc', 'stairs', 'upstairs', 'downstairs']
+        indoor_text_found = any(keyword in all_text for keyword in indoor_keywords)
+        
+        # Check visual characteristics of indoor environments
+        height, width = image.shape[:2]
+        
+        # Indoor environments often have:
+        # 1. More muted/darker colors
+        # 2. Furniture-like rectangular patterns
+        # 3. No sky/outdoor elements
+        # 4. Different color palette than battles
+        
+        # Simple heuristic: check if the image has typical indoor color distribution
+        hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        
+        # Check for brown/wooden colors (furniture)
+        brown_lower = np.array([10, 50, 50])
+        brown_upper = np.array([20, 255, 200])
+        brown_mask = cv2.inRange(hsv_image, brown_lower, brown_upper)
+        brown_ratio = np.sum(brown_mask > 0) / (height * width)
+        
+        # Check for typical indoor lighting (not too bright, not too dark)
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        avg_brightness = np.mean(gray)
+        
+        # Indoor environments typically have moderate brightness and some brown/furniture colors
+        visual_indoor_indicators = brown_ratio > 0.1 and 80 <= avg_brightness <= 180
+        
+        return indoor_text_found or visual_indoor_indicators
+    
     def _is_actual_battle(self, image: np.ndarray, detected_text: List[DetectedText], 
                          health_bars: List[GameUIElement]) -> bool:
-        """Determine if health bars indicate an actual battle vs UI elements"""
+        """Determine if health bars indicate an actual battle vs UI elements - very strict"""
         
         # Battle indicators
         all_text = ' '.join([t.text.lower() for t in detected_text])
         
-        # Check for battle-specific text
-        battle_keywords = ['attack', 'fight', 'run', 'pokemon', 'hp', 'lv', 'level']
-        battle_text_found = any(keyword in all_text for keyword in battle_keywords)
+        # Check for explicit battle-specific text (more specific keywords)
+        battle_keywords = ['fight', 'run', 'pkmn', 'attack', 'move', 'wild', 'appeared', 'fainted']
+        strong_battle_keywords = ['fight', 'run', 'wild', 'appeared', 'fainted']
         
-        # Check health bar positioning (battle health bars are typically in specific locations)
+        battle_text_found = any(keyword in all_text for keyword in battle_keywords)
+        strong_battle_text = any(keyword in all_text for keyword in strong_battle_keywords)
+        
+        # Exclude indoor/home environment
+        indoor_keywords = ['home', 'house', 'room', 'mom', 'bed', 'pc']
+        is_indoor = any(keyword in all_text for keyword in indoor_keywords)
+        
+        if is_indoor:
+            return False  # Never classify indoor areas as battles
+        
+        # Check health bar positioning (battle health bars are in very specific locations)
         height, width = image.shape[:2]
-        battle_positioned_bars = 0
+        valid_battle_bars = 0
         
         for bar in health_bars:
             x1, y1, x2, y2 = bar.bbox
             rel_y = y1 / height
+            rel_x = x1 / width
             
-            # Battle health bars are typically in top portion (0.1 - 0.4) or specific battle UI areas
-            if 0.1 <= rel_y <= 0.4:
-                battle_positioned_bars += 1
+            # Battle health bars are typically:
+            # - In top-left or top-right corners
+            # - Very specific positioning
+            # - Not in center areas where furniture/decorations might be
+            if ((rel_y <= 0.25 and rel_x <= 0.6) or  # Top-left area
+                (rel_y <= 0.25 and rel_x >= 0.4)):   # Top-right area
+                valid_battle_bars += 1
         
-        # Require BOTH battle text AND properly positioned health bars
-        # OR multiple health bars in battle positions
-        return (battle_text_found and battle_positioned_bars > 0) or battle_positioned_bars >= 2
+        # Very strict requirements:
+        # 1. Must have strong battle text OR multiple properly positioned health bars
+        # 2. Cannot be in indoor environment
+        # 3. Must have at least one valid battle-positioned health bar
+        return (strong_battle_text or valid_battle_bars >= 2) and valid_battle_bars > 0
     
     def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
         """Extract dominant colors from the screenshot"""
