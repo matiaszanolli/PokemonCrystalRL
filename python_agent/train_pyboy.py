@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-train.py - RL training script using Stable Baselines3
+train_pyboy.py - Training script using PyBoy environment
 """
 
 import os
@@ -18,26 +19,25 @@ from stable_baselines3.common.callbacks import (
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
-from env import PokemonCrystalEnv
-from utils import create_custom_cnn_policy
+from pyboy_env import PyBoyPokemonCrystalEnv
 
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Train RL agent on Pokémon Crystal')
+    parser = argparse.ArgumentParser(description='Train RL agent on Pokémon Crystal using PyBoy')
     
     parser.add_argument('--algorithm', type=str, default='ppo',
                        choices=['ppo', 'dqn', 'a2c'],
                        help='RL algorithm to use')
     
-    parser.add_argument('--total-timesteps', type=int, default=1000000,
+    parser.add_argument('--total-timesteps', type=int, default=100000,
                        help='Total training timesteps')
-    
-    parser.add_argument('--emulator-path', type=str, default='/usr/games/mgba-qt',
-                       help='Path to emulator executable')
     
     parser.add_argument('--rom-path', type=str, default='../pokecrystal.gbc',
                        help='Path to Pokémon Crystal ROM')
+    
+    parser.add_argument('--save-state-path', type=str, default=None,
+                       help='Path to PyBoy save state file')
     
     parser.add_argument('--model-save-path', type=str, default='models',
                        help='Directory to save trained models')
@@ -66,25 +66,27 @@ def parse_args():
     parser.add_argument('--verbose', type=int, default=1,
                        help='Verbosity level')
     
-    parser.add_argument('--run-id', type=int, default=None,
-                       help='Training run ID for monitoring')
+    parser.add_argument('--headless', action='store_true',
+                       help='Run in headless mode (no GUI)')
     
     return parser.parse_args()
 
 
-def create_env(emulator_path: str, rom_path: str, rank: int = 0):
+def create_env(rom_path: str, save_state_path: str, headless: bool = True, rank: int = 0):
     """
     Create a single environment instance
     
     Args:
-        emulator_path: Path to emulator
         rom_path: Path to ROM file
+        save_state_path: Path to save state file
+        headless: Run in headless mode
         rank: Environment rank (for multi-env setups)
     """
     def _init():
-        env = PokemonCrystalEnv(
-            emulator_path=emulator_path,
-            rom_path=rom_path
+        env = PyBoyPokemonCrystalEnv(
+            rom_path=rom_path,
+            save_state_path=save_state_path,
+            headless=headless
         )
         env = Monitor(env, filename=None)
         return env
@@ -166,7 +168,7 @@ def setup_callbacks(model_save_path: str, eval_env, eval_freq: int, save_freq: i
     checkpoint_callback = CheckpointCallback(
         save_freq=save_freq,
         save_path=model_save_path,
-        name_prefix='pokemon_crystal_rl'
+        name_prefix='pokemon_crystal_pyboy_rl'
     )
     callbacks.append(checkpoint_callback)
     
@@ -181,13 +183,6 @@ def setup_callbacks(model_save_path: str, eval_env, eval_freq: int, save_freq: i
     )
     callbacks.append(eval_callback)
     
-    # Stop training when reward threshold is reached (optional)
-    # stop_callback = StopTrainingOnRewardThreshold(
-    #     reward_threshold=1000,  # Adjust based on your reward scale
-    #     verbose=1
-    # )
-    # callbacks.append(stop_callback)
-    
     return callbacks
 
 
@@ -199,23 +194,32 @@ def main():
     os.makedirs(args.model_save_path, exist_ok=True)
     os.makedirs(args.log_path, exist_ok=True)
     
-    print(f"Training Pokémon Crystal RL agent")
+    print(f"🎮 Training Pokémon Crystal RL agent with PyBoy")
     print(f"Algorithm: {args.algorithm}")
     print(f"Total timesteps: {args.total_timesteps}")
     print(f"Number of environments: {args.n_envs}")
     print(f"Device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
+    print(f"Headless mode: {args.headless}")
     
     # Create training environment(s)
     if args.n_envs == 1:
-        env = DummyVecEnv([create_env(args.emulator_path, args.rom_path)])
+        env = DummyVecEnv([create_env(
+            args.rom_path, 
+            args.save_state_path, 
+            args.headless
+        )])
     else:
         env = SubprocVecEnv([
-            create_env(args.emulator_path, args.rom_path, i) 
+            create_env(args.rom_path, args.save_state_path, args.headless, i) 
             for i in range(args.n_envs)
         ])
     
     # Create evaluation environment
-    eval_env = DummyVecEnv([create_env(args.emulator_path, args.rom_path)])
+    eval_env = DummyVecEnv([create_env(
+        args.rom_path, 
+        args.save_state_path, 
+        args.headless
+    )])
     
     # Setup model
     if args.resume_from:
@@ -245,29 +249,29 @@ def main():
     )
     
     # Start training
-    print("Starting training...")
+    print("🚀 Starting training...")
     start_time = datetime.now()
     
     try:
         model.learn(
             total_timesteps=args.total_timesteps,
             callback=callbacks,
-            tb_log_name=f"{args.algorithm}_{start_time.strftime('%Y%m%d_%H%M%S')}"
+            tb_log_name=f"{args.algorithm}_pyboy_{start_time.strftime('%Y%m%d_%H%M%S')}"
         )
     except KeyboardInterrupt:
         print("Training interrupted by user")
     
     end_time = datetime.now()
     training_time = end_time - start_time
-    print(f"Training completed in: {training_time}")
+    print(f"✅ Training completed in: {training_time}")
     
     # Save final model
     final_model_path = os.path.join(
         args.model_save_path, 
-        f"pokemon_crystal_{args.algorithm}_final"
+        f"pokemon_crystal_pyboy_{args.algorithm}_final"
     )
     model.save(final_model_path)
-    print(f"Final model saved to: {final_model_path}")
+    print(f"💾 Final model saved to: {final_model_path}")
     
     # Clean up
     env.close()

@@ -25,9 +25,9 @@ class PokemonCrystalEnv(gym.Env):
     """
     
     def __init__(self, 
-                 emulator_path: str = "bizhawk",
+                 emulator_path: str = "/usr/games/mgba-qt",
                  rom_path: str = "../pokecrystal.gbc",
-                 lua_script_path: str = "../lua_bridge/crystal_bridge.lua",
+                 lua_script_path: str = "../mgba_pokemon_bridge.lua",
                  max_steps: int = 10000,
                  render_mode: Optional[str] = None):
         """
@@ -137,10 +137,14 @@ class PokemonCrystalEnv(gym.Env):
         rom_abs_path = os.path.abspath(self.rom_path)
         lua_abs_path = os.path.abspath(self.lua_script_path)
         
+        # For mGBA, we need to use xvfb-run to run in a virtual display
+        # and the Lua script loading is different
         cmd = [
+            "xvfb-run", "-a", 
+            "-s", "-screen 0 1024x768x24",
             self.emulator_path,
-            rom_abs_path,
-            "--lua=" + lua_abs_path
+            "--lua", lua_abs_path,
+            rom_abs_path
         ]
         
         print(f"Starting emulator with:")
@@ -151,18 +155,40 @@ class PokemonCrystalEnv(gym.Env):
             self.emulator_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                cwd=os.path.dirname(os.path.abspath(self.rom_path))  # Set working directory to ROM location
             )
             print("Emulator started successfully")
+            # Give the emulator a moment to start
+            time.sleep(2)
         except Exception as e:
             raise RuntimeError(f"Failed to start emulator: {e}")
     
     def _send_action(self, action: int):
         """Send action to Lua script via file"""
+        # Map numeric actions to text format expected by Lua script
+        action_map = {
+            0: "NONE",    # No action
+            1: "UP",      # Up
+            2: "DOWN",    # Down
+            3: "LEFT",    # Left
+            4: "RIGHT",   # Right
+            5: "A",       # A button
+            6: "B",       # B button
+            7: "START",   # Start button
+            8: "SELECT"   # Select button
+        }
+        
+        action_text = action_map.get(action, "NONE")
+        
         try:
             with open(self.action_file, 'w') as f:
-                f.write(str(action))
+                f.write(action_text)
         except Exception as e:
+            # If file creation fails, check current directory permissions
+            current_dir = os.getcwd()
+            print(f"Action file creation failed in: {current_dir}")
+            print(f"Permissions: {oct(os.stat(current_dir).st_mode)[-3:]}")
             raise RuntimeError(f"Failed to send action: {e}")
     
     def _wait_for_state(self, timeout: float = 5.0):
