@@ -1,0 +1,2 @@
+# This file ensures the python_agent/models/ directory is tracked by git
+# The directory structure is needed for saving individual training run models

@@ -1,0 +1,2 @@
+# This file ensures the models/ directory is tracked by git
+# The directory structure is needed for saving trained models
