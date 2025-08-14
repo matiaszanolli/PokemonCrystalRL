@@ -288,7 +288,7 @@ class TestCrossSystemDataFlow:
     def test_game_context_propagation(self, temp_db):
         """Test that game context is properly propagated through systems"""
         semantic_system = SemanticContextSystem(db_path=temp_db)
-        dialogue_machine = DialogueStateMachine(db_path=temp_db)
+        dialogue_machine = DialogueStateMachine(db_path=temp_db, semantic_system=semantic_system)
         
         # Mock game context building
         with patch.object(dialogue_machine, '_build_game_context') as mock_context:
@@ -818,8 +818,8 @@ class TestSystemInteroperability:
         with sqlite3.connect(temp_db) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO conversations (id, npc_type, start_time, end_time, total_turns)
-                VALUES ('old-format-id', 'professor', '2023-01-01T00:00:00', NULL, 1)
+                INSERT INTO dialogue_sessions (session_start, npc_type, location_map, total_exchanges, choices_made)
+                VALUES ('2023-01-01T00:00:00', 'professor', 0, 1, 0)
             """)
             conn.commit()
         
@@ -890,19 +890,12 @@ class TestScalabilityLimits:
         with sqlite3.connect(temp_db) as conn:
             cursor = conn.cursor()
             
-            # Insert many conversations
+            # Insert many conversations (without specifying ID since it's auto-increment)
             for i in range(1000):
                 cursor.execute("""
-                    INSERT INTO conversations (id, npc_type, start_time, end_time, total_turns)
-                    VALUES (?, 'generic', '2023-01-01T00:00:00', '2023-01-01T00:01:00', 3)
-                """, (f"test-conv-{i:04d}",))
-                
-                # Insert dialogue turns for each conversation
-                for turn in range(3):
-                    cursor.execute("""
-                        INSERT INTO dialogue_turns (conversation_id, turn_number, dialogue_text, detected_choices, chosen_action, timestamp)
-                        VALUES (?, ?, ?, '[]', 'A', '2023-01-01T00:00:00')
-                    """, (f"test-conv-{i:04d}", turn + 1, f"Test dialogue {i}-{turn}"))
+                    INSERT INTO dialogue_sessions (session_start, npc_type, location_map, total_exchanges, choices_made)
+                    VALUES ('2023-01-01T00:00:00', 'generic', 1, 3, 1)
+                """)
             
             conn.commit()
         

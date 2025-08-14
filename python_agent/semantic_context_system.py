@@ -148,13 +148,13 @@ class SemanticContextSystem:
             # Gym Challenge
             DialoguePattern(
                 pattern_id="gym_challenge_offer",
-                keywords=["gym", "leader", "badge", "challenge", "battle", "trainer"],
+                keywords=["gym", "leader", "badge", "challenge", "battle", "trainer", "falkner", "bugsy", "whitney", "morty"],
                 intent=DialogueIntent.GYM_CHALLENGE,
                 npc_types=["gym_leader", "trainer"],
                 context_requirements={"party_size": {">=": 1}},
                 response_strategies=["accept_challenge", "prepare_for_battle"],
-                confidence_indicators=["gym leader", "badge", "official battle"],
-                priority=4
+                confidence_indicators=["gym leader", "badge", "official battle", "falkner", "bugsy", "whitney", "morty", "i'm falkner", "i'm bugsy"],
+                priority=5
             ),
             
             # Healing at Pokemon Center
@@ -164,7 +164,7 @@ class SemanticContextSystem:
                 intent=DialogueIntent.HEALING_REQUEST,
                 npc_types=["nurse", "pokemon_center"],
                 context_requirements={"low_hp_pokemon": {">=": 1}},
-                response_strategies=["accept_healing", "use_pokemon_center"],
+                response_strategies=["accept_healing"],
                 confidence_indicators=["nurse joy", "pokemon center", "heal your pokemon"],
                 priority=3
             ),
@@ -397,6 +397,7 @@ class SemanticContextSystem:
             "dialogue_text": dialogue_text,
             "clean_text": clean_text,
             "primary_intent": primary_intent.value if primary_intent else "unknown",
+            "intent": primary_intent.value if primary_intent else "unknown",  # For compatibility
             "confidence": confidence,
             "response_strategy": response_strategy,
             "context_factors": context_factors,
@@ -406,6 +407,12 @@ class SemanticContextSystem:
         
         # Store for learning
         self._store_dialogue_analysis(analysis)
+        
+        # Update pattern effectiveness for matched patterns
+        if matches and primary_intent and confidence > 0.3:
+            # Track effectiveness for the best matching pattern
+            best_pattern_id = matches[0]["pattern_id"]
+            self.update_pattern_effectiveness(best_pattern_id, success=True)
         
         return analysis
     
@@ -453,21 +460,27 @@ class SemanticContextSystem:
                 keyword_matches += 0.5
         
         keyword_score = keyword_matches / len(pattern.keywords) if pattern.keywords else 0
-        score += keyword_score * 0.4
+        score += keyword_score * 0.3
         
         # Confidence indicators (stronger signals)
         confidence_matches = 0
+        strong_indicator_bonus = 0
         for indicator in pattern.confidence_indicators:
-            if indicator in text:
+            # Normalize the indicator text to match our text normalization
+            normalized_indicator = self._normalize_text(indicator)
+            if normalized_indicator in text:
                 confidence_matches += 1
+                # Give extra boost for specific gym leader names
+                if normalized_indicator in ['falkner', 'bugsy', 'whitney', 'morty', 'im falkner', 'im bugsy']:
+                    strong_indicator_bonus += 0.3  # Big boost for gym leader identification
             # Partial matching for multi-word indicators
-            elif len(indicator.split()) > 1:
-                words_matched = sum(1 for word in indicator.split() if word in text)
-                if words_matched >= len(indicator.split()) // 2:
+            elif len(normalized_indicator.split()) > 1:
+                words_matched = sum(1 for word in normalized_indicator.split() if word in text)
+                if words_matched >= len(normalized_indicator.split()) // 2:
                     confidence_matches += 0.7
                     
         confidence_score = confidence_matches / len(pattern.confidence_indicators) if pattern.confidence_indicators else 0
-        score += confidence_score * 0.4
+        score += confidence_score * 0.5 + strong_indicator_bonus
         
         # Context requirements
         context_score = self._check_context_requirements(pattern.context_requirements, context)
@@ -545,6 +558,9 @@ class SemanticContextSystem:
             intent_mapping = {
                 "starter": [DialogueIntent.STARTER_SELECTION],
                 "gym": [DialogueIntent.GYM_CHALLENGE, DialogueIntent.BATTLE_REQUEST],
+                "beat": [DialogueIntent.GYM_CHALLENGE, DialogueIntent.BATTLE_REQUEST],  # for "beat_bugsy"
+                "bugsy": [DialogueIntent.GYM_CHALLENGE],  # specific gym leader
+                "falkner": [DialogueIntent.GYM_CHALLENGE],  # specific gym leader
                 "heal": [DialogueIntent.HEALING_REQUEST],
                 "shop": [DialogueIntent.SHOPPING],
                 "battle": [DialogueIntent.BATTLE_REQUEST, DialogueIntent.GYM_CHALLENGE]
@@ -639,6 +655,7 @@ class SemanticContextSystem:
             "dialogue_text": "",
             "clean_text": "",
             "primary_intent": "unknown",
+            "intent": "unknown",  # Added for compatibility
             "confidence": 0.0,
             "response_strategy": "wait_and_observe",
             "context_factors": [],

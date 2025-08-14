@@ -175,6 +175,13 @@ class ChoiceRecognitionSystem:
                 "confidence_boost": 0.5
             },
             
+            "pokemon_names": {
+                "pattern": r"\b(pikachu|charmander|bulbasaur|squirtle|eevee)\b",
+                "type": ChoiceType.POKEMON_SELECTION,
+                "indicators": ["pikachu", "charmander", "bulbasaur", "squirtle", "eevee"],
+                "confidence_boost": 0.5
+            },
+            
             "pokemon_actions": {
                 "pattern": r"\b(fight|bag|pokemon|run|use item|switch)\b",
                 "type": ChoiceType.MENU_SELECTION,
@@ -196,6 +203,14 @@ class ChoiceRecognitionSystem:
                 "type": ChoiceType.CONFIRMATION,
                 "indicators": ["confirm", "cancel", "accept", "decline"],
                 "confidence_boost": 0.3
+            },
+            
+            # Battle/Challenge patterns  
+            "battle_challenge": {
+                "pattern": r"\b(bring it on|maybe later|challenge|battle|fight|lets go|let's go)\b",
+                "type": ChoiceType.CONFIRMATION,
+                "indicators": ["bring it on", "maybe later", "challenge", "battle", "fight", "lets go", "let's go"],
+                "confidence_boost": 0.4
             },
             
             # Directional patterns
@@ -259,7 +274,13 @@ class ChoiceRecognitionSystem:
             # Confirmation
             "confirm": ["A"],
             "accept": ["A"],
-            "decline": ["B"]
+            "decline": ["B"],
+            
+            # Gym challenge specific
+            "bring it on": ["A"],
+            "maybe later": ["B"],
+            "challenge": ["A"],
+            "battle": ["A"]
         }
     
     def _load_ui_layouts(self):
@@ -347,12 +368,33 @@ class ChoiceRecognitionSystem:
                 continue
             text = text_obj.text.strip()
             
-            # Skip if text is too long (probably not a choice)
-            if len(text) > 50:
-                continue
-            
             # Skip if text is too short (probably not meaningful)
             if len(text) < 2:
+                continue
+            
+            # Prioritize texts explicitly marked as "choice"
+            if text_obj.location == "choice":
+                choice_info = {
+                    "text": text,
+                    "coordinates": text_obj.bbox,
+                    "confidence": text_obj.confidence,
+                    "location": text_obj.location
+                }
+                choice_texts.append(choice_info)
+                continue
+            
+            # For texts not explicitly marked as choice, apply filtering
+            # Skip if text is too long (probably dialogue)
+            if len(text) > 30:
+                continue
+                
+            # Skip if text contains question marks (likely dialogue)
+            if '?' in text:
+                continue
+                
+            # Skip if text looks like a sentence (contains multiple words and punctuation)
+            word_count = len(text.split())
+            if word_count > 4 and any(char in text for char in '.!,;:'):
                 continue
             
             choice_info = {

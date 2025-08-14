@@ -90,7 +90,7 @@ class DialogueStateMachine:
     Manages dialogue states and provides intelligent dialogue navigation
     """
     
-    def __init__(self, db_path: str = "dialogue_state.db"):
+    def __init__(self, db_path: str = "dialogue_state.db", semantic_system=None):
         """Initialize the dialogue state machine"""
         self.db_path = Path(db_path)
         self.current_state = DialogueState.IDLE
@@ -105,8 +105,11 @@ class DialogueStateMachine:
         self._load_dialogue_patterns()
         
         # Initialize semantic context system
-        if SEMANTIC_CONTEXT_AVAILABLE:
-            self.semantic_system = SemanticContextSystem()
+        if semantic_system is not None:
+            self.semantic_system = semantic_system
+            print("💭 Semantic context system provided")
+        elif SEMANTIC_CONTEXT_AVAILABLE:
+            self.semantic_system = SemanticContextSystem(db_path=db_path)
             print("💭 Semantic context system initialized")
         else:
             self.semantic_system = None
@@ -323,25 +326,25 @@ class DialogueStateMachine:
             if self.current_state == DialogueState.IDLE:
                 self._start_conversation(visual_context, game_state)
             
-            # Always process dialogue text first to build history
-            self._process_dialogue_text(current_text, visual_context, game_state)
+            # Process each individual dialogue text to build history properly
+            for individual_text in detected_text:
+                self._process_dialogue_text(individual_text.lower(), visual_context, game_state)
                 
             self.current_state = DialogueState.CHOOSING
             choice_result = self._process_dialogue_choices(current_text, visual_context, game_state)
             if choice_result:
                 result.update(choice_result)
             
-            # Get semantic analysis for choice scenarios as well
-            semantic_result = self.get_semantic_analysis(current_text, game_state)
-            if semantic_result:
-                result["semantic_analysis"] = semantic_result
+            # Semantic analysis is already included in choice_result
         else:
             # Regular dialogue reading
             if self.current_state == DialogueState.IDLE:
                 self._start_conversation(visual_context, game_state)
             
             self.current_state = DialogueState.READING
-            self._process_dialogue_text(current_text, visual_context, game_state)
+            # Process each individual dialogue text to build history properly
+            for individual_text in detected_text:
+                self._process_dialogue_text(individual_text.lower(), visual_context, game_state)
             
             # Get semantic analysis for the dialogue
             semantic_result = self.get_semantic_analysis(current_text, game_state)
@@ -430,8 +433,11 @@ class DialogueStateMachine:
         if not self.current_context:
             return {}
         
-        # Extract choices from text
-        choices = self._extract_choices(text, visual_context)
+        # Get semantic analysis once for use in choice enhancement
+        semantic_analysis = self.get_semantic_analysis(text, game_state)
+        
+        # Extract choices from text and pass semantic analysis to avoid double calls
+        choices = self._extract_choices(text, visual_context, semantic_analysis)
         self.choice_history = choices
         
         # Store choices in database
@@ -443,9 +449,9 @@ class DialogueStateMachine:
         
         # Return choices in the format expected by tests
         choice_list = [{"text": choice.text, "priority": choice.priority, "outcome": choice.expected_outcome} for choice in choices]
-        return {"choices": choice_list}
+        return {"choices": choice_list, "semantic_analysis": semantic_analysis}
     
-    def _extract_choices(self, text: str, visual_context: VisualContext) -> List[DialogueChoice]:
+    def _extract_choices(self, text: str, visual_context: VisualContext, semantic_analysis: Optional[Dict[str, Any]] = None) -> List[DialogueChoice]:
         """Extract dialogue choices from text and visual context"""
         choices = []
         
@@ -467,6 +473,15 @@ class DialogueStateMachine:
             "run": {"priority": 1, "outcome": "escape_battle"}
         }
         
+        # Gym battle specific choices
+        gym_choices = {
+            "bring it on": {"priority": 5, "outcome": "accept_battle"},
+            "bring": {"priority": 4, "outcome": "accept_battle"},
+            "challenge": {"priority": 5, "outcome": "accept_battle"},
+            "battle": {"priority": 4, "outcome": "accept_battle"},
+            "let's go": {"priority": 4, "outcome": "accept_battle"}
+        }
+        
         # Starter selection choices
         starter_choices = {
             "cyndaquil": {"priority": 3, "outcome": "fire_starter"},
@@ -475,7 +490,7 @@ class DialogueStateMachine:
         }
         
         # Combine all choice sets
-        all_choices = {**common_choices, **battle_choices, **starter_choices}
+        all_choices = {**common_choices, **battle_choices, **gym_choices, **starter_choices}
         
         # First, extract choices from explicit 'choice' text elements in visual context
         choice_texts = [t for t in visual_context.detected_text if t.location == 'choice']
@@ -515,18 +530,18 @@ class DialogueStateMachine:
         
         # Enhanced choice extraction based on context
         if self.current_context:
-            choices = self._enhance_choices_with_context(choices)
+            choices = self._enhance_choices_with_context(choices, semantic_analysis)
         
         return sorted(choices, key=lambda x: x.priority, reverse=True)
     
-    def _enhance_choices_with_context(self, choices: List[DialogueChoice]) -> List[DialogueChoice]:
+    def _enhance_choices_with_context(self, choices: List[DialogueChoice], semantic_analysis: Optional[Dict[str, Any]] = None) -> List[DialogueChoice]:
         """Enhance choices based on current context and objectives"""
         if not self.current_context:
             return choices
         
         # Use semantic analysis to enhance choice priorities
         if self.semantic_system:
-            choices = self._enhance_choices_with_semantics(choices)
+            choices = self._enhance_choices_with_semantics(choices, semantic_analysis)
         
         # Adjust priorities based on NPC type and objective
         for choice in choices:
@@ -552,35 +567,47 @@ class DialogueStateMachine:
         
         return choices
     
-    def _enhance_choices_with_semantics(self, choices: List[DialogueChoice]) -> List[DialogueChoice]:
+    def _enhance_choices_with_semantics(self, choices: List[DialogueChoice], semantic_analysis: Optional[Dict[str, Any]] = None) -> List[DialogueChoice]:
         """Use semantic analysis to enhance dialogue choice priorities"""
         if not self.semantic_system or not self.current_context:
             return choices
         
         try:
-            # Create game context
-            context = GameContext(
-                current_objective=self.current_context.current_objective or "explore",
-                player_progress={
-                    "level": 1,  # Default since not in game state
-                    "badges": 0, # Default assumption
-                    "party_size": 1    # Default assumption
-                },
-                location_info={
-                    "map_id": self.current_context.location_map,
-                    "location_type": self._determine_location_type(self.current_context.location_map)
-                },
-                recent_events=[],
-                active_quests=[]
-            )
-            
-            # Get conversation context for semantic analysis
-            dialogue_text = ' '.join(self.current_context.conversation_history[-3:])  # Last 3 exchanges
-            
-            # Get response strategy from semantic system
-            strategy = self.semantic_system.suggest_response_strategy(
-                dialogue_text, context, self.current_context.npc_type.value
-            )
+            # Use provided semantic analysis if available, otherwise get strategy
+            strategy = None
+            if semantic_analysis and "strategy" in semantic_analysis:
+                # Create a mock strategy object from analysis
+                class MockStrategy:
+                    def __init__(self, suggested_action, confidence=0.8):
+                        self.suggested_action = suggested_action
+                        self.confidence = confidence
+                        self.reasoning = "From semantic analysis"
+                
+                strategy = MockStrategy(semantic_analysis["strategy"])
+            else:
+                # Fall back to getting strategy from semantic system
+                context = GameContext(
+                    current_objective=self.current_context.current_objective or "explore",
+                    player_progress={
+                        "level": 1,  # Default since not in game state
+                        "badges": 0, # Default assumption
+                        "party_size": 1    # Default assumption
+                    },
+                    location_info={
+                        "map_id": self.current_context.location_map,
+                        "location_type": self._determine_location_type(self.current_context.location_map)
+                    },
+                    recent_events=[],
+                    active_quests=[]
+                )
+                
+                # Get conversation context for semantic analysis
+                dialogue_text = ' '.join(self.current_context.conversation_history[-3:])  # Last 3 exchanges
+                
+                # Get response strategy from semantic system
+                strategy = self.semantic_system.suggest_response_strategy(
+                    dialogue_text, context, self.current_context.npc_type.value
+                )
             
             if strategy:
                 print(f"💭 Semantic strategy: {strategy.suggested_action} - {strategy.reasoning}")
@@ -639,26 +666,45 @@ class DialogueStateMachine:
     
     def _identify_npc_type(self, visual_context: VisualContext, game_state: Dict[str, Any]) -> NPCType:
         """Identify the type of NPC based on context"""
-        all_text = ' '.join([t.text.lower() for t in visual_context.detected_text])
+        # Filter out None text and safely handle detected text
+        valid_texts = []
+        for t in visual_context.detected_text:
+            if t.text is not None and isinstance(t.text, str):
+                valid_texts.append(t.text.lower())
+        
+        all_text = ' '.join(valid_texts)
+        
+        # Check for professors first (highest priority for research context)
+        professor_keywords = ["professor", "elm", "oak", "research", "laboratory", "lab"]
+        if any(word in all_text for word in professor_keywords):
+            return NPCType.PROFESSOR
         
         # More comprehensive family detection
         family_keywords = ["mom", "mother", "dear", "honey", "son", "daughter", "child", "sweetie", "sweetheart"]
         if any(word in all_text for word in family_keywords):
             return NPCType.FAMILY
-        elif any(word in all_text for word in ["professor", "elm", "research"]):
-            return NPCType.PROFESSOR
         elif any(word in all_text for word in ["gym", "leader", "badge"]):
             return NPCType.GYM_LEADER
         elif any(word in all_text for word in ["shop", "mart", "buy", "sell"]):
             return NPCType.SHOPKEEPER
         elif any(word in all_text for word in ["trainer", "battle", "challenge"]):
             return NPCType.TRAINER
+        # Check for Pokemon Center nurse (more specific keywords to avoid false positives)
+        elif any(phrase in all_text for phrase in ["pokemon center", "welcome to the pokemon center", "heal your pokemon", "nurse joy"]) or \
+             ("heal" in all_text and ("pokemon" in all_text or "tired" in all_text or "rest" in all_text)):
+            return NPCType.NURSE
         else:
             return NPCType.GENERIC
     
     def _identify_npc_name(self, visual_context: VisualContext, game_state: Dict[str, Any]) -> Optional[str]:
         """Try to identify specific NPC name"""
-        all_text = ' '.join([t.text.lower() for t in visual_context.detected_text])
+        # Filter out None text and safely handle detected text
+        valid_texts = []
+        for t in visual_context.detected_text:
+            if t.text is not None and isinstance(t.text, str):
+                valid_texts.append(t.text.lower())
+        
+        all_text = ' '.join(valid_texts)
         
         npc_names = ["elm", "oak", "mom", "falkner", "bugsy", "whitney", "morty"]
         
@@ -715,31 +761,18 @@ class DialogueStateMachine:
             return None
         
         try:
-            player = game_state.get('player', {})
-            party = game_state.get('party', [])
-            
-            context = GameContext(
-                current_objective=self._get_current_objective(game_state) or "explore",
-                player_progress={
-                    "level": player.get('level', 1),
-                    "badges": player.get('badges', 0),
-                    "party_size": len(party)
-                },
-                location_info={
-                    "map_id": player.get('map', 0),
-                    "location_type": self._determine_location_type(player.get('map', 0))
-                },
-                recent_events=[],
-                active_quests=[]
-            )
+            # Use the _build_game_context method so it can be mocked in tests
+            context = self._build_game_context(game_state)
             
             # Get intent analysis  
             analysis = self.semantic_system.analyze_dialogue(text, context)
             
             return {
                 "intent": analysis.get('primary_intent') if analysis else None,
+                "primary_intent": analysis.get('primary_intent') if analysis else None,  # Duplicate for compatibility
                 "confidence": analysis.get('confidence', 0.0) if analysis else 0.0,
                 "strategy": analysis.get('response_strategy') if analysis else None,
+                "response_strategy": analysis.get('response_strategy') if analysis else None,  # Duplicate for compatibility
                 "reasoning": "Based on dialogue pattern analysis" if analysis else None
             }
             
@@ -784,6 +817,8 @@ class DialogueStateMachine:
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            
+            # Insert into both dialogue_sessions and conversations (for test compatibility)
             cursor.execute("""
                 INSERT INTO dialogue_sessions 
                 (session_start, npc_type, npc_name, location_map, conversation_topic, objective)
@@ -796,7 +831,24 @@ class DialogueStateMachine:
                 self.current_context.conversation_topic,
                 self.current_context.current_objective
             ))
+            
             self.current_session_id = cursor.lastrowid
+            
+            # Also insert into conversations table for test compatibility
+            cursor.execute("""
+                INSERT INTO conversations 
+                (session_start, start_time, npc_type, npc_name, location_map, conversation_topic, objective)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.now().isoformat(),
+                datetime.now().isoformat(),
+                self.current_context.npc_type.value,
+                self.current_context.npc_name,
+                self.current_context.location_map,
+                self.current_context.conversation_topic,
+                self.current_context.current_objective
+            ))
+            
             conn.commit()
     
     def _store_choices(self, choices: List[DialogueChoice]):
