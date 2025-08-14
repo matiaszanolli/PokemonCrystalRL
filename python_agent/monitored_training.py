@@ -24,6 +24,7 @@ from pyboy_env import PyBoyPokemonCrystalEnv
 from enhanced_llm_agent import EnhancedLLMPokemonAgent
 from web_monitor import PokemonRLWebMonitor, create_dashboard_templates
 from vision_processor import PokemonVisionProcessor
+from text_logger import PokemonTextLogger
 
 
 class MonitoredTrainingSession:
@@ -70,6 +71,10 @@ class MonitoredTrainingSession:
         # Initialize web monitor (always enabled)
         print("🌐 Initializing web monitor...")
         self.web_monitor = PokemonRLWebMonitor()
+        
+        # Initialize text logger for transcription
+        print("📝 Initializing text transcription logger...")
+        self.text_logger = PokemonTextLogger("gameplay_transcripts")
         
         # Training metrics
         self.training_stats = {
@@ -159,6 +164,10 @@ class MonitoredTrainingSession:
                     visual_context = self.vision_processor.process_screenshot(screenshot)
                     self.training_stats["visual_analyses"] += 1
                     self.screenshot_history.append(screenshot.copy())
+                    
+                    # Log detected text for transcription
+                    if self.text_logger:
+                        self.text_logger.log_visual_context(visual_context)
             
             # Get LLM decision with full context
             start_time = time.time()
@@ -378,6 +387,12 @@ class MonitoredTrainingSession:
         print(f"   Visual analyses: {self.training_stats['visual_analyses']}")
         print(f"   Web monitoring: Active throughout training")
         
+        # Close text logging session and export transcript
+        if hasattr(self, 'text_logger') and self.text_logger:
+            print(f"\n📝 Closing text logging session...")
+            transcript_file = self.text_logger.close_session()
+            print(f"📄 Gameplay transcript saved: {transcript_file}")
+        
         return episode_results
     
     def stop(self):
@@ -391,6 +406,14 @@ class MonitoredTrainingSession:
         
         if self.env:
             self.env.close()
+        
+        # Close text logging session
+        if hasattr(self, 'text_logger') and self.text_logger:
+            try:
+                transcript_file = self.text_logger.close_session()
+                print(f"📄 Final transcript saved: {transcript_file}")
+            except Exception as e:
+                print(f"⚠️ Error closing text logger: {e}")
         
         print("✅ Training and monitoring stopped")
     

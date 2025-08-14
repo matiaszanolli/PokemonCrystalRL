@@ -6,8 +6,13 @@ try:
     import gymnasium as gym
     from gymnasium import spaces
 except ImportError:
-    import gym
-    from gym import spaces
+    try:
+        import gym
+        from gym import spaces
+    except ImportError:
+        print("❌ Neither Gymnasium nor Gym is installed")
+        print("Install Gymnasium with: pip install gymnasium")
+        raise
 
 import numpy as np
 import os
@@ -16,6 +21,7 @@ from pyboy import PyBoy
 
 from memory_map import MEMORY_ADDRESSES
 from utils import calculate_reward, preprocess_state
+from monitoring_client import MonitoringClient
 
 
 class PyBoyPokemonCrystalEnv(gym.Env):
@@ -29,7 +35,9 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                  max_steps: int = 10000,
                  render_mode: Optional[str] = None,
                  headless: bool = True,
-                 debug_mode: bool = False):
+                 debug_mode: bool = False,
+                 enable_monitoring: bool = True,
+                 monitor_server_url: str = "http://localhost:5000"):
         """
         Initialize the PyBoy Pokémon Crystal environment
         
@@ -49,6 +57,19 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.render_mode = render_mode
         self.headless = headless
         self.debug_mode = debug_mode
+        self.enable_monitoring = enable_monitoring
+        
+        # Initialize monitoring client
+        self.monitor = None
+        if enable_monitoring:
+            try:
+                self.monitor = MonitoringClient(monitor_server_url, auto_start=True)
+                if self.debug_mode:
+                    print(f"✓ Monitoring enabled: {self.monitor.is_server_available()}")
+            except Exception as e:
+                if self.debug_mode:
+                    print(f"⚠ Monitoring initialization failed: {e}")
+                self.monitor = None
         
         # Action space: 9 possible actions (including no-op)
         # 0: No action, 1: Up, 2: Down, 3: Left, 4: Right, 
@@ -69,6 +90,13 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.episode_reward = 0
         self.previous_state = None
         self.current_state = None
+        self.episode_number = 0
+        
+        # Action mapping for monitoring
+        self.action_map = {
+            0: "NONE", 1: "UP", 2: "DOWN", 3: "LEFT", 4: "RIGHT",
+            5: "A", 6: "B", 7: "START", 8: "SELECT"
+        }
         
         # Memory addresses for Pokemon Crystal (verified addresses)
         self.memory_addresses = {
@@ -119,6 +147,12 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.step_count = 0
         self.episode_reward = 0
         self.previous_state = None
+        self.episode_number += 1
+        
+        # Update monitoring if enabled
+        if self.monitor:
+            self.monitor.current_episode = self.episode_number
+            self.monitor.current_step = 0
         
         # Get initial observation
         obs = self._get_observation()
@@ -150,6 +184,10 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         
         info = self._get_info()
         
+        # Send monitoring updates if enabled
+        if self.monitor:
+            self._send_monitoring_updates(action, reward, info)
+        
         return obs, reward, terminated, truncated, info
     
     def render(self):
@@ -164,6 +202,10 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         """Clean up environment"""
         if self.pyboy:
             self.pyboy.stop()
+        
+        # Send final monitoring update
+        if self.monitor:
+            self.monitor.send_performance_update()
     
     def _execute_action(self, action: int):
         """Execute the given action"""
@@ -412,6 +454,78 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         
         # Return empty array if no emulator or capture failed
         return np.zeros((144, 160, 3), dtype=np.uint8)
+    
+    def _send_monitoring_updates(self, action: int, reward: float, info: Dict[str, Any]):
+        """Send updates to monitoring system"""
+        if not self.monitor:
+            return
+        
+        try:
+            # Get current game state
+            self._update_state()
+            
+            # Get player position and game info
+            player_x = 0
+            player_y = 0
+            map_id = 0
+            screen_type = "unknown"
+            
+            if self.current_state and 'player' in self.current_state:
+                player = self.current_state['player']
+                player_x = player.get('x', 0)
+                player_y = player.get('y', 0)
+                map_id = player.get('map', 0)
+                
+                # Basic screen type detection based on map or other criteria
+                if map_id == 0:
+                    screen_type = "menu"
+                elif map_id > 0:
+                    screen_type = "overworld"
+            
+            # Update step information
+            self.monitor.update_step(
+                step=self.step_count,
+                reward=reward,
+                action=self.action_map.get(action, "UNKNOWN"),
+                screen_type=screen_type,
+                map_id=map_id,
+                player_x=player_x,
+                player_y=player_y
+            )
+            
+            # Update screenshot every few steps
+            if self.step_count % 5 == 0:  # Update screenshot every 5 steps
+                screenshot = self.get_screenshot()
+                if screenshot is not None and screenshot.size > 0:
+                    self.monitor.update_screenshot(screenshot)
+            
+        except Exception as e:
+            if self.debug_mode:
+                print(f"⚠ Monitoring update failed: {e}")
+    
+    def send_episode_end(self, success: bool = False):
+        """Send episode end notification to monitoring"""
+        if self.monitor:
+            self.monitor.update_episode(
+                episode=self.episode_number,
+                total_reward=self.episode_reward,
+                steps=self.step_count,
+                success=success
+            )
+    
+    def send_llm_decision(self, action: str, reasoning: str = "", context: Dict = None):
+        """Send LLM decision to monitoring"""
+        if self.monitor:
+            self.monitor.update_llm_decision(action, reasoning, context)
+    
+    def send_text_update(self, text: str, text_type: str = "dialogue"):
+        """Send text detection to monitoring"""
+        if self.monitor:
+            self.monitor.update_text(text, text_type)
+    
+    def is_monitoring_available(self) -> bool:
+        """Check if monitoring is available"""
+        return self.monitor is not None and self.monitor.is_server_available()
 
 
 # Register the environment

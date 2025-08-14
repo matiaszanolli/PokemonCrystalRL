@@ -1,0 +1,31 @@
+Pokemon Crystal Gameplay Transcript
+Session: session_20250814_165109
+Generated: 2025-08-14 16:51:09
+Total Frames: 5
+Total Text Detections: 15
+============================================================
+
+Frame 1 (dialogue):
+  💬 DIALOGUE: DIALOGUE
+  📋 MENU: MENU
+  🔧 UI: HP
+
+Frame 2 (dialogue):
+  💬 DIALOGUE: DIALOGUE
+  📋 MENU: MENU
+  🔧 UI: HP
+
+Frame 3 (dialogue):
+  💬 DIALOGUE: DIALOGUE
+  📋 MENU: MENU
+  🔧 UI: HP
+
+Frame 4 (dialogue):
+  💬 DIALOGUE: DIALOGUE
+  📋 MENU: MENU
+  🔧 UI: HP
+
+Frame 5 (dialogue):
+  💬 DIALOGUE: DIALOGUE
+  📋 MENU: MENU
+  🔧 UI: HP

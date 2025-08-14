@@ -17,6 +17,14 @@ import numpy as np
 from pyboy_env import PyBoyPokemonCrystalEnv
 from vision_processor import PokemonVisionProcessor, VisualContext
 
+# Import dialogue state machine
+try:
+    from dialogue_state_machine import DialogueStateMachine, DialogueState
+    DIALOGUE_STATE_AVAILABLE = True
+except ImportError:
+    DIALOGUE_STATE_AVAILABLE = False
+    print("⚠️ Dialogue state machine not available")
+
 
 class EnhancedLLMPokemonAgent:
     """
@@ -26,7 +34,9 @@ class EnhancedLLMPokemonAgent:
     def __init__(self, 
                  model_name: str = "llama3.2:3b",
                  memory_db: str = None,
-                 use_vision: bool = True):
+                 use_vision: bool = True,
+                 enable_monitoring: bool = True,
+                 monitor_server_url: str = "http://localhost:5000"):
         """
         Initialize the enhanced LLM Pokemon agent
         
@@ -40,6 +50,18 @@ class EnhancedLLMPokemonAgent:
         os.makedirs("outputs", exist_ok=True)
         self.memory_db = memory_db or "outputs/pokemon_agent_memory.db"
         self.use_vision = use_vision
+        self.enable_monitoring = enable_monitoring
+        
+        # Initialize monitoring client
+        self.monitor = None
+        if enable_monitoring:
+            try:
+                from monitoring_client import MonitoringClient
+                self.monitor = MonitoringClient(monitor_server_url, auto_start=False)
+                print(f"📊 Monitoring client initialized")
+            except Exception as e:
+                print(f"⚠️ Monitoring initialization failed: {e}")
+                self.monitor = None
         
         # Initialize memory database
         self._init_memory_db()
@@ -56,6 +78,19 @@ class EnhancedLLMPokemonAgent:
                 self.vision_processor = None
         else:
             self.vision_processor = None
+        
+        # Initialize dialogue state machine if available
+        if DIALOGUE_STATE_AVAILABLE:
+            try:
+                self.dialogue_state_machine = DialogueStateMachine(
+                    db_path=self.memory_db.replace('.db', '_dialogue.db')
+                )
+                print("💬 Dialogue state machine enabled")
+            except Exception as e:
+                print(f"⚠️ Dialogue state machine failed to initialize: {e}")
+                self.dialogue_state_machine = None
+        else:
+            self.dialogue_state_machine = None
         
         # Map discovery and state tracking
         self.discovered_maps = set()  # Track visited areas
@@ -136,6 +171,43 @@ class EnhancedLLMPokemonAgent:
         }
         
         print(f"🤖 Enhanced LLM Pokemon Agent initialized with {model_name}")
+    
+    def _send_monitoring_update(self, action: int, llm_response: str, 
+                               state: Dict[str, Any], visual_context = None):
+        """Send decision update to monitoring system"""
+        if not self.monitor:
+            return
+        
+        try:
+            # Extract reasoning from LLM response
+            reasoning = llm_response.strip()[:200]  # First 200 chars as reasoning
+            
+            # Get action string
+            action_str = self.action_map.get(action, str(action))
+            
+            # Build context info
+            context = {}
+            if state and 'player' in state:
+                player = state['player']
+                context['position'] = (player.get('x', 0), player.get('y', 0))
+                context['map'] = player.get('map', 0)
+                context['money'] = player.get('money', 0)
+                context['badges'] = player.get('badges', 0)
+            
+            if visual_context:
+                context['screen_type'] = visual_context.screen_type
+                context['game_phase'] = visual_context.game_phase
+                context['visual_summary'] = visual_context.visual_summary
+            
+            # Send to monitoring
+            self.monitor.update_llm_decision(action_str, reasoning, context)
+            
+        except Exception as e:
+            print(f"⚠️ Monitoring update failed: {e}")
+    
+    def is_monitoring_available(self) -> bool:
+        """Check if monitoring is available"""
+        return self.monitor is not None and self.monitor.is_server_available()
     
     def _init_memory_db(self):
         """Initialize SQLite database for episodic memory"""
@@ -457,12 +529,19 @@ class EnhancedLLMPokemonAgent:
             except Exception as e:
                 print(f"⚠️ Vision processing failed: {e}")
         
+        # Update dialogue state machine if available
+        dialogue_state = None
+        dialogue_recommendation = None
+        if self.dialogue_state_machine and visual_context:
+            dialogue_state = self.dialogue_state_machine.update_state(visual_context, state)
+            dialogue_recommendation = self.dialogue_state_machine.get_recommended_action()
+        
         # Analyze current situation
         analysis = self.analyze_game_state(state, visual_context)
         
-        # Build context for LLM
+        # Build context for LLM with dialogue state info
         context_prompt = self._build_enhanced_strategy_prompt(
-            state, analysis, visual_context, recent_history, stuck_info
+            state, analysis, visual_context, recent_history, stuck_info, dialogue_state
         )
         
         system_prompt = """You are a Pokemon Crystal gameplay expert with visual analysis capabilities.
@@ -501,13 +580,18 @@ IMPORTANT: If recent actions show repetitive behavior, choose a DIFFERENT action
         # Store decision for learning
         self._store_enhanced_decision(state, llm_response, action, analysis, visual_context)
         
+        # Send monitoring update if enabled
+        if self.monitor:
+            self._send_monitoring_update(action, llm_response, state, visual_context)
+        
         return action
     
     def _build_enhanced_strategy_prompt(self, state: Dict[str, Any], 
                                        analysis: Dict[str, Any], 
                                        visual_context: Optional[VisualContext] = None,
                                        recent_history: List[str] = None,
-                                       stuck_info: Dict[str, Any] = None) -> str:
+                                       stuck_info: Dict[str, Any] = None,
+                                       dialogue_state = None) -> str:
         """Build a comprehensive prompt including visual context"""
         
         player = state.get('player', {})
