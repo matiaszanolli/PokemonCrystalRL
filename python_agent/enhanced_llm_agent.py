@@ -449,74 +449,53 @@ TEAM: {len(party)} Pokemon"""
         """Parse LLM response to extract action command with improved fallback logic"""
         response_upper = response.upper()
         
-        # DEBUG: Print the LLM response to understand parsing issues
-        print(f"🔍 LLM Response: '{response.strip()}'")
-        
         # Enhanced action parsing with more flexible patterns
         if "UP" in response_upper or "NORTH" in response_upper:
-            print(f"✅ Parsed as UP (1)")
             return 1
         elif "DOWN" in response_upper or "SOUTH" in response_upper:
-            print(f"✅ Parsed as DOWN (2)")
             return 2
         elif "LEFT" in response_upper or "WEST" in response_upper:
-            print(f"✅ Parsed as LEFT (3)")
             return 3
         elif "RIGHT" in response_upper or "EAST" in response_upper:
-            print(f"✅ Parsed as RIGHT (4)")
             return 4
         elif (" A " in response_upper or response_upper.endswith(" A") or 
               "PRESS A" in response_upper or "BUTTON A" in response_upper or
               "HIT A" in response_upper or "USE A" in response_upper):
-            print(f"✅ Parsed as A button (5) - explicit A mention")
             return 5
         elif (" B " in response_upper or response_upper.endswith(" B") or 
               "PRESS B" in response_upper or "BUTTON B" in response_upper or
               "HIT B" in response_upper or "USE B" in response_upper or
               "CANCEL" in response_upper or "BACK" in response_upper or "EXIT" in response_upper):
-            print(f"✅ Parsed as B button (6)")
             return 6
         elif "START" in response_upper or "MENU" in response_upper:
-            print(f"✅ Parsed as START (7)")
             return 7
         elif "SELECT" in response_upper and "BUTTON" in response_upper:
-            print(f"✅ Parsed as SELECT (8)")
             return 8
         
         # Context-aware action selection based on content
         elif ("INTERACT" in response_upper or "TALK" in response_upper or 
               "CONFIRM" in response_upper or "ENTER" in response_upper or
               "CONTINUE" in response_upper or "NEXT" in response_upper or "PROCEED" in response_upper):
-            print(f"✅ Parsed as A (5) - interaction/continue keyword")
             return 5
         elif "MOVE" in response_upper or "WALK" in response_upper or "GO" in response_upper:
             # If movement is mentioned but direction unclear, choose random movement
-            action = np.random.choice([1, 2, 3, 4])  # UP, DOWN, LEFT, RIGHT
-            print(f"✅ Parsed as movement ({action}) - generic movement keyword")
-            return action
+            return np.random.choice([1, 2, 3, 4])  # UP, DOWN, LEFT, RIGHT
         elif "EXPLORE" in response_upper or "LOOK" in response_upper:
-            action = np.random.choice([1, 2, 3, 4])  # Random exploration movement
-            print(f"✅ Parsed as exploration movement ({action})")
-            return action
+            return np.random.choice([1, 2, 3, 4])  # Random exploration movement
         elif "WAIT" in response_upper or "PAUSE" in response_upper or "NOTHING" in response_upper:
-            print(f"✅ Parsed as NONE (0) - explicit wait")
             return 0  # NONE - only when explicitly requested
         else:
             # Last resort: more balanced fallback
             # Check if response suggests any direction even without exact keywords
             if any(word in response_upper for word in ["FORWARD", "AHEAD", "ADVANCE"]):
-                print(f"✅ Fallback: UP (1) - forward motion implied")
                 return 1
             elif any(word in response_upper for word in ["BACKWARD", "RETREAT", "RETURN"]):
-                print(f"✅ Fallback: DOWN (2) - backward motion implied")
                 return 2
             else:
                 # Truly random fallback with more balanced distribution
                 fallback_actions = [1, 2, 3, 4, 5, 0]  # Include NONE occasionally
                 weights = [0.25, 0.25, 0.2, 0.2, 0.08, 0.02]  # Favor movement, some A, rare NONE
-                action = np.random.choice(fallback_actions, p=weights)
-                print(f"⚠️ Fallback: Random action ({action}) - unclear response")
-                return action
+                return np.random.choice(fallback_actions, p=weights)
     
     def _store_enhanced_decision(self, state: Dict[str, Any], llm_response: str, 
                                action: int, analysis: Dict[str, Any],
