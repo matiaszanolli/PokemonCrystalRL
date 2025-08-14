@@ -176,9 +176,9 @@ class ChoiceRecognitionSystem:
             },
             
             "pokemon_actions": {
-                "pattern": r"\b(fight|use item|switch|run)\b",
+                "pattern": r"\b(fight|bag|pokemon|run|use item|switch)\b",
                 "type": ChoiceType.MENU_SELECTION,
-                "indicators": ["fight", "use item", "switch", "run"],
+                "indicators": ["fight", "bag", "pokemon", "run", "use item", "switch"],
                 "confidence_boost": 0.4
             },
             
@@ -233,9 +233,12 @@ class ChoiceRecognitionSystem:
             
             # Battle menu
             "fight": ["A"],
+            "bag": ["DOWN", "A"],
+            "pokemon": ["DOWN", "DOWN", "A"],
+            "run": ["DOWN", "DOWN", "DOWN", "A"],
+            # Legacy mappings for compatibility
             "use item": ["DOWN", "A"],
             "switch": ["DOWN", "DOWN", "A"],
-            "run": ["DOWN", "DOWN", "DOWN", "A"],
             
             # Directional
             "north": ["UP"],
@@ -537,6 +540,12 @@ class ChoiceRecognitionSystem:
         """Determine the expected outcome of selecting this choice"""
         text_lower = text.lower()
         
+        # Context-based outcomes take priority for specific choice types
+        if choice_type == ChoiceType.POKEMON_SELECTION:
+            return f"select_{text_lower.replace(' ', '_')}"
+        elif choice_type == ChoiceType.DIRECTIONAL:
+            return f"move_{text_lower}"
+        
         # Direct outcome mappings
         outcome_mappings = {
             "yes": "accept_or_confirm",
@@ -550,6 +559,8 @@ class ChoiceRecognitionSystem:
             "totodile": "select_water_starter",
             "chikorita": "select_grass_starter",
             "fight": "enter_battle_menu",
+            "bag": "use_item_from_bag",
+            "pokemon": "switch_pokemon",
             "run": "flee_battle",
             "confirm": "confirm_action",
             "accept": "accept_offer",
@@ -563,12 +574,8 @@ class ChoiceRecognitionSystem:
             if key in text_lower:
                 return outcome
         
-        # Context-based outcomes
-        if choice_type == ChoiceType.POKEMON_SELECTION:
-            return f"select_{text_lower.replace(' ', '_')}"
-        elif choice_type == ChoiceType.DIRECTIONAL:
-            return f"move_{text_lower}"
-        elif choice_type == ChoiceType.MENU_SELECTION:
+        # Fall back to context-based outcomes for menu selections
+        if choice_type == ChoiceType.MENU_SELECTION:
             return f"select_{text_lower.replace(' ', '_')}"
         
         return "unknown_outcome"

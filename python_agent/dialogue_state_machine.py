@@ -32,6 +32,8 @@ class DialogueState(Enum):
     READING = "reading"              # Reading dialogue text
     CHOOSING = "choosing"            # Multiple choice selection
     WAITING_RESPONSE = "waiting"     # Waiting for dialogue to advance
+    LISTENING = "listening"          # Listening to NPC (alias for reading)
+    RESPONDING = "responding"        # Formulating response
     CONVERSATION_END = "ended"       # Dialogue finished
     INTERRUPTED = "interrupted"      # Dialogue interrupted by battle/event
 
@@ -43,6 +45,7 @@ class NPCType(Enum):
     TRAINER = "trainer"             # Opposing trainers
     GYM_LEADER = "gym_leader"       # Gym leaders
     SHOPKEEPER = "shopkeeper"       # Store clerks
+    NURSE = "nurse"                 # Pokemon Center nurse
     GENERIC = "generic"             # Regular NPCs
     STORY = "story"                 # Important story characters
 
@@ -141,12 +144,15 @@ class DialogueStateMachine:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_start TEXT NOT NULL,
                     session_end TEXT,
+                    start_time TEXT NOT NULL DEFAULT (datetime('now')),
+                    end_time TEXT,
                     npc_type TEXT NOT NULL,
                     npc_name TEXT,
                     location_map INTEGER NOT NULL,
                     conversation_topic TEXT,
                     objective TEXT,
                     total_exchanges INTEGER DEFAULT 0,
+                    total_turns INTEGER DEFAULT 0,
                     choices_made INTEGER DEFAULT 0,
                     outcome TEXT
                 )
@@ -296,7 +302,9 @@ class DialogueStateMachine:
     
     def _process_dialogue_screen(self, visual_context: VisualContext, game_state: Dict[str, Any]) -> Dict[str, Any]:
         """Process dialogue screen and update state accordingly"""
-        detected_text = [t.text for t in visual_context.detected_text if t.location == 'dialogue']
+        # Filter out any None or invalid text values
+        detected_text = [t.text for t in visual_context.detected_text 
+                        if t.location == 'dialogue' and t.text is not None and isinstance(t.text, str)]
         
         if not detected_text:
             return {}
@@ -304,12 +312,29 @@ class DialogueStateMachine:
         current_text = ' '.join(detected_text).lower()
         result = {}
         
-        # Check if this is a choice selection
-        if self._detect_choices(current_text):
+        # Check if there are explicit choices in the visual context
+        choice_texts = [t for t in visual_context.detected_text if t.location == 'choice']
+        
+        # Determine if we're in a choice selection screen
+        has_choices = len(choice_texts) >= 1 or self._detect_choices(current_text)
+        
+        if has_choices:
+            # Start conversation if not already started
+            if self.current_state == DialogueState.IDLE:
+                self._start_conversation(visual_context, game_state)
+            
+            # Always process dialogue text first to build history
+            self._process_dialogue_text(current_text, visual_context, game_state)
+                
             self.current_state = DialogueState.CHOOSING
             choice_result = self._process_dialogue_choices(current_text, visual_context, game_state)
             if choice_result:
                 result.update(choice_result)
+            
+            # Get semantic analysis for choice scenarios as well
+            semantic_result = self.get_semantic_analysis(current_text, game_state)
+            if semantic_result:
+                result["semantic_analysis"] = semantic_result
         else:
             # Regular dialogue reading
             if self.current_state == DialogueState.IDLE:
@@ -421,7 +446,7 @@ class DialogueStateMachine:
         return {"choices": choice_list}
     
     def _extract_choices(self, text: str, visual_context: VisualContext) -> List[DialogueChoice]:
-        """Extract dialogue choices from text"""
+        """Extract dialogue choices from text and visual context"""
         choices = []
         
         # Common dialogue choices
@@ -452,15 +477,41 @@ class DialogueStateMachine:
         # Combine all choice sets
         all_choices = {**common_choices, **battle_choices, **starter_choices}
         
+        # First, extract choices from explicit 'choice' text elements in visual context
+        choice_texts = [t for t in visual_context.detected_text if t.location == 'choice']
+        for choice_obj in choice_texts:
+            choice_text = choice_obj.text.lower()
+            # Find matching choice data if available
+            choice_data = None
+            for pattern, data in all_choices.items():
+                if pattern in choice_text:
+                    choice_data = data
+                    break
+            
+            # If no specific match found, use generic values
+            if not choice_data:
+                choice_data = {"priority": 2, "outcome": "generic_choice"}
+            
+            choices.append(DialogueChoice(
+                text=choice_obj.text,  # Keep original case
+                choice_id=hashlib.md5(choice_obj.text.encode()).hexdigest()[:8],
+                confidence=choice_obj.confidence,
+                expected_outcome=choice_data["outcome"],
+                priority=choice_data["priority"]
+            ))
+        
+        # Then also look for choices in the dialogue text itself
         for choice_text, choice_data in all_choices.items():
             if choice_text in text.lower():
-                choices.append(DialogueChoice(
-                    text=choice_text,
-                    choice_id=hashlib.md5(choice_text.encode()).hexdigest()[:8],
-                    confidence=0.8,
-                    expected_outcome=choice_data["outcome"],
-                    priority=choice_data["priority"]
-                ))
+                # Check if this choice is already added from visual context
+                if not any(choice.text.lower() == choice_text for choice in choices):
+                    choices.append(DialogueChoice(
+                        text=choice_text,
+                        choice_id=hashlib.md5(choice_text.encode()).hexdigest()[:8],
+                        confidence=0.8,
+                        expected_outcome=choice_data["outcome"],
+                        priority=choice_data["priority"]
+                    ))
         
         # Enhanced choice extraction based on context
         if self.current_context:
@@ -874,6 +925,25 @@ class DialogueStateMachine:
     def current_npc_type(self) -> Optional[NPCType]:
         """Get current NPC type"""
         return self.current_context.npc_type if self.current_context else None
+    
+    @property
+    def current_session_id(self) -> Optional[str]:
+        """Get current session ID"""
+        return getattr(self, '_current_session_id', None)
+    
+    @current_session_id.setter
+    def current_session_id(self, value: Optional[str]):
+        """Set current session ID"""
+        self._current_session_id = value
+    
+    @property
+    def current_conversation_id(self) -> Optional[str]:
+        """Get current conversation ID (alias for session_id)"""
+        return self.current_session_id
+    
+    def reset(self):
+        """Reset the dialogue state machine"""
+        self.reset_conversation()
     
     def _build_game_context(self, game_state: Dict[str, Any]) -> GameContext:
         """Build game context for semantic analysis"""

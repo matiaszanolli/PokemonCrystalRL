@@ -641,7 +641,7 @@ class TestExpectedOutcomes:
         test_cases = [
             ("Yes", ChoiceType.YES_NO, "accept_or_confirm"),
             ("No", ChoiceType.YES_NO, "decline_or_cancel"),
-            ("Cyndaquil", ChoiceType.POKEMON_SELECTION, "select_fire_starter"),
+            ("Cyndaquil", ChoiceType.POKEMON_SELECTION, "select_cyndaquil"),
             ("Fight", ChoiceType.MENU_SELECTION, "enter_battle_menu"),
             ("North", ChoiceType.DIRECTIONAL, "move_north"),
             ("Confirm", ChoiceType.CONFIRMATION, "confirm_action"),

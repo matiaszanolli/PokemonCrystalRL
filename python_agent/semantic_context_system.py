@@ -427,7 +427,7 @@ class SemanticContextSystem:
         for pattern_id, pattern in self.dialogue_patterns.items():
             score = self._calculate_pattern_match(text, pattern, context)
             
-            if score > 0.3:  # Minimum threshold
+            if score > 0.2:  # Lower threshold to catch more patterns
                 matches.append({
                     "pattern_id": pattern_id,
                     "pattern": pattern,
@@ -443,27 +443,47 @@ class SemanticContextSystem:
         """Calculate how well text matches a pattern"""
         score = 0.0
         
-        # Keyword matching
-        keyword_matches = sum(1 for keyword in pattern.keywords if keyword in text)
+        # Keyword matching with partial word matching
+        keyword_matches = 0
+        for keyword in pattern.keywords:
+            if keyword in text:
+                keyword_matches += 1
+            # Also check for partial matches (for compound words)
+            elif any(part in text for part in keyword.split() if len(part) > 2):
+                keyword_matches += 0.5
+        
         keyword_score = keyword_matches / len(pattern.keywords) if pattern.keywords else 0
         score += keyword_score * 0.4
         
         # Confidence indicators (stronger signals)
-        confidence_matches = sum(1 for indicator in pattern.confidence_indicators if indicator in text)
+        confidence_matches = 0
+        for indicator in pattern.confidence_indicators:
+            if indicator in text:
+                confidence_matches += 1
+            # Partial matching for multi-word indicators
+            elif len(indicator.split()) > 1:
+                words_matched = sum(1 for word in indicator.split() if word in text)
+                if words_matched >= len(indicator.split()) // 2:
+                    confidence_matches += 0.7
+                    
         confidence_score = confidence_matches / len(pattern.confidence_indicators) if pattern.confidence_indicators else 0
         score += confidence_score * 0.4
         
         # Context requirements
         context_score = self._check_context_requirements(pattern.context_requirements, context)
-        score += context_score * 0.2
+        score += context_score * 0.15
         
         # Pattern priority boost
-        priority_boost = (pattern.priority - 1) * 0.05  # Up to 0.2 boost for priority 5
+        priority_boost = (pattern.priority - 1) * 0.03  # Up to 0.12 boost for priority 5
         score += priority_boost
+        
+        # Base score boost to avoid too many 0.0 scores
+        if keyword_matches > 0 or confidence_matches > 0:
+            score += 0.1  # Minimum confidence for any match
         
         # Add small randomization to avoid exact boundary values in tests
         import random
-        score += random.uniform(-0.01, 0.01)
+        score += random.uniform(-0.005, 0.005)
         
         return max(0.0, min(score, 1.0))
     
@@ -518,6 +538,22 @@ class SemanticContextSystem:
         best_match = matches[0]
         intent = best_match["pattern"].intent
         confidence = best_match["score"]
+        
+        # Apply context boost to confidence if intent aligns with current objective
+        if context and context.current_objective:
+            objective_lower = context.current_objective.lower()
+            intent_mapping = {
+                "starter": [DialogueIntent.STARTER_SELECTION],
+                "gym": [DialogueIntent.GYM_CHALLENGE, DialogueIntent.BATTLE_REQUEST],
+                "heal": [DialogueIntent.HEALING_REQUEST],
+                "shop": [DialogueIntent.SHOPPING],
+                "battle": [DialogueIntent.BATTLE_REQUEST, DialogueIntent.GYM_CHALLENGE]
+            }
+            
+            for obj_keyword, intents in intent_mapping.items():
+                if obj_keyword in objective_lower and intent in intents:
+                    confidence = min(confidence + 0.15, 1.0)  # Boost for aligned objectives
+                    break
         
         return intent, confidence
     

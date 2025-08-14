@@ -293,6 +293,7 @@ class TestCrossSystemDataFlow:
         # Mock game context building
         with patch.object(dialogue_machine, '_build_game_context') as mock_context:
             test_context = GameContext(
+                current_objective="continue_journey",
                 player_progress={"badges": 1, "pokemon_count": 3},
                 location_info={"current_map": "violet_city", "region": "johto"},
                 recent_events=["beat_falkner", "got_zephyr_badge"],
@@ -482,6 +483,7 @@ class TestPerformanceCharacteristics:
         
         # Test semantic analysis speed
         game_context = GameContext(
+            current_objective="test_processing",
             player_progress={"badges": 0},
             location_info={"current_map": "test"},
             recent_events=[],
@@ -725,6 +727,7 @@ class TestEdgeCasesAndErrorHandling:
         
         # Test with extreme game context
         extreme_context = GameContext(
+            current_objective="test_extreme_values",
             player_progress={str(i): i for i in range(10000)},  # Very large dict
             location_info={"map": "A" * 10000},  # Very long strings
             recent_events=["event"] * 1000,  # Very long list
@@ -782,7 +785,13 @@ class TestEdgeCasesAndErrorHandling:
             " ",  # Whitespace only
         ]
         
-        game_context = GameContext({}, {}, [], [])
+        game_context = GameContext(
+            current_objective="test_unicode",
+            player_progress={},
+            location_info={},
+            recent_events=[],
+            active_quests=[]
+        )
         
         for dialogue in test_dialogues:
             result = semantic_system.analyze_dialogue(dialogue, game_context)
