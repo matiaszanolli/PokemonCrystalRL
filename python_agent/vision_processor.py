@@ -464,16 +464,17 @@ class PokemonVisionProcessor:
         
         all_text = ' '.join([t.text.lower() for t in detected_text])
         
-        # Check for dialogue FIRST and with higher priority
+        # Check for indoor/home environment FIRST to prevent false classifications
+        if self._is_indoor_environment(image, detected_text, all_text):
+            return 'overworld'  # Indoor areas are part of overworld
+        
+        # Check for actual dialogue (must be substantial dialogue content)
         dialogue_texts = [t for t in detected_text if t.location == 'dialogue']
         dialogue_boxes = [e for e in ui_elements if e.element_type == 'dialogue_box']
         
-        if dialogue_texts or dialogue_boxes:
+        # Only classify as dialogue if there's substantial dialogue content
+        if self._is_actual_dialogue(dialogue_texts, dialogue_boxes, all_text):
             return 'dialogue'
-        
-        # Check for indoor/home environment indicators first
-        if self._is_indoor_environment(image, detected_text, all_text):
-            return 'overworld'  # Indoor areas are part of overworld
         
         # Check for actual battle context (requires multiple strong indicators)
         health_bars = [e for e in ui_elements if e.element_type == 'healthbar']
@@ -482,15 +483,24 @@ class PokemonVisionProcessor:
         if health_bars and self._is_actual_battle(image, detected_text, health_bars):
             return 'battle'
         
-        # Check for menus
+        # Check for actual menus (not just any UI elements)
         menu_texts = [t for t in detected_text if t.location == 'menu']
         menu_boxes = [e for e in ui_elements if e.element_type == 'menu']
         
-        if menu_texts or menu_boxes:
+        if self._is_actual_menu(menu_texts, menu_boxes, all_text):
             return 'menu'
         
-        # Look for common intro/title text
-        if any(word in all_text for word in ['pokemon', 'press', 'start', 'continue', 'new game']):
+        # Look for intro/title screens (prioritize specific intro indicators)
+        intro_keywords = ['press start', 'new game', 'continue', 'pokemon crystal', 'game freak']
+        title_keywords = ['pokemon', 'crystal', 'version']
+        
+        # Strong intro indicators (definitive intro screens)
+        if any(phrase in all_text for phrase in intro_keywords):
+            return 'intro'
+        
+        # Weaker title indicators (could be intro if no other strong signals)
+        if any(word in all_text for word in title_keywords) and not all_text.strip():
+            # Only classify as intro if minimal other content (title screen)
             return 'intro'
         
         # Default to overworld
@@ -499,36 +509,74 @@ class PokemonVisionProcessor:
     def _is_indoor_environment(self, image: np.ndarray, detected_text: List[DetectedText], all_text: str) -> bool:
         """Detect if we're in an indoor environment (home, building, etc.)"""
         
-        # Check for indoor environment indicators
-        indoor_keywords = ['home', 'house', 'room', 'inside', 'mom', 'bed', 'pc', 'stairs', 'upstairs', 'downstairs']
-        indoor_text_found = any(keyword in all_text for keyword in indoor_keywords)
+        # Don't classify intro/menu screens as indoor (even if they mention 'new game')
+        intro_exclusions = ['new game', 'continue', 'press start', 'pokemon crystal']
+        is_intro_screen = any(phrase in all_text for phrase in intro_exclusions)
+        
+        if is_intro_screen:
+            return False  # Never classify intro screens as indoor
+        
+        # Strong indoor text indicators (player's home specifically)
+        strong_indoor_keywords = ['mom', 'bed', 'pc', 'home', 'house', 'room', 'your room']
+        weak_indoor_keywords = ['inside', 'stairs', 'upstairs', 'downstairs', 'door', 'floor']
+        
+        strong_indoor_text = any(keyword in all_text for keyword in strong_indoor_keywords)
+        weak_indoor_text = any(keyword in all_text for keyword in weak_indoor_keywords)
         
         # Check visual characteristics of indoor environments
         height, width = image.shape[:2]
         
-        # Indoor environments often have:
-        # 1. More muted/darker colors
-        # 2. Furniture-like rectangular patterns
-        # 3. No sky/outdoor elements
-        # 4. Different color palette than battles
+        try:
+            # Convert to HSV for color analysis
+            hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+            
+            # Check for brown/wooden colors (furniture)
+            brown_lower = np.array([8, 30, 30])
+            brown_upper = np.array([25, 255, 200])
+            brown_mask = cv2.inRange(hsv_image, brown_lower, brown_upper)
+            brown_ratio = np.sum(brown_mask > 0) / (height * width)
+            
+            # Check for typical indoor lighting patterns
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            avg_brightness = np.mean(gray)
+            brightness_std = np.std(gray)
+            
+            # Check for indoor color palette (less vibrant than outdoor/battle)
+            saturation = hsv_image[:, :, 1]
+            avg_saturation = np.mean(saturation)
+            
+            # Indoor visual indicators:
+            # 1. Some brown/wooden elements (furniture)
+            # 2. Moderate brightness (not too bright like battles)
+            # 3. Lower saturation (indoor lighting is more muted)
+            # 4. Consistent lighting (lower brightness variation)
+            visual_indoor_score = 0
+            
+            if brown_ratio > 0.05:  # Some furniture
+                visual_indoor_score += 2
+            if 70 <= avg_brightness <= 170:  # Indoor lighting range
+                visual_indoor_score += 1
+            if avg_saturation < 80:  # Muted colors
+                visual_indoor_score += 1
+            if brightness_std < 40:  # Consistent lighting
+                visual_indoor_score += 1
+            
+            visual_indoor_indicators = visual_indoor_score >= 3
+            
+        except Exception as e:
+            print(f"⚠️ Indoor detection visual analysis error: {e}")
+            visual_indoor_indicators = False
         
-        # Simple heuristic: check if the image has typical indoor color distribution
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        # Definitive indoor if strong text indicators
+        if strong_indoor_text:
+            return True
         
-        # Check for brown/wooden colors (furniture)
-        brown_lower = np.array([10, 50, 50])
-        brown_upper = np.array([20, 255, 200])
-        brown_mask = cv2.inRange(hsv_image, brown_lower, brown_upper)
-        brown_ratio = np.sum(brown_mask > 0) / (height * width)
+        # Likely indoor if weak text + visual indicators
+        if weak_indoor_text and visual_indoor_indicators:
+            return True
         
-        # Check for typical indoor lighting (not too bright, not too dark)
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        avg_brightness = np.mean(gray)
-        
-        # Indoor environments typically have moderate brightness and some brown/furniture colors
-        visual_indoor_indicators = brown_ratio > 0.1 and 80 <= avg_brightness <= 180
-        
-        return indoor_text_found or visual_indoor_indicators
+        # Indoor if strong visual indicators alone
+        return visual_indoor_indicators
     
     def _is_actual_battle(self, image: np.ndarray, detected_text: List[DetectedText], 
                          health_bars: List[GameUIElement]) -> bool:
@@ -573,6 +621,53 @@ class PokemonVisionProcessor:
         # 2. Cannot be in indoor environment
         # 3. Must have at least one valid battle-positioned health bar
         return (strong_battle_text or valid_battle_bars >= 2) and valid_battle_bars > 0
+    
+    def _is_actual_dialogue(self, dialogue_texts: List[DetectedText], dialogue_boxes: List[GameUIElement], all_text: str) -> bool:
+        """Determine if detected dialogue elements indicate actual dialogue vs UI noise"""
+        
+        # Check for substantial dialogue content
+        dialogue_content = ' '.join([t.text for t in dialogue_texts])
+        dialogue_length = len(dialogue_content.strip())
+        
+        # Dialogue indicators
+        dialogue_keywords = ['said', 'says', 'asked', 'replied', 'told', 'explained', 'professor', 'mom']
+        has_dialogue_keywords = any(keyword in all_text for keyword in dialogue_keywords)
+        
+        # Question indicators
+        has_questions = '?' in dialogue_content
+        
+        # Exclude home environment from dialogue classification
+        home_keywords = ['mom', 'home', 'house', 'bed', 'pc']
+        is_home_context = any(keyword in all_text for keyword in home_keywords)
+        
+        # Must have substantial content OR clear dialogue indicators
+        # But not if we're clearly in a home environment with minimal dialogue
+        substantial_dialogue = dialogue_length > 10 or has_dialogue_keywords or has_questions
+        
+        return substantial_dialogue and not (is_home_context and dialogue_length < 20)
+    
+    def _is_actual_menu(self, menu_texts: List[DetectedText], menu_boxes: List[GameUIElement], all_text: str) -> bool:
+        """Determine if detected menu elements indicate actual menu vs UI noise"""
+        
+        # Start menu specific indicators (title screen menus)
+        start_menu_indicators = ['new game', 'continue', 'option', 'mystery gift']
+        is_start_menu = any(indicator in all_text for indicator in start_menu_indicators)
+        
+        # In-game menu indicators
+        game_menu_keywords = ['pokemon', 'bag', 'trainer', 'save', 'settings', 'items', 'status']
+        has_game_menu_keywords = any(keyword in all_text for keyword in game_menu_keywords)
+        
+        # Menu navigation indicators
+        navigation_indicators = ['▶', '▼', '▲', '◀', 'select', 'cancel', 'back']
+        has_navigation = any(indicator in all_text for indicator in navigation_indicators)
+        
+        # Exclude home environment from menu classification
+        home_keywords = ['mom', 'home', 'house', 'bed', 'pc']
+        is_home_context = any(keyword in all_text for keyword in home_keywords)
+        
+        # Must have clear menu indicators and not be in home
+        # Start menu gets priority for title screen detection
+        return (is_start_menu or has_game_menu_keywords or has_navigation or len(menu_boxes) > 0) and not is_home_context
     
     def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
         """Extract dominant colors from the screenshot"""
