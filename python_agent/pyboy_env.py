@@ -28,7 +28,8 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                  save_state_path: str = "../pokecrystal.ss1",
                  max_steps: int = 10000,
                  render_mode: Optional[str] = None,
-                 headless: bool = True):
+                 headless: bool = True,
+                 debug_mode: bool = False):
         """
         Initialize the PyBoy Pokémon Crystal environment
         
@@ -38,6 +39,7 @@ class PyBoyPokemonCrystalEnv(gym.Env):
             max_steps: Maximum steps per episode
             render_mode: Rendering mode ('human', 'rgb_array', or None)
             headless: Whether to run in headless mode (no GUI)
+            debug_mode: Enable debug mode for detailed logging
         """
         super().__init__()
         
@@ -46,6 +48,7 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.max_steps = max_steps
         self.render_mode = render_mode
         self.headless = headless
+        self.debug_mode = debug_mode
         
         # Action space: 9 possible actions (including no-op)
         # 0: No action, 1: Up, 2: Down, 3: Left, 4: Right, 
@@ -154,7 +157,7 @@ class PyBoyPokemonCrystalEnv(gym.Env):
             # PyBoy handles rendering automatically in non-headless mode
             pass
         elif self.render_mode == "rgb_array":
-            return np.array(self.pyboy.screen_image())
+            return self._get_screen_array()
     
     def close(self):
         """Clean up environment"""
@@ -337,6 +340,70 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         if self.pyboy and os.path.exists(filename):
             with open(filename, 'rb') as f:
                 self.pyboy.load_state(f)
+    
+    def get_game_state(self) -> Dict[str, Any]:
+        """Get the current game state for external use"""
+        self._update_state()
+        return self.current_state if self.current_state else {}
+    
+    def get_screenshot(self) -> np.ndarray:
+        """Get current screenshot as RGB numpy array"""
+        return self._get_screen_array()
+    
+    def _get_screen_array(self) -> np.ndarray:
+        """Get screen data as numpy array using the correct PyBoy API"""
+        if self.pyboy:
+            try:
+                # Use the PyBoy screen.ndarray method (confirmed working)
+                if hasattr(self.pyboy, 'screen') and hasattr(self.pyboy.screen, 'ndarray'):
+                    screen_data = self.pyboy.screen.ndarray.copy()
+                    
+                    if self.debug_mode:
+                        print(f"🔍 Screen data shape: {screen_data.shape}, dtype: {screen_data.dtype}")
+                    
+                    # Handle different channel formats
+                    if screen_data.shape[-1] == 4:  # RGBA format
+                        # Convert RGBA to RGB by dropping alpha channel
+                        screen_rgb = screen_data[:, :, :3]
+                        return screen_rgb.astype(np.uint8)
+                    elif screen_data.shape[-1] == 3:  # Already RGB
+                        return screen_data.astype(np.uint8)
+                    elif len(screen_data.shape) == 2:  # Grayscale
+                        # Convert grayscale to RGB
+                        screen_rgb = np.stack([screen_data, screen_data, screen_data], axis=-1)
+                        return screen_rgb.astype(np.uint8)
+                    else:
+                        # Unknown format, try to reshape to RGB
+                        if screen_data.size >= 144 * 160 * 3:
+                            reshaped = screen_data.flatten()[:144*160*3].reshape((144, 160, 3))
+                            return reshaped.astype(np.uint8)
+                
+                # Fallback: try PIL image method
+                elif hasattr(self.pyboy, 'screen') and hasattr(self.pyboy.screen, 'image'):
+                    pil_img = self.pyboy.screen.image()
+                    screen_array = np.array(pil_img)
+                    
+                    # Convert PIL image to RGB if needed
+                    if screen_array.shape[-1] == 4:  # RGBA
+                        return screen_array[:, :, :3].astype(np.uint8)
+                    elif screen_array.shape[-1] == 3:  # RGB
+                        return screen_array.astype(np.uint8)
+                
+                # Last resort: try legacy screen_image method
+                elif hasattr(self.pyboy, 'screen_image'):
+                    screen_image = self.pyboy.screen_image()
+                    screen_array = np.array(screen_image)
+                    if len(screen_array.shape) >= 3 and screen_array.shape[-1] >= 3:
+                        return screen_array[:, :, :3].astype(np.uint8)
+                
+            except Exception as e:
+                if self.debug_mode:
+                    print(f"🔍 Screen capture error: {e}")
+                    if hasattr(self.pyboy, 'screen'):
+                        print(f"🔍 Available screen methods: {[m for m in dir(self.pyboy.screen) if not m.startswith('_')]}")
+        
+        # Return empty array if no emulator or capture failed
+        return np.zeros((144, 160, 3), dtype=np.uint8)
 
 
 # Register the environment

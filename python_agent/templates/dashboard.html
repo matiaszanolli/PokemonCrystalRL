@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokemon Crystal RL - Training Monitor</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 10px;
+            border-radius: 25px;
+            font-weight: bold;
+        }
+        
+        .status.monitoring { background-color: #4CAF50; }
+        .status.stopped { background-color: #f44336; }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .main-panel {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+        }
+        
+        .game-screen {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .game-screen img {
+            max-width: 100%;
+            border: 3px solid #555;
+            border-radius: 5px;
+            image-rendering: pixelated;
+        }
+        
+        .stats-panel {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .stat-group {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 8px;
+        }
+        
+        .stat-group h3 {
+            margin: 0 0 15px 0;
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #444;
+            border-radius: 5px;
+        }
+        
+        .pokemon-party {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .pokemon {
+            padding: 10px;
+            background-color: #444;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .pokemon.low-hp {
+            border-left-color: #f44336;
+        }
+        
+        .hp-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #666;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        
+        .hp-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .hp-fill.low { background-color: #f44336; }
+        .hp-fill.medium { background-color: #FF9800; }
+        
+        .side-panel {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 20px;
+        }
+        
+        .controls {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button.stop {
+            background-color: #f44336;
+        }
+        
+        button.stop:hover {
+            background-color: #d32f2f;
+        }
+        
+        .actions-panel {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .action-history {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #333;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        
+        .action-item {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #444;
+            border-radius: 3px;
+            font-size: 0.9em;
+            border-left: 3px solid #4CAF50;
+        }
+        
+        .decisions-panel {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .decision-item {
+            padding: 12px;
+            margin: 10px 0;
+            background-color: #333;
+            border-radius: 5px;
+            border-left: 3px solid #2196F3;
+        }
+        
+        .decision-action {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .decision-reasoning {
+            font-size: 0.9em;
+            color: #ccc;
+            margin-top: 5px;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .updating {
+            animation: pulse 1s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 Pokemon Crystal RL Training Monitor</h1>
+        <div id="status" class="status stopped">🔴 Not Monitoring</div>
+    </div>
+
+    <div class="dashboard">
+        <div class="main-panel">
+            <div class="game-screen">
+                <h3>🎯 Live Game Screen</h3>
+                <img id="screenshot" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" alt="Game Screen">
+                <p id="screen-info">Waiting for game data...</p>
+            </div>
+            
+            <div class="stats-panel">
+                <h3>📊 Game Statistics</h3>
+                
+                <div class="stat-group">
+                    <h3>👤 Player Info</h3>
+                    <div class="stat-item">
+                        <span>Location:</span>
+                        <span id="player-location">Map ?, (?, ?)</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>💰 Money:</span>
+                        <span id="player-money">$0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>🏆 Badges:</span>
+                        <span id="player-badges">0</span>
+                    </div>
+                </div>
+                
+                <div class="stat-group">
+                    <h3>🐾 Pokemon Party</h3>
+                    <div id="pokemon-party" class="pokemon-party">
+                        <p>No Pokemon data available</p>
+                    </div>
+                </div>
+                
+                <div class="stat-group">
+                    <h3>🎯 Training Stats</h3>
+                    <div class="stat-item">
+                        <span>Episodes:</span>
+                        <span id="training-episodes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Total Steps:</span>
+                        <span id="training-steps">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Decisions Made:</span>
+                        <span id="training-decisions">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Visual Analyses:</span>
+                        <span id="training-visual">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="side-panel">
+            <div class="controls">
+                <h3>🎛️ Controls</h3>
+                <div class="control-buttons">
+                    <button onclick="startMonitoring()">▶️ Start Monitor</button>
+                    <button onclick="stopMonitoring()" class="stop">⏹️ Stop Monitor</button>
+                </div>
+            </div>
+            
+            <div class="actions-panel">
+                <h3>🎮 Recent Actions</h3>
+                <div id="action-history" class="action-history">
+                    <p>No actions yet...</p>
+                </div>
+            </div>
+            
+            <div class="decisions-panel">
+                <h3>🧠 Agent Decisions</h3>
+                <div id="decision-history" style="max-height: 400px; overflow-y: auto;">
+                    <p>No decisions yet...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket connection
+        const socket = io();
+        
+        // Connection events
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+        
+        socket.on('status', function(data) {
+            updateStatus(data);
+        });
+        
+        socket.on('screenshot', function(data) {
+            updateScreenshot(data);
+        });
+        
+        socket.on('stats_update', function(data) {
+            updateStats(data);
+        });
+        
+        socket.on('new_action', function(data) {
+            addAction(data);
+        });
+        
+        socket.on('new_decision', function(data) {
+            addDecision(data);
+        });
+        
+        // Control functions
+        function startMonitoring() {
+            socket.emit('start_monitoring');
+        }
+        
+        function stopMonitoring() {
+            socket.emit('stop_monitoring');
+        }
+        
+        // Update functions
+        function updateStatus(data) {
+            const statusElement = document.getElementById('status');
+            if (data.monitoring) {
+                statusElement.textContent = '🟢 Monitoring Active';
+                statusElement.className = 'status monitoring';
+            } else {
+                statusElement.textContent = '🔴 Not Monitoring';
+                statusElement.className = 'status stopped';
+            }
+        }
+        
+        function updateScreenshot(data) {
+            const imgElement = document.getElementById('screenshot');
+            const infoElement = document.getElementById('screen-info');
+            
+            imgElement.src = data.image;
+            infoElement.textContent = `Updated: ${new Date(data.timestamp).toLocaleTimeString()}`;
+            imgElement.classList.add('updating');
+            setTimeout(() => imgElement.classList.remove('updating'), 200);
+        }
+        
+        function updateStats(data) {
+            if (data.player) {
+                document.getElementById('player-location').textContent = 
+                    `Map ${data.player.map}, (${data.player.x}, ${data.player.y})`;
+                document.getElementById('player-money').textContent = 
+                    `$${data.player.money.toLocaleString()}`;
+                document.getElementById('player-badges').textContent = 
+                    data.player.badges;
+            }
+            
+            if (data.party) {
+                updatePokemonParty(data.party);
+            }
+            
+            if (data.training) {
+                document.getElementById('training-episodes').textContent = 
+                    data.training.episodes;
+                document.getElementById('training-steps').textContent = 
+                    data.training.total_steps.toLocaleString();
+                document.getElementById('training-decisions').textContent = 
+                    data.training.decisions_made.toLocaleString();
+                document.getElementById('training-visual').textContent = 
+                    data.training.visual_analyses.toLocaleString();
+            }
+        }
+        
+        function updatePokemonParty(party) {
+            const partyElement = document.getElementById('pokemon-party');
+            
+            if (party.length === 0) {
+                partyElement.innerHTML = '<p>No Pokemon in party</p>';
+                return;
+            }
+            
+            partyElement.innerHTML = '';
+            party.forEach((pokemon, index) => {
+                const hpPercent = (pokemon.hp / pokemon.max_hp) * 100;
+                const hpClass = hpPercent < 25 ? 'low' : hpPercent < 50 ? 'medium' : '';
+                
+                const pokemonDiv = document.createElement('div');
+                pokemonDiv.className = `pokemon ${hpPercent < 25 ? 'low-hp' : ''}`;
+                pokemonDiv.innerHTML = `
+                    <div><strong>Pokemon #${pokemon.species}</strong> - Level ${pokemon.level}</div>
+                    <div>HP: ${pokemon.hp}/${pokemon.max_hp}</div>
+                    <div class="hp-bar">
+                        <div class="hp-fill ${hpClass}" style="width: ${hpPercent}%"></div>
+                    </div>
+                `;
+                partyElement.appendChild(pokemonDiv);
+            });
+        }
+        
+        function addAction(data) {
+            const historyElement = document.getElementById('action-history');
+            
+            // Clear placeholder text
+            if (historyElement.textContent.includes('No actions yet')) {
+                historyElement.innerHTML = '';
+            }
+            
+            const actionDiv = document.createElement('div');
+            actionDiv.className = 'action-item';
+            actionDiv.innerHTML = `
+                <strong>${data.action}</strong>
+                <div style="font-size: 0.8em; color: #aaa;">
+                    ${new Date(data.timestamp).toLocaleTimeString()}
+                </div>
+                ${data.reasoning ? `<div style="font-size: 0.8em; margin-top: 5px;">${data.reasoning}</div>` : ''}
+            `;
+            
+            historyElement.insertBefore(actionDiv, historyElement.firstChild);
+            
+            // Keep only recent actions (max 20)
+            while (historyElement.children.length > 20) {
+                historyElement.removeChild(historyElement.lastChild);
+            }
+        }
+        
+        function addDecision(data) {
+            const historyElement = document.getElementById('decision-history');
+            
+            // Clear placeholder text
+            if (historyElement.textContent.includes('No decisions yet')) {
+                historyElement.innerHTML = '';
+            }
+            
+            const decisionDiv = document.createElement('div');
+            decisionDiv.className = 'decision-item';
+            decisionDiv.innerHTML = `
+                <div class="decision-action">${data.decision}</div>
+                <div class="decision-reasoning">${data.reasoning}</div>
+                <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
+                    ${new Date(data.timestamp).toLocaleTimeString()}
+                    ${data.confidence ? ` | Confidence: ${(data.confidence * 100).toFixed(1)}%` : ''}
+                </div>
+            `;
+            
+            historyElement.insertBefore(decisionDiv, historyElement.firstChild);
+            
+            // Keep only recent decisions (max 15)
+            while (historyElement.children.length > 15) {
+                historyElement.removeChild(historyElement.lastChild);
+            }
+        }
+        
+        // Request screenshot on load
+        socket.emit('request_screenshot');
+        
+        // Auto-refresh stats
+        setInterval(() => {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current_stats && Object.keys(data.current_stats).length > 0) {
+                        updateStats(data.current_stats);
+                    }
+                })
+                .catch(console.error);
+        }, 2000);
+    </script>
+</body>
+</html>

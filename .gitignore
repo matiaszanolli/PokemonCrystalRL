@@ -145,10 +145,13 @@ logs/
 tensorboard_logs/
 wandb/
 mlruns/
-outputs/
 runs/
 checkpoints/
 experiments/
+
+# Generated training outputs (keep structure)
+python_agent/outputs/*
+!python_agent/outputs/.gitkeep
 
 # TensorBoard
 events.out.tfevents.*
