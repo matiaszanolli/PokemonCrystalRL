@@ -11,8 +11,16 @@ from typing import Dict, List, Tuple, Optional, Set
 import os
 from collections import defaultdict
 import json
+import hashlib
+from collections import OrderedDict
 
 from rom_font_extractor import PokemonCrystalFontExtractor
+try:
+    from gameboy_color_palette import GameBoyColorPalette
+    GBC_PALETTE_AVAILABLE = True
+except ImportError:
+    GBC_PALETTE_AVAILABLE = False
+    print("⚠️ Game Boy Color palette support not available")
 
 
 class ROMFontDecoder:
@@ -29,6 +37,7 @@ class ROMFontDecoder:
             rom_path: Path to Pokemon Crystal ROM file (for fresh extraction)
         """
         self.font_templates: Dict[str, np.ndarray] = {}
+        self.font_variations: Dict[str, Dict[str, np.ndarray]] = {}
         self.template_path = template_path
         self.rom_path = rom_path
         
@@ -37,8 +46,21 @@ class ROMFontDecoder:
             'total_attempts': 0,
             'successful_matches': 0,
             'failed_matches': 0,
-            'confidence_scores': []
+            'confidence_scores': [],
+            'cache_hits': 0,
+            'cache_misses': 0
         }
+        
+        # Template matching cache (LRU cache)
+        self.cache_size = 1000  # Maximum cache entries
+        self.template_cache: OrderedDict[str, Tuple[str, float]] = OrderedDict()
+        self.region_cache: OrderedDict[str, str] = OrderedDict()
+        
+        # Initialize Game Boy Color palette support
+        self.gbc_palette = None
+        if GBC_PALETTE_AVAILABLE:
+            self.gbc_palette = GameBoyColorPalette()
+            print("🎨 Game Boy Color palette support enabled")
         
         # Load or extract font templates
         self._load_font_templates()
@@ -198,6 +220,141 @@ class ROMFontDecoder:
         
         return binary
     
+    def _hash_tile(self, tile: np.ndarray) -> str:
+        """
+        Create a hash of a tile for caching
+        
+        Args:
+            tile: Tile to hash
+            
+        Returns:
+            Hash string
+        """
+        # Normalize tile first
+        normalized = self._normalize_tile(tile)
+        # Create MD5 hash of the tile data
+        return hashlib.md5(normalized.tobytes()).hexdigest()
+    
+    def _hash_region(self, region: np.ndarray) -> str:
+        """
+        Create a hash of a text region for caching
+        
+        Args:
+            region: Region to hash
+            
+        Returns:
+            Hash string
+        """
+        # Convert to grayscale if needed
+        if len(region.shape) == 3:
+            region = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+        
+        # Create hash of the region data
+        return hashlib.md5(region.tobytes()).hexdigest()
+    
+    def _get_cached_character(self, tile: np.ndarray) -> Optional[Tuple[str, float]]:
+        """
+        Check if character recognition is cached
+        
+        Args:
+            tile: Tile to check
+            
+        Returns:
+            Cached result or None
+        """
+        tile_hash = self._hash_tile(tile)
+        
+        if tile_hash in self.template_cache:
+            # Move to end (LRU)
+            result = self.template_cache.pop(tile_hash)
+            self.template_cache[tile_hash] = result
+            self.recognition_stats['cache_hits'] += 1
+            return result
+        
+        self.recognition_stats['cache_misses'] += 1
+        return None
+    
+    def _cache_character_result(self, tile: np.ndarray, char: str, confidence: float) -> None:
+        """
+        Cache a character recognition result
+        
+        Args:
+            tile: Tile that was recognized
+            char: Recognized character
+            confidence: Confidence score
+        """
+        tile_hash = self._hash_tile(tile)
+        
+        # Add to cache
+        self.template_cache[tile_hash] = (char, confidence)
+        
+        # Maintain cache size (LRU eviction)
+        while len(self.template_cache) > self.cache_size:
+            self.template_cache.popitem(last=False)
+    
+    def _get_cached_region(self, region: np.ndarray) -> Optional[str]:
+        """
+        Check if text region decoding is cached
+        
+        Args:
+            region: Region to check
+            
+        Returns:
+            Cached result or None
+        """
+        region_hash = self._hash_region(region)
+        
+        if region_hash in self.region_cache:
+            # Move to end (LRU)
+            result = self.region_cache.pop(region_hash)
+            self.region_cache[region_hash] = result
+            return result
+        
+        return None
+    
+    def _cache_region_result(self, region: np.ndarray, text: str) -> None:
+        """
+        Cache a text region decoding result
+        
+        Args:
+            region: Region that was decoded
+            text: Decoded text
+        """
+        region_hash = self._hash_region(region)
+        
+        # Add to cache
+        self.region_cache[region_hash] = text
+        
+        # Maintain cache size (LRU eviction)
+        while len(self.region_cache) > self.cache_size:
+            self.region_cache.popitem(last=False)
+    
+    def clear_cache(self) -> None:
+        """
+        Clear all caches
+        """
+        self.template_cache.clear()
+        self.region_cache.clear()
+        print("🧹 Font decoder caches cleared")
+    
+    def get_cache_stats(self) -> Dict:
+        """
+        Get cache performance statistics
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        total_requests = self.recognition_stats['cache_hits'] + self.recognition_stats['cache_misses']
+        
+        return {
+            'template_cache_size': len(self.template_cache),
+            'region_cache_size': len(self.region_cache),
+            'cache_hits': self.recognition_stats['cache_hits'],
+            'cache_misses': self.recognition_stats['cache_misses'],
+            'hit_rate': self.recognition_stats['cache_hits'] / max(1, total_requests),
+            'total_requests': total_requests
+        }
+    
     def _calculate_match_score(self, tile: np.ndarray, template: np.ndarray) -> float:
         """
         Calculate similarity score between tile and template
@@ -267,6 +424,18 @@ class ROMFontDecoder:
         if not self.font_templates:
             return '?', 0.0
         
+        # Check cache first
+        cached_result = self._get_cached_character(tile)
+        if cached_result is not None:
+            char, confidence = cached_result
+            # Still count in statistics
+            self.recognition_stats['confidence_scores'].append(confidence)
+            if confidence >= min_confidence:
+                self.recognition_stats['successful_matches'] += 1
+            else:
+                self.recognition_stats['failed_matches'] += 1
+            return char, confidence
+        
         best_char = '?'
         best_score = 0.0
         
@@ -277,6 +446,9 @@ class ROMFontDecoder:
             if score > best_score:
                 best_score = score
                 best_char = char
+        
+        # Cache the result
+        self._cache_character_result(tile, best_char, best_score)
         
         # Record statistics
         self.recognition_stats['confidence_scores'].append(best_score)
@@ -432,7 +604,106 @@ class ROMFontDecoder:
             line += "│"
             print(line)
         
-        print("└────────┘")
+        print("└────────┐")
+    
+    def decode_text_region_with_palette(self, text_region: np.ndarray, 
+                                       screen_type: str = 'overworld',
+                                       char_width: int = 8, char_height: int = 8,
+                                       min_confidence: float = 0.6) -> str:
+        """
+        Decode text region with Game Boy Color palette awareness
+        
+        Args:
+            text_region: Image region containing text
+            screen_type: Type of screen for palette selection
+            char_width: Width of each character in pixels
+            char_height: Height of each character in pixels
+            min_confidence: Minimum confidence for character recognition
+            
+        Returns:
+            Decoded text string
+        """
+        if self.gbc_palette is None:
+            # Fallback to regular decoding
+            return self.decode_text_region(text_region, char_width, char_height, min_confidence)
+        
+        # Analyze color characteristics
+        color_analysis = self.gbc_palette.analyze_text_region_colors(text_region)
+        
+        # Enhance region based on detected characteristics
+        enhanced_region = text_region.copy()
+        
+        # Apply palette-aware enhancements
+        if color_analysis['is_high_contrast']:
+            # High contrast - use direct processing
+            pass
+        else:
+            # Low contrast - enhance using detected palette
+            detected_palette = color_analysis['detected_palette']
+            
+            # Convert to optimal palette for processing
+            if color_analysis['text_style'] == 'light_on_dark':
+                target_palette = 'text_white'
+            else:
+                target_palette = 'text_black'
+            
+            # Enhance for better recognition
+            if color_analysis['mean_brightness'] < 100:
+                enhanced_region = self.gbc_palette.enhance_template_for_lighting(
+                    enhanced_region, 'dark'
+                )
+            elif color_analysis['mean_brightness'] > 180:
+                enhanced_region = self.gbc_palette.enhance_template_for_lighting(
+                    enhanced_region, 'bright'
+                )
+        
+        # Use regular decoding with enhanced region
+        return self.decode_text_region(enhanced_region, char_width, char_height, min_confidence)
+    
+    def get_palette_analysis(self, region: np.ndarray) -> Dict:
+        """
+        Get Game Boy Color palette analysis for a region
+        
+        Args:
+            region: Image region to analyze
+            
+        Returns:
+            Dictionary with palette analysis or empty dict if not available
+        """
+        if self.gbc_palette is None:
+            return {}
+        
+        return self.gbc_palette.analyze_text_region_colors(region)
+    
+    def optimize_templates_for_palette(self, palette_name: str) -> None:
+        """
+        Optimize font templates for a specific Game Boy Color palette
+        
+        Args:
+            palette_name: Name of the target palette
+        """
+        if self.gbc_palette is None:
+            print("⚠️ Game Boy Color palette support not available")
+            return
+        
+        if palette_name not in self.gbc_palette.list_palettes():
+            print(f"⚠️ Unknown palette: {palette_name}")
+            return
+        
+        # Create palette-optimized versions of templates
+        optimized_templates = {}
+        
+        for char, template in self.font_templates.items():
+            # Create color-aware template
+            optimized = self.gbc_palette.create_color_aware_template(
+                template, 'text_white', palette_name
+            )
+            optimized_templates[f"{char}_{palette_name}"] = optimized
+        
+        # Add optimized templates to font variations
+        self.font_variations[palette_name] = optimized_templates
+        
+        print(f"✨ Optimized {len(optimized_templates)} templates for palette '{palette_name}'")
 
 
 def test_rom_font_decoder():

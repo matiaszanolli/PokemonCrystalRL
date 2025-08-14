@@ -43,13 +43,41 @@ class PokemonCrystalFontExtractor:
             'main_font': {
                 'start_address': 0x1C000,  # Bank 7, offset 0x0000
                 'tile_count': 128,
-                'char_offset': 0x80  # Characters start at 0x80
+                'char_offset': 0x80,  # Characters start at 0x80
+                'size': (8, 8),
+                'style': 'normal'
             },
             # Additional character sets
             'lowercase_font': {
                 'start_address': 0x1D000,  # Bank 7, offset 0x1000  
                 'tile_count': 64,
-                'char_offset': 0xA0
+                'char_offset': 0xA0,
+                'size': (8, 8),
+                'style': 'normal'
+            },
+            # Battle text font (typically larger/bolder)
+            'battle_font': {
+                'start_address': 0x1E000,  # Bank 7, offset 0x2000
+                'tile_count': 96,
+                'char_offset': 0x80,
+                'size': (8, 8),
+                'style': 'bold'
+            },
+            # Small font for status/stats
+            'small_font': {
+                'start_address': 0x1F000,  # Bank 7, offset 0x3000
+                'tile_count': 64,
+                'char_offset': 0x80,
+                'size': (6, 8),
+                'style': 'small'
+            },
+            # Menu headers (larger font)
+            'large_font': {
+                'start_address': 0x20000,  # Bank 8, offset 0x0000
+                'tile_count': 32,
+                'char_offset': 0x80,
+                'size': (16, 16),
+                'style': 'large'
             }
         }
         
@@ -73,7 +101,7 @@ class PokemonCrystalFontExtractor:
             0xF6: '0', 0xF7: '1', 0xF8: '2', 0xF9: '3', 0xFA: '4',
             0xFB: '5', 0xFC: '6', 0xFD: '7', 0xFE: '8', 0xFF: '9',
             
-            # Special characters
+            # Special characters (Basic punctuation)
             0x7F: ' ',   # Space
             0xE0: '-',   # Hyphen/dash
             0xE1: '/',   # Slash
@@ -84,9 +112,82 @@ class PokemonCrystalFontExtractor:
             0xE6: '!',   # Exclamation mark
             0xE7: ',',   # Comma
             0xE8: '.',   # Period
+            0xE9: '(',   # Left parenthesis
+            0xEA: ')',   # Right parenthesis
+            0xEB: '[',   # Left bracket
+            0xEC: ']',   # Right bracket
+            0xED: '"',   # Quote
+            0xEE: '&',   # Ampersand
+            0xEF: '+',   # Plus
+            
+            # Pokemon-specific symbols
             0xF0: '♂',   # Male symbol
             0xF1: '♀',   # Female symbol
-            0xF2: '$',   # Dollar/money symbol
+            0xF2: '$',   # Money/Pokedollar symbol
+            0xF3: '×',   # Multiplication/times symbol
+            0xF4: '…',   # Ellipsis
+            0xF5: '▶',   # Right arrow/play symbol
+            
+            # Additional special characters
+            0x4E: '★',   # Star symbol
+            0x51: '♪',   # Music note
+            0x52: '♫',   # Music notes
+            0x53: '♬',   # Music beam
+            0x54: '♭',   # Flat symbol
+            0x55: '♯',   # Sharp symbol
+            0x56: '☀',   # Sun symbol
+            0x57: '☁',   # Cloud symbol
+            0x58: '☂',   # Umbrella symbol
+            0x59: '❄',   # Snowflake symbol
+            0x5A: '⚡',   # Lightning bolt
+            0x5B: '♠',   # Spade symbol
+            0x5C: '♣',   # Club symbol
+            0x5D: '♥',   # Heart symbol
+            0x5E: '♦',   # Diamond symbol
+            
+            # Level/status indicators
+            0x34: 'Lv',  # Level abbreviation
+            0x35: 'HP',  # Hit Points
+            0x36: 'PP',  # Power Points
+            0x37: 'EXP', # Experience
+            0x38: 'ATK', # Attack
+            0x39: 'DEF', # Defense
+            0x3A: 'SPD', # Speed
+            0x3B: 'SPC', # Special
+            
+            # Pokemon type symbols (approximated)
+            0x60: '🔥',   # Fire type
+            0x61: '💧',   # Water type
+            0x62: '🌿',   # Grass type
+            0x63: '⚡',   # Electric type
+            0x64: '🧊',   # Ice type
+            0x65: '✊',   # Fighting type
+            0x66: '☠️',   # Poison type
+            0x67: '🌍',   # Ground type
+            0x68: '🕊️',   # Flying type
+            0x69: '🔮',   # Psychic type
+            0x6A: '🐛',   # Bug type
+            0x6B: '🗿',   # Rock type
+            0x6C: '👻',   # Ghost type
+            0x6D: '🐉',   # Dragon type
+            0x6E: '🌑',   # Dark type
+            0x6F: '⚙️',   # Steel type
+            
+            # Game-specific characters
+            0x70: '→',   # Right arrow
+            0x71: '←',   # Left arrow
+            0x72: '↑',   # Up arrow
+            0x73: '↓',   # Down arrow
+            0x74: '▲',   # Up triangle
+            0x75: '▼',   # Down triangle
+            0x76: '◄',   # Left triangle
+            0x77: '►',   # Right triangle
+            0x78: '■',   # Solid square
+            0x79: '□',   # Empty square
+            0x7A: '●',   # Solid circle
+            0x7B: '○',   # Empty circle
+            0x7C: '◆',   # Solid diamond
+            0x7D: '◇',   # Empty diamond
         }
         
         print("🔍 Pokemon Crystal font extractor initialized")
