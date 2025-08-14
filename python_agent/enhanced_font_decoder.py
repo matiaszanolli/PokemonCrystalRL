@@ -474,12 +474,33 @@ class ROMFontDecoder:
         Returns:
             Decoded text string
         """
-        if text_region is None or text_region.size == 0:
+        # Robust input validation
+        if text_region is None:
             return ""
         
-        # Convert to grayscale if needed
-        if len(text_region.shape) == 3:
-            text_region = cv2.cvtColor(text_region, cv2.COLOR_BGR2GRAY)
+        if not isinstance(text_region, np.ndarray):
+            return ""
+        
+        if text_region.size == 0:
+            return ""
+        
+        # Check array dimensions
+        if len(text_region.shape) not in [2, 3]:
+            return ""
+        
+        # Check minimum size
+        if text_region.shape[0] < char_height or text_region.shape[1] < char_width:
+            return ""
+        
+        try:
+            # Convert to grayscale if needed
+            if len(text_region.shape) == 3:
+                if text_region.shape[2] != 3:
+                    return ""
+                text_region = cv2.cvtColor(text_region, cv2.COLOR_BGR2GRAY)
+        except cv2.error as e:
+            print(f"⚠️ Color conversion error in font decoder: {e}")
+            return ""
         
         height, width = text_region.shape
         
@@ -623,6 +644,19 @@ class ROMFontDecoder:
         Returns:
             Decoded text string
         """
+        # Robust input validation
+        if text_region is None:
+            return ""
+        
+        if not isinstance(text_region, np.ndarray):
+            return ""
+        
+        if text_region.size == 0:
+            return ""
+        
+        # Check array dimensions
+        if len(text_region.shape) not in [2, 3]:
+            return ""
         if self.gbc_palette is None:
             # Fallback to regular decoding
             return self.decode_text_region(text_region, char_width, char_height, min_confidence)

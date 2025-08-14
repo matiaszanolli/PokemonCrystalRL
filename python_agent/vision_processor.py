@@ -90,6 +90,17 @@ class PokemonVisionProcessor:
         
         print("✅ Vision processor initialized")
     
+    def _create_empty_context(self, reason: str = "unknown") -> VisualContext:
+        """Create an empty visual context when processing fails"""
+        return VisualContext(
+            screen_type='unknown',
+            detected_text=[],
+            ui_elements=[],
+            dominant_colors=[(128, 128, 128)],  # Gray fallback
+            game_phase='unknown',
+            visual_summary=f"Processing failed: {reason}"
+        )
+    
     def _load_ui_templates(self) -> Dict[str, Any]:
         """Load UI element templates for detection"""
         # In a full implementation, these would be loaded from files
@@ -122,8 +133,25 @@ class PokemonVisionProcessor:
         Returns:
             VisualContext with extracted information
         """
-        # Upscale screenshot for better OCR
-        upscaled = self._upscale_screenshot(screenshot)
+        # Validate input screenshot
+        if screenshot is None or screenshot.size == 0:
+            return self._create_empty_context("empty_screenshot")
+        
+        # Check dimensions
+        if len(screenshot.shape) != 3 or screenshot.shape[2] != 3:
+            return self._create_empty_context("invalid_dimensions")
+        
+        # Check if image has reasonable dimensions
+        height, width = screenshot.shape[:2]
+        if height < 10 or width < 10:
+            return self._create_empty_context("too_small")
+        
+        try:
+            # Upscale screenshot for better OCR
+            upscaled = self._upscale_screenshot(screenshot)
+        except Exception as e:
+            print(f"⚠️ Screenshot upscaling failed: {e}")
+            return self._create_empty_context("upscaling_failed")
         
         # Detect text
         detected_text = self._detect_text(upscaled)
@@ -156,7 +184,14 @@ class PokemonVisionProcessor:
     
     def _upscale_screenshot(self, screenshot: np.ndarray, scale_factor: int = 4) -> np.ndarray:
         """Upscale screenshot for better OCR accuracy"""
+        # Additional validation
+        if screenshot is None or screenshot.size == 0:
+            raise ValueError("Empty screenshot provided for upscaling")
+        
         height, width = screenshot.shape[:2]
+        if height <= 0 or width <= 0:
+            raise ValueError(f"Invalid dimensions: {height}x{width}")
+        
         new_width = width * scale_factor
         new_height = height * scale_factor
         
@@ -264,6 +299,13 @@ class PokemonVisionProcessor:
         """Detect common Pokemon UI elements"""
         ui_elements = []
         
+        # Validate image before processing
+        if image is None or image.size == 0:
+            return ui_elements
+        
+        if len(image.shape) != 3 or image.shape[2] != 3:
+            return ui_elements
+        
         try:
             # Convert to HSV for better color detection
             hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
@@ -288,13 +330,27 @@ class PokemonVisionProcessor:
     
     def _detect_dialogue_box(self, image: np.ndarray, hsv_image: np.ndarray) -> Optional[GameUIElement]:
         """Detect dialogue/text boxes"""
+        # Validate input
+        if image is None or image.size == 0:
+            return None
+        
         height, width = image.shape[:2]
+        if height < 10 or width < 10:
+            return None
         
         # Look for white/light areas in bottom 40% of screen
         lower_region = image[int(height * 0.6):, :]
         
-        # Simple white detection
-        gray = cv2.cvtColor(lower_region, cv2.COLOR_RGB2GRAY)
+        # Check if lower region is valid
+        if lower_region.size == 0:
+            return None
+        
+        try:
+            # Simple white detection
+            gray = cv2.cvtColor(lower_region, cv2.COLOR_RGB2GRAY)
+        except cv2.error as e:
+            print(f"⚠️ Color conversion error in dialogue detection: {e}")
+            return None
         _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
         
         # Find contours
@@ -365,6 +421,10 @@ class PokemonVisionProcessor:
     def _detect_menus(self, image: np.ndarray, hsv_image: np.ndarray) -> List[GameUIElement]:
         """Detect menu boxes"""
         menus = []
+        
+        # Validate input
+        if image is None or image.size == 0:
+            return menus
         
         try:
             # Look for blue/dark colored rectangular regions (typical menu colors)
@@ -457,6 +517,13 @@ class PokemonVisionProcessor:
     
     def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
         """Extract dominant colors from the screenshot"""
+        # Validate input
+        if image is None or image.size == 0:
+            return [(128, 128, 128)]  # Gray fallback
+        
+        if len(image.shape) != 3 or image.shape[2] != 3:
+            return [(128, 128, 128)]  # Gray fallback
+        
         try:
             # Reshape image for k-means
             data = image.reshape((-1, 3))
