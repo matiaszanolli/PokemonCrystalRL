@@ -70,14 +70,15 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.previous_state = None
         self.current_state = None
         
-        # Memory addresses (PyBoy uses different addressing)
+        # Memory addresses for Pokemon Crystal (verified addresses)
         self.memory_addresses = {
             'player_x': 0xDCB8,
-            'player_y': 0xDCB9,
+            'player_y': 0xDCB9, 
             'player_map': 0xDCB5,
             'player_direction': 0xDCB6,
-            'money': [0xD84E, 0xD84F, 0xD850],  # 3 bytes BCD
-            'badges': [0xD857, 0xD858],  # 2 bytes
+            'money': 0xD84E,  # 3 bytes BCD format: $xxxx stored as BCD
+            'badges': 0xD855,  # Johto badges byte
+            'kanto_badges': 0xD856,  # Kanto badges byte  
             'party_count': 0xDCD7,
             'party_pokemon': 0xDCDF,  # Start of party data
             'player_name': 0xD47D,
@@ -228,20 +229,27 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.current_state = state
     
     def _read_bcd_money(self) -> int:
-        """Read money value in BCD format"""
+        """Read money value in BCD format (3 bytes starting at money address)"""
         money = 0
-        for i, addr in enumerate(self.memory_addresses['money']):
-            byte_val = self.pyboy.memory[addr]
+        money_addr = self.memory_addresses['money']
+        
+        # Read 3 bytes of BCD money data
+        for i in range(3):
+            byte_val = self.pyboy.memory[money_addr + i]
             tens = (byte_val >> 4) & 0xF
             ones = byte_val & 0xF
             money = money * 100 + tens * 10 + ones
+        
         return money
     
     def _read_badges(self) -> int:
-        """Read badge count"""
-        badge_byte1 = self.pyboy.memory[self.memory_addresses['badges'][0]]
-        badge_byte2 = self.pyboy.memory[self.memory_addresses['badges'][1]]
-        return (badge_byte1 << 8) | badge_byte2
+        """Read badge count from Johto and Kanto badge bytes"""
+        johto_badges = self.pyboy.memory[self.memory_addresses['badges']]
+        kanto_badges = self.pyboy.memory[self.memory_addresses['kanto_badges']]
+        
+        # Count number of bits set in both badge bytes
+        total_badges = bin(johto_badges).count('1') + bin(kanto_badges).count('1')
+        return total_badges
     
     def _read_party_data(self) -> list:
         """Read party Pokemon data"""

@@ -293,8 +293,10 @@ class PokemonRLWebMonitor:
     def _get_action_counts(self):
         """Get action frequency counts"""
         action_counts = {}
-        for action in self.action_history[-100:]:  # Last 100 actions
-            action_counts[action] = action_counts.get(action, 0) + 1
+        for action_data in self.action_history[-100:]:  # Last 100 actions
+            # Extract action name from action data dict
+            action_name = action_data.get('action', 'unknown') if isinstance(action_data, dict) else str(action_data)
+            action_counts[action_name] = action_counts.get(action_name, 0) + 1
         return action_counts
     
     def update_screenshot(self, screenshot: np.ndarray):

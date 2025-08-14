@@ -330,21 +330,26 @@ IMPORTANT RULES:
 1. Be concise - give short, direct answers
 2. Focus on immediate next action, not long-term strategy  
 3. Consider both game state data AND visual information when available
-4. Your response should end with ONE of these actions: UP, DOWN, LEFT, RIGHT, A, B, START, SELECT, NONE
+4. VARY your actions - don't repeat the same action unless specifically needed
+5. Your response should be ONLY ONE of these actions: UP, DOWN, LEFT, RIGHT, A, B, START, SELECT, NONE
 
 Actions explained:
-- Movement: UP/DOWN/LEFT/RIGHT to navigate
-- A: Interact with objects/people, confirm in menus, attack in battle
+- Movement: UP/DOWN/LEFT/RIGHT to navigate and explore
+- A: Interact with objects/people, confirm in menus, attack in battle, continue dialogue
 - B: Cancel, go back, run from wild Pokemon  
 - START: Open main menu
 - SELECT: Usually unused
-- NONE: Wait/do nothing
+- NONE: Wait/do nothing (use sparingly)
 
-Visual Context Priority:
-- If in BATTLE: Focus on battle strategy
-- If in DIALOGUE: Continue reading with A
-- If in MENU: Navigate appropriately 
-- If in OVERWORLD: Explore systematically"""
+Action Context Guidelines:
+- DIALOGUE SCREENS: Use A to continue, but if you've pressed A multiple times, try B to back out or movement to explore
+- MENU SCREENS: Use UP/DOWN to navigate options, A to select, B to cancel
+- OVERWORLD: Use movement (UP/DOWN/LEFT/RIGHT) to explore, A to interact with objects/NPCs
+- TITLE/INTRO: Use A to proceed through initial screens
+- BATTLE: Use A for attacks, or UP/DOWN to navigate battle menus
+- When stuck or repeating actions: Try different movement directions or B to escape
+
+IMPORTANT: If recent actions show repetitive behavior, choose a DIFFERENT action to break the pattern!"""
 
         # Query local LLM
         llm_response = self._query_local_llm(context_prompt, system_prompt)
@@ -412,7 +417,18 @@ TEAM: {len(party)} Pokemon"""
             prompt += f"\nVISUAL INSIGHTS: {', '.join(analysis['visual_insights'])}"
         
         if recent_history:
-            prompt += f"\nRECENT ACTIONS: {', '.join(recent_history[-3:])}"
+            prompt += f"\nRECENT ACTIONS: {', '.join(recent_history[-5:])}"
+            
+            # Detect repetitive behavior
+            if len(recent_history) >= 3:
+                last_actions = recent_history[-3:]
+                if len(set(last_actions)) == 1:  # All same action
+                    prompt += f"\n⚠️ WARNING: You've been repeating the same action ({last_actions[0]}) - try something different!"
+                elif len(set(last_actions)) == 2 and len(recent_history) >= 4:
+                    # Check for alternating pattern
+                    last_four = recent_history[-4:]
+                    if last_four[0] == last_four[2] and last_four[1] == last_four[3]:
+                        prompt += f"\n⚠️ WARNING: You're stuck in a pattern ({', '.join(last_four)}) - break the cycle!"
         
         # Add screen-specific guidance
         if visual_context:
@@ -430,29 +446,77 @@ TEAM: {len(party)} Pokemon"""
         return prompt
     
     def _parse_action_from_response(self, response: str) -> int:
-        """Parse LLM response to extract action command"""
+        """Parse LLM response to extract action command with improved fallback logic"""
         response_upper = response.upper()
         
-        # Look for action keywords in the response
-        if "UP" in response_upper:
+        # DEBUG: Print the LLM response to understand parsing issues
+        print(f"🔍 LLM Response: '{response.strip()}'")
+        
+        # Enhanced action parsing with more flexible patterns
+        if "UP" in response_upper or "NORTH" in response_upper:
+            print(f"✅ Parsed as UP (1)")
             return 1
-        elif "DOWN" in response_upper:
+        elif "DOWN" in response_upper or "SOUTH" in response_upper:
+            print(f"✅ Parsed as DOWN (2)")
             return 2
-        elif "LEFT" in response_upper:
+        elif "LEFT" in response_upper or "WEST" in response_upper:
+            print(f"✅ Parsed as LEFT (3)")
             return 3
-        elif "RIGHT" in response_upper:
+        elif "RIGHT" in response_upper or "EAST" in response_upper:
+            print(f"✅ Parsed as RIGHT (4)")
             return 4
-        elif " A " in response_upper or response_upper.endswith(" A") or "PRESS A" in response_upper:
+        elif (" A " in response_upper or response_upper.endswith(" A") or 
+              "PRESS A" in response_upper or "BUTTON A" in response_upper or
+              "HIT A" in response_upper or "USE A" in response_upper):
+            print(f"✅ Parsed as A button (5) - explicit A mention")
             return 5
-        elif " B " in response_upper or response_upper.endswith(" B") or "PRESS B" in response_upper:
+        elif (" B " in response_upper or response_upper.endswith(" B") or 
+              "PRESS B" in response_upper or "BUTTON B" in response_upper or
+              "HIT B" in response_upper or "USE B" in response_upper or
+              "CANCEL" in response_upper or "BACK" in response_upper or "EXIT" in response_upper):
+            print(f"✅ Parsed as B button (6)")
             return 6
         elif "START" in response_upper or "MENU" in response_upper:
+            print(f"✅ Parsed as START (7)")
             return 7
-        elif "SELECT" in response_upper:
+        elif "SELECT" in response_upper and "BUTTON" in response_upper:
+            print(f"✅ Parsed as SELECT (8)")
             return 8
+        
+        # Context-aware action selection based on content
+        elif ("INTERACT" in response_upper or "TALK" in response_upper or 
+              "CONFIRM" in response_upper or "ENTER" in response_upper or
+              "CONTINUE" in response_upper or "NEXT" in response_upper or "PROCEED" in response_upper):
+            print(f"✅ Parsed as A (5) - interaction/continue keyword")
+            return 5
+        elif "MOVE" in response_upper or "WALK" in response_upper or "GO" in response_upper:
+            # If movement is mentioned but direction unclear, choose random movement
+            action = np.random.choice([1, 2, 3, 4])  # UP, DOWN, LEFT, RIGHT
+            print(f"✅ Parsed as movement ({action}) - generic movement keyword")
+            return action
+        elif "EXPLORE" in response_upper or "LOOK" in response_upper:
+            action = np.random.choice([1, 2, 3, 4])  # Random exploration movement
+            print(f"✅ Parsed as exploration movement ({action})")
+            return action
+        elif "WAIT" in response_upper or "PAUSE" in response_upper or "NOTHING" in response_upper:
+            print(f"✅ Parsed as NONE (0) - explicit wait")
+            return 0  # NONE - only when explicitly requested
         else:
-            # Default to no action if unclear
-            return 0
+            # Last resort: more balanced fallback
+            # Check if response suggests any direction even without exact keywords
+            if any(word in response_upper for word in ["FORWARD", "AHEAD", "ADVANCE"]):
+                print(f"✅ Fallback: UP (1) - forward motion implied")
+                return 1
+            elif any(word in response_upper for word in ["BACKWARD", "RETREAT", "RETURN"]):
+                print(f"✅ Fallback: DOWN (2) - backward motion implied")
+                return 2
+            else:
+                # Truly random fallback with more balanced distribution
+                fallback_actions = [1, 2, 3, 4, 5, 0]  # Include NONE occasionally
+                weights = [0.25, 0.25, 0.2, 0.2, 0.08, 0.02]  # Favor movement, some A, rare NONE
+                action = np.random.choice(fallback_actions, p=weights)
+                print(f"⚠️ Fallback: Random action ({action}) - unclear response")
+                return action
     
     def _store_enhanced_decision(self, state: Dict[str, Any], llm_response: str, 
                                action: int, analysis: Dict[str, Any],
