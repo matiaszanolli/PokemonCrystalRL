@@ -26,7 +26,7 @@ class PokemonCrystalEnv(gym.Env):
     
     def __init__(self, 
                  emulator_path: str = "bizhawk",
-                 rom_path: str = "pokemon_crystal.gbc",
+                 rom_path: str = "../pokecrystal.gbc",
                  lua_script_path: str = "../lua_bridge/crystal_bridge.lua",
                  max_steps: int = 10000,
                  render_mode: Optional[str] = None):
@@ -133,11 +133,19 @@ class PokemonCrystalEnv(gym.Env):
     
     def _start_emulator(self):
         """Start the emulator with the Lua script"""
+        # Convert paths to absolute paths to avoid issues
+        rom_abs_path = os.path.abspath(self.rom_path)
+        lua_abs_path = os.path.abspath(self.lua_script_path)
+        
         cmd = [
             self.emulator_path,
-            self.rom_path,
-            "--lua=" + self.lua_script_path
+            rom_abs_path,
+            "--lua=" + lua_abs_path
         ]
+        
+        print(f"Starting emulator with:")
+        print(f"  ROM: {rom_abs_path}")
+        print(f"  Lua: {lua_abs_path}")
         
         try:
             self.emulator_process = subprocess.Popen(

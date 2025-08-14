@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument('--emulator-path', type=str, default='bizhawk',
                        help='Path to emulator executable')
     
-    parser.add_argument('--rom-path', type=str, default='pokemon_crystal.gbc',
+    parser.add_argument('--rom-path', type=str, default='../pokecrystal.gbc',
                        help='Path to Pokémon Crystal ROM')
     
     parser.add_argument('--model-save-path', type=str, default='models',
