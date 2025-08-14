@@ -339,6 +339,9 @@ class ChoiceRecognitionSystem:
         choice_texts = []
         
         for text_obj in detected_texts:
+            # Handle None text gracefully
+            if text_obj.text is None:
+                continue
             text = text_obj.text.strip()
             
             # Skip if text is too long (probably not a choice)
@@ -550,10 +553,13 @@ class ChoiceRecognitionSystem:
             "run": "flee_battle",
             "confirm": "confirm_action",
             "accept": "accept_offer",
-            "decline": "decline_offer"
+            "decline": "decline_offer",
+            "north": "move_north"  # Add missing north mapping
         }
         
-        for key, outcome in outcome_mappings.items():
+        # Sort by length (descending) to prioritize longer, more specific matches
+        sorted_mappings = sorted(outcome_mappings.items(), key=lambda x: len(x[0]), reverse=True)
+        for key, outcome in sorted_mappings:
             if key in text_lower:
                 return outcome
         
@@ -600,20 +606,38 @@ class ChoiceRecognitionSystem:
     def _apply_context_prioritization(self, choices: List[RecognizedChoice], 
                                     context: ChoiceContext) -> List[RecognizedChoice]:
         """Apply context-based prioritization to choices"""
+        # Create new list with updated priorities to avoid modifying originals
+        updated_choices = []
         for choice in choices:
+            new_priority = choice.priority
+            
             # Boost priority based on conversation history
             if context.conversation_history:
                 recent_text = " ".join(context.conversation_history[-3:]).lower()
                 
                 # If recent conversation mentions specific topics, boost related choices
                 if "starter" in recent_text and "pokemon_choice" in choice.context_tags:
-                    choice.priority += 15
+                    new_priority += 15
                 elif "battle" in recent_text and "battle_related" in choice.context_tags:
-                    choice.priority += 15
+                    new_priority += 15
                 elif "heal" in recent_text and "positive_response" in choice.context_tags:
-                    choice.priority += 10
+                    new_priority += 10
+            
+            # Create updated choice with new priority
+            updated_choice = RecognizedChoice(
+                text=choice.text,
+                choice_type=choice.choice_type,
+                position=choice.position,
+                action_mapping=choice.action_mapping,
+                confidence=choice.confidence,
+                priority=new_priority,
+                expected_outcome=choice.expected_outcome,
+                context_tags=choice.context_tags,
+                ui_coordinates=choice.ui_coordinates
+            )
+            updated_choices.append(updated_choice)
         
-        return choices
+        return updated_choices
     
     def _store_choice_recognition(self, dialogue_text: str, choices: List[RecognizedChoice]):
         """Store choice recognition for learning and analysis"""
