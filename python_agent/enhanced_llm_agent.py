@@ -57,7 +57,36 @@ class EnhancedLLMPokemonAgent:
         else:
             self.vision_processor = None
         
-        # Game knowledge context (expanded)
+        # Map discovery and state tracking
+        self.discovered_maps = set()  # Track visited areas
+        self.position_history = []    # Track recent positions to detect being stuck
+        self.last_position = None
+        self.stuck_counter = 0
+        
+        # Enhanced game knowledge and tracking
+        self.gameplay_knowledge = {
+            "escape_strategies": [
+                "If stuck in dialogue/menu and A isn't working, try B to go back",
+                "If stuck in same screen, try different movement directions",
+                "If completely stuck, try START menu then B to exit",
+                "B button usually cancels or goes back in most situations",
+                "In battles, B can run away from wild Pokemon"
+            ],
+            "navigation_tips": [
+                "A button interacts with objects, people, and confirms menu choices",
+                "UP/DOWN navigate menus, LEFT/RIGHT can change values in some menus", 
+                "START opens the main menu in overworld",
+                "In dialogue, A continues text, B might skip or go back",
+                "Movement in overworld: UP/DOWN/LEFT/RIGHT"
+            ],
+            "game_progression": {
+                "intro": "Get starter Pokemon from Professor Elm, learn basic controls",
+                "early_exploration": "Explore Route 29, catch wild Pokemon, visit Cherrygrove City",
+                "gym_preparation": "Train Pokemon, heal at Pokemon Centers, challenge Violet City gym",
+                "post_gym": "Continue story, explore new areas, catch stronger Pokemon"
+            }
+        }
+        
         self.pokemon_context = {
             "starter_pokemon": {
                 155: "Cyndaquil (Fire)",
@@ -220,7 +249,9 @@ class EnhancedLLMPokemonAgent:
             "threats": [],
             "opportunities": [],
             "next_actions": [],
-            "visual_insights": []
+            "visual_insights": [],
+            "phase_strategy": "",
+            "location_context": ""
         }
         
         if not state or 'player' not in state:
@@ -228,17 +259,60 @@ class EnhancedLLMPokemonAgent:
         
         player = state['player']
         party = state.get('party', [])
+        current_map = player.get('map', 0)
+        money = player.get('money', 0)
+        badges = player.get('badges', 0)
         
-        # Determine game phase
+        # Enhanced game phase determination with location awareness
+        analysis["location_context"] = self._get_location_context(current_map)
+        
         if len(party) == 0:
             analysis["phase"] = "intro/starter_selection"
             analysis["immediate_goals"] = ["Get starter Pokemon", "Leave Professor's lab"]
-        elif len(party) == 1 and player.get('badges', 0) == 0:
-            analysis["phase"] = "early_game"
-            analysis["immediate_goals"] = ["Catch more Pokemon", "Train team", "Head to first gym"]
-        elif player.get('badges', 0) > 0:
-            analysis["phase"] = "gym_progression"
-            analysis["immediate_goals"] = [f"Progress with {player.get('badges', 0)} badges"]
+            analysis["phase_strategy"] = "Focus on dialogue and menu navigation. Use A to proceed through conversations."
+            analysis["next_actions"] = ["A", "UP", "DOWN"]  # Dialogue and menu navigation
+            
+        elif len(party) == 1 and badges == 0:
+            if current_map <= 2:  # Still in starting area
+                analysis["phase"] = "tutorial/early_exploration"
+                analysis["immediate_goals"] = ["Learn basic controls", "Explore starting area", "Talk to NPCs"]
+                analysis["phase_strategy"] = "Explore systematically, talk to everyone, learn game mechanics."
+                analysis["next_actions"] = ["UP", "DOWN", "LEFT", "RIGHT", "A"]
+            else:
+                analysis["phase"] = "early_game_exploration"
+                analysis["immediate_goals"] = ["Catch wild Pokemon", "Train starter", "Find Pokemon Center"]
+                analysis["phase_strategy"] = "Catch 2-3 Pokemon, train to level 10+, head to first gym."
+                analysis["next_actions"] = ["UP", "DOWN", "LEFT", "RIGHT", "A"]
+                
+        elif len(party) > 1 and badges == 0:
+            avg_level = sum(p.get('level', 1) for p in party) / len(party)
+            if avg_level < 8:
+                analysis["phase"] = "team_building"
+                analysis["immediate_goals"] = ["Train Pokemon team", "Battle wild Pokemon", "Level up"]
+                analysis["phase_strategy"] = "Focus on training. Battle wild Pokemon to gain experience."
+            else:
+                analysis["phase"] = "gym_preparation"
+                analysis["immediate_goals"] = ["Head to Violet City", "Prepare for Flying-type gym", "Stock up on items"]
+                analysis["phase_strategy"] = "Team is ready for first gym. Head to Violet City."
+                
+        elif badges == 1:
+            analysis["phase"] = "post_first_gym"
+            analysis["immediate_goals"] = ["Explore new areas", "Head to Azalea Town", "Catch stronger Pokemon"]
+            analysis["phase_strategy"] = "First gym complete! Explore south to Union Cave and Azalea Town."
+            
+        elif badges >= 2:
+            analysis["phase"] = "mid_game_progression"
+            analysis["immediate_goals"] = [f"Continue with {badges} badges", "Next gym challenge", "Story progression"]
+            analysis["phase_strategy"] = "Experienced trainer. Focus on story progression and gym challenges."
+            
+        # Money-based strategy adjustments
+        if money < 500:
+            analysis["threats"].append("Very low on money - battle trainers for cash")
+            analysis["immediate_goals"].append("Fight trainers for money")
+        elif money < 2000:
+            analysis["threats"].append("Low money - be careful with purchases")
+        elif money > 5000:
+            analysis["opportunities"].append("Good money - can buy items/pokeballs freely")
         
         # Enhanced analysis with visual context
         if visual_context:
@@ -298,10 +372,77 @@ class EnhancedLLMPokemonAgent:
         
         return analysis
     
+    def _detect_stuck_state(self, state: Dict[str, Any], recent_history: List[str] = None) -> Dict[str, Any]:
+        """Detect if agent is stuck and suggest escape strategies"""
+        stuck_info = {
+            "is_stuck": False,
+            "stuck_type": None,
+            "escape_strategy": None
+        }
+        
+        if not state or 'player' not in state:
+            return stuck_info
+            
+        player = state.get('player', {})
+        current_pos = (player.get('x', 0), player.get('y', 0), player.get('map', 0))
+        
+        # Track position history
+        self.position_history.append(current_pos)
+        if len(self.position_history) > 10:  # Keep last 10 positions
+            self.position_history.pop(0)
+            
+        # Check if stuck in same position
+        if len(self.position_history) >= 5:
+            if all(pos == current_pos for pos in self.position_history[-5:]):
+                stuck_info["is_stuck"] = True
+                stuck_info["stuck_type"] = "same_position"
+                stuck_info["escape_strategy"] = "Try B to exit menus, or different movement directions"
+        
+        # Check for action repetition
+        if recent_history and len(recent_history) >= 4:
+            last_four = recent_history[-4:]
+            if len(set(last_four)) <= 2:  # Only 1-2 unique actions
+                stuck_info["is_stuck"] = True
+                stuck_info["stuck_type"] = "action_loop"
+                stuck_info["escape_strategy"] = "Break the pattern with B button or try opposite direction"
+                
+        return stuck_info
+    
+    def _get_location_context(self, current_map: int) -> str:
+        """Get contextual information about current location"""
+        location_map = {
+            0: "New Bark Town - Starting town with Professor Elm's lab",
+            1: "Route 29 - First route, catch early Pokemon like Pidgey and Sentret", 
+            2: "Cherrygrove City - First real city, Pokemon Center for healing",
+            3: "Route 30 - Trainer battles, Mr. Pokemon's house to the north",
+            4: "Route 31 - Dark Cave entrance, path to Violet City",
+            5: "Violet City - First gym town, Falkner specializes in Flying-types",
+            6: "Route 32 - Ruins of Alph nearby, Union Cave entrance",
+            7: "Azalea Town - Second gym town, Bugsy specializes in Bug-types",
+            8: "Ilex Forest - Cut required, shrine in the center",
+            9: "Route 34 - Daycare center, breeding location",
+            10: "Goldenrod City - Big city, department store, radio tower"
+        }
+        
+        return location_map.get(current_map, f"Unknown area (Map {current_map})")
+    
+    def _update_map_discovery(self, player_map: int):
+        """Track discovered maps for exploration progress"""
+        if player_map not in self.discovered_maps:
+            self.discovered_maps.add(player_map)
+            print(f"🗺️ Discovered new area: Map {player_map}")
+    
     def decide_next_action(self, state: Dict[str, Any], 
                           screenshot: Optional[np.ndarray] = None,
                           recent_history: List[str] = None) -> int:
         """Use local LLM to decide next action based on game state and visual context"""
+        
+        # Update map discovery
+        if state and 'player' in state:
+            self._update_map_discovery(state['player'].get('map', 0))
+        
+        # Detect stuck state
+        stuck_info = self._detect_stuck_state(state, recent_history)
         
         # Process visual context if screenshot provided
         visual_context = None
@@ -321,7 +462,7 @@ class EnhancedLLMPokemonAgent:
         
         # Build context for LLM
         context_prompt = self._build_enhanced_strategy_prompt(
-            state, analysis, visual_context, recent_history
+            state, analysis, visual_context, recent_history, stuck_info
         )
         
         system_prompt = """You are a Pokemon Crystal gameplay expert with visual analysis capabilities.
@@ -365,7 +506,8 @@ IMPORTANT: If recent actions show repetitive behavior, choose a DIFFERENT action
     def _build_enhanced_strategy_prompt(self, state: Dict[str, Any], 
                                        analysis: Dict[str, Any], 
                                        visual_context: Optional[VisualContext] = None,
-                                       recent_history: List[str] = None) -> str:
+                                       recent_history: List[str] = None,
+                                       stuck_info: Dict[str, Any] = None) -> str:
         """Build a comprehensive prompt including visual context"""
         
         player = state.get('player', {})
@@ -405,6 +547,8 @@ TEAM: {len(party)} Pokemon"""
                 prompt += f"\n- UI Elements: {', '.join(set(ui_types))}"
         
         prompt += f"\n\nGAME PHASE: {analysis['phase']}"
+        prompt += f"\nLOCATION CONTEXT: {analysis['location_context']}"
+        prompt += f"\nPHASE STRATEGY: {analysis['phase_strategy']}"
         prompt += f"\nGOALS: {', '.join(analysis['immediate_goals'])}"
         
         if analysis['threats']:
@@ -412,6 +556,10 @@ TEAM: {len(party)} Pokemon"""
         
         if analysis['opportunities']:
             prompt += f"\nOPPORTUNITIES: {', '.join(analysis['opportunities'])}"
+            
+        # Add contextual action recommendations
+        if analysis['next_actions']:
+            prompt += f"\nRECOMMENDED ACTIONS: {', '.join(analysis['next_actions'])}"
         
         if analysis['visual_insights']:
             prompt += f"\nVISUAL INSIGHTS: {', '.join(analysis['visual_insights'])}"
@@ -429,6 +577,20 @@ TEAM: {len(party)} Pokemon"""
                     last_four = recent_history[-4:]
                     if last_four[0] == last_four[2] and last_four[1] == last_four[3]:
                         prompt += f"\n⚠️ WARNING: You're stuck in a pattern ({', '.join(last_four)}) - break the cycle!"
+        
+        # Add stuck detection information
+        if stuck_info and stuck_info.get('is_stuck'):
+            prompt += f"\n🚨 STUCK DETECTED: {stuck_info['stuck_type']} - {stuck_info['escape_strategy']}"
+        
+        # Add exploration progress
+        prompt += f"\n\nEXPLORATION: Discovered {len(self.discovered_maps)} areas"
+        
+        # Add gameplay knowledge hints
+        prompt += "\n\nGAMEPLAY KNOWLEDGE:"
+        prompt += "\n- If stuck in dialogue/menu: try B to go back"
+        prompt += "\n- If repeating same actions: try different directions or B"
+        prompt += "\n- A interacts/confirms, B cancels/backs out"
+        prompt += "\n- START opens menu, movement keys navigate"
         
         # Add screen-specific guidance
         if visual_context:

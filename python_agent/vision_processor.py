@@ -256,16 +256,18 @@ class PokemonVisionProcessor:
         return None
     
     def _detect_health_bars(self, image: np.ndarray, hsv_image: np.ndarray) -> List[GameUIElement]:
-        """Detect Pokemon health bars"""
+        """Detect Pokemon health bars with improved criteria"""
         health_bars = []
         
         try:
-            # Define color ranges for health (green, yellow, red)
+            # Define more restrictive color ranges for actual health bars
             health_colors = [
-                ((40, 100, 100), (80, 255, 255)),  # Green
-                ((20, 100, 100), (40, 255, 255)),  # Yellow  
-                ((0, 100, 100), (20, 255, 255))    # Red
+                ((40, 120, 120), (80, 255, 255)),  # Green (more restrictive)
+                ((20, 120, 120), (40, 255, 255)),  # Yellow (more restrictive)
+                ((0, 120, 120), (20, 255, 255))    # Red (more restrictive)
             ]
+            
+            height, width = image.shape[:2]
             
             for i, (lower, upper) in enumerate(health_colors):
                 mask = cv2.inRange(hsv_image, lower, upper)
@@ -274,12 +276,24 @@ class PokemonVisionProcessor:
                 for contour in contours:
                     x, y, w, h = cv2.boundingRect(contour)
                     
-                    # Check if it looks like a health bar (horizontal rectangle)
-                    if w > h * 2 and w > 20 and h > 5:
+                    # More restrictive criteria for health bars
+                    aspect_ratio = w / h if h > 0 else 0
+                    area = w * h
+                    rel_y = y / height
+                    
+                    # Health bars should be:
+                    # 1. Horizontal rectangles with aspect ratio 3:1 to 8:1
+                    # 2. Reasonable size (not tiny UI elements)
+                    # 3. In specific screen areas (top 40% for battle UI)
+                    if (3 <= aspect_ratio <= 8 and 
+                        w >= 30 and h >= 6 and 
+                        area >= 200 and
+                        rel_y <= 0.4):  # Only in top portion of screen
+                        
                         health_bars.append(GameUIElement(
                             element_type='healthbar',
                             bbox=(x, y, x + w, y + h),
-                            confidence=0.7
+                            confidence=0.8
                         ))
         
         except Exception as e:
@@ -324,16 +338,19 @@ class PokemonVisionProcessor:
                              ui_elements: List[GameUIElement]) -> str:
         """Classify what type of screen is being shown"""
         
-        # Check for dialogue
+        # Check for dialogue FIRST and with higher priority
         dialogue_texts = [t for t in detected_text if t.location == 'dialogue']
         dialogue_boxes = [e for e in ui_elements if e.element_type == 'dialogue_box']
         
         if dialogue_texts or dialogue_boxes:
             return 'dialogue'
         
-        # Check for battle (health bars present)
+        # Check for actual battle context (requires multiple indicators)
         health_bars = [e for e in ui_elements if e.element_type == 'healthbar']
-        if health_bars:
+        all_text = ' '.join([t.text.lower() for t in detected_text])
+        
+        # Battle detection requires health bars AND battle-specific text/context
+        if health_bars and self._is_actual_battle(image, detected_text, health_bars):
             return 'battle'
         
         # Check for menus
@@ -344,12 +361,38 @@ class PokemonVisionProcessor:
             return 'menu'
         
         # Look for common intro/title text
-        all_text = ' '.join([t.text.lower() for t in detected_text])
         if any(word in all_text for word in ['pokemon', 'press', 'start', 'continue', 'new game']):
             return 'intro'
         
         # Default to overworld
         return 'overworld'
+    
+    def _is_actual_battle(self, image: np.ndarray, detected_text: List[DetectedText], 
+                         health_bars: List[GameUIElement]) -> bool:
+        """Determine if health bars indicate an actual battle vs UI elements"""
+        
+        # Battle indicators
+        all_text = ' '.join([t.text.lower() for t in detected_text])
+        
+        # Check for battle-specific text
+        battle_keywords = ['attack', 'fight', 'run', 'pokemon', 'hp', 'lv', 'level']
+        battle_text_found = any(keyword in all_text for keyword in battle_keywords)
+        
+        # Check health bar positioning (battle health bars are typically in specific locations)
+        height, width = image.shape[:2]
+        battle_positioned_bars = 0
+        
+        for bar in health_bars:
+            x1, y1, x2, y2 = bar.bbox
+            rel_y = y1 / height
+            
+            # Battle health bars are typically in top portion (0.1 - 0.4) or specific battle UI areas
+            if 0.1 <= rel_y <= 0.4:
+                battle_positioned_bars += 1
+        
+        # Require BOTH battle text AND properly positioned health bars
+        # OR multiple health bars in battle positions
+        return (battle_text_found and battle_positioned_bars > 0) or battle_positioned_bars >= 2
     
     def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
         """Extract dominant colors from the screenshot"""
