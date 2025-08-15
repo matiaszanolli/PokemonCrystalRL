@@ -46,6 +46,14 @@ Technical documentation for developers:
 |---------|-------------|----------|
 | [🔧 Unified Trainer API](api/unified-trainer-api.md) | Complete API reference | **Developers** |
 
+### **🧪 Test Suite**
+Quality assurance and automated testing:
+
+| Test Doc | Description | Audience |
+|---------|-------------|----------|
+| [🧪 Test Migration Guide](../archive/tests/README.md) | Test suite migration | **Developers** |
+| [🧪 Pytest Documentation](https://docs.pytest.org/) | Official pytest docs | Developers |
+
 ### **🔬 Research Documentation**
 Academic and research-oriented documentation:
 

@@ -240,6 +240,35 @@ pokemon-crystal-rl/
 - **`LLMBackend`**: Model abstraction layer
 - **Web Server**: Real-time monitoring interface
 
+### **🧪 Testing**
+
+Comprehensive pytest-based test suite ensuring code quality and reliability:
+
+```bash
+# Run all tests
+pytest
+
+# Run with verbose output and coverage
+pytest -v --cov=. --cov-report=html
+
+# Run specific test modules
+pytest tests/test_dialogue_state_machine.py
+pytest tests/test_integration_and_performance.py
+```
+
+#### **Test Coverage**
+- 🎯 **Dialogue Systems**: Choice recognition, semantic processing
+- 🎮 **Game Integration**: PyBoy environment, state management
+- 🔧 **Performance**: Speed benchmarks, memory usage
+- 🌐 **Web Interface**: Monitoring endpoints, real-time updates
+
+#### **Test Organization**
+- **`tests/conftest.py`**: Shared fixtures and configuration
+- **`tests/test_*.py`**: Organized test modules by functionality
+- **`pytest.ini`**: Pytest configuration and settings
+
+> 📖 **Test Documentation**: See [archive/tests/README.md](archive/tests/README.md) for migration details
+
 ### **Contributing**
 See [🤝 Contributing Guide](CONTRIBUTING.md) for:
 - Code standards and style
