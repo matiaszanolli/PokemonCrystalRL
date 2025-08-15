@@ -51,10 +51,9 @@ except ImportError:
 
 class TrainingMode(Enum):
     """Available training modes"""
-    FAST_LOCAL = "fast_local"           # Direct PyBoy with optimized capture
-    CURRICULUM = "curriculum"           # Progressive skill-based training
-    ULTRA_FAST = "ultra_fast"          # Rule-based maximum speed
-    MONITORED = "monitored"            # Full monitoring and analysis
+    FAST_MONITORED = "fast_monitored"   # Fast training with comprehensive monitoring
+    CURRICULUM = "curriculum"           # Progressive skill-based training (legacy)
+    ULTRA_FAST = "ultra_fast"          # Rule-based maximum speed (legacy)
     CUSTOM = "custom"                  # User-defined configuration
 
 
@@ -72,7 +71,7 @@ class TrainingConfig:
     """Unified training configuration"""
     # Core settings
     rom_path: str
-    mode: TrainingMode = TrainingMode.FAST_LOCAL
+    mode: TrainingMode = TrainingMode.FAST_MONITORED
     llm_backend: LLMBackend = LLMBackend.SMOLLM2
     
     # Training parameters
@@ -145,9 +144,10 @@ class UnifiedPokemonTrainer:
         """Initialize training components based on mode"""
         print(f"🚀 Initializing {self.config.mode.value.title()} Training Mode")
         
-        if self.config.mode in [TrainingMode.FAST_LOCAL, TrainingMode.ULTRA_FAST]:
+        # Fast monitored mode uses direct PyBoy for speed with full monitoring
+        if self.config.mode in [TrainingMode.FAST_MONITORED, TrainingMode.ULTRA_FAST]:
             self._init_direct_pyboy()
-        elif self.config.mode in [TrainingMode.CURRICULUM, TrainingMode.MONITORED]:
+        elif self.config.mode == TrainingMode.CURRICULUM:
             self._init_environment_wrapper()
         
         if self.config.llm_backend and self.config.llm_backend != LLMBackend.NONE:
@@ -244,16 +244,72 @@ class UnifiedPokemonTrainer:
             self._start_screen_capture()
         
         # Route to appropriate training method
-        if self.config.mode == TrainingMode.FAST_LOCAL:
-            self._run_fast_local_training()
+        if self.config.mode == TrainingMode.FAST_MONITORED:
+            self._run_fast_monitored_training()
         elif self.config.mode == TrainingMode.CURRICULUM:
             self._run_curriculum_training()
         elif self.config.mode == TrainingMode.ULTRA_FAST:
             self._run_ultra_fast_training()
-        elif self.config.mode == TrainingMode.MONITORED:
-            self._run_monitored_training()
         else:
             raise ValueError(f"Unknown training mode: {self.config.mode}")
+    
+    def _run_fast_monitored_training(self):
+        """Run unified fast training with comprehensive monitoring"""
+        actions_taken = 0
+        last_llm_action = 5  # Default to A button
+        
+        # Load save state if available
+        if self.config.save_state_path and self.pyboy:
+            try:
+                with open(self.config.save_state_path, 'rb') as f:
+                    self.pyboy.load_state(f)
+                print(f"💾 Loaded save state: {self.config.save_state_path}")
+            except Exception as e:
+                print(f"⚠️ Could not load save state: {e}")
+        
+        print("⚡ Fast monitored training: balancing speed with comprehensive monitoring")
+        
+        try:
+            while actions_taken < self.config.max_actions:
+                # Advance game with PyBoy speed constraints (max ~5x speed)
+                if self.pyboy:
+                    self.pyboy.tick()
+                
+                # Get action - LLM decisions at intervals for intelligence
+                if self.config.llm_backend and actions_taken % self.config.llm_interval == 0:
+                    action = self._get_llm_action()
+                    last_llm_action = action
+                else:
+                    # Reuse last LLM action for speed
+                    action = last_llm_action
+                
+                # Execute action
+                self._execute_action(action)
+                actions_taken += 1
+                self.stats['total_actions'] = actions_taken
+                
+                # Comprehensive progress monitoring
+                if actions_taken % 100 == 0:
+                    self._update_stats()
+                    elapsed = time.time() - self.stats['start_time']
+                    aps = actions_taken / elapsed
+                    print(f"📊 Progress: {actions_taken}/{self.config.max_actions} ({aps:.1f} a/s)")
+                    
+                    # Additional monitoring info every 500 actions
+                    if actions_taken % 500 == 0:
+                        llm_ratio = self.stats['llm_calls'] / actions_taken * 100
+                        print(f"🤖 LLM decisions: {self.stats['llm_calls']} ({llm_ratio:.1f}% of actions)")
+                        if self.config.enable_web:
+                            print(f"🌐 Web monitor: http://{self.config.web_host}:{self.config.web_port}")
+                
+                # Optimal delay for PyBoy stability (respects <5x speed limit)
+                time.sleep(0.008)  # ~125 actions/second max
+        
+        except KeyboardInterrupt:
+            print("\n⏸️ Training interrupted")
+        
+        finally:
+            self._finalize_training()
     
     def _run_fast_local_training(self):
         """Run optimized local training"""

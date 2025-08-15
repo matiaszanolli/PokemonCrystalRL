@@ -119,90 +119,46 @@ def check_ollama_service():
         return False
 
 def find_rom_files():
-    """Search for Pokemon Crystal ROM files in common locations"""
-    print("\n🔍 Searching for Pokemon Crystal ROM files...")
+    """Check for Pokemon Crystal ROM at standard location"""
+    print("\n🔍 Checking for Pokemon Crystal ROM...")
     
-    # Common ROM file extensions and names
-    rom_extensions = ['.gbc', '.gb']
-    rom_names = ['pokemon_crystal', 'pokecrystal', 'crystal', 'pokémon_crystal']
+    # Standard ROM path
+    rom_path = "../roms/pokemon_crystal.gbc"
     
-    # Search locations
-    search_paths = [
-        '.',
-        '..',
-        '../..',
-        './roms',
-        '../roms',
-        '../../roms',
-        './ROMs',
-        '../ROMs',
-        '../../ROMs'
-    ]
-    
-    found_roms = []
-    
-    for search_path in search_paths:
-        if not os.path.exists(search_path):
-            continue
-            
-        try:
-            for root, dirs, files in os.walk(search_path):
-                for file in files:
-                    if any(file.lower().endswith(ext) for ext in rom_extensions):
-                        # Check if it's likely a Pokemon Crystal ROM
-                        file_lower = file.lower()
-                        if any(name in file_lower for name in rom_names):
-                            full_path = os.path.join(root, file)
-                            found_roms.append(full_path)
-                        elif file_lower.endswith('.gbc') or file_lower.endswith('.gb'):
-                            # Add any Game Boy ROM for user consideration
-                            full_path = os.path.join(root, file)
-                            found_roms.append(full_path)
-        except PermissionError:
-            continue
-    
-    if found_roms:
-        print(f"✅ Found {len(found_roms)} potential ROM file(s):")
-        for i, rom in enumerate(found_roms):
-            print(f"   {i+1}. {rom}")
-        return found_roms
+    if os.path.exists(rom_path):
+        print(f"✅ Found ROM: {rom_path}")
+        return [rom_path]
     else:
-        print("❌ No ROM files found in common locations")
-        print("💡 Pokemon Crystal ROM file needed for training")
-        print("   - ROM should be named something like 'pokemon_crystal.gbc'")
-        print("   - Place in current directory, ../roms/, or specify path manually")
+        print(f"❌ ROM not found at expected location: {rom_path}")
+        print("💡 Please ensure Pokemon Crystal ROM is at: ../roms/pokemon_crystal.gbc")
         return []
 
 def find_save_states():
-    """Search for existing save state files"""
+    """Check for save state files at standard locations"""
     print("\n💾 Checking for save state files...")
     
-    save_extensions = ['.state', '.ss1', '.sav']
-    search_paths = ['.', '..', '../..']
+    # Standard save state paths (in order of preference)
+    standard_saves = [
+        "../pokemon_crystal_intro.state",
+        "../pokecrystal.ss1", 
+        "../pokecrystal.sav"
+    ]
     
     found_saves = []
     
-    for search_path in search_paths:
-        if not os.path.exists(search_path):
-            continue
-            
-        try:
-            for root, dirs, files in os.walk(search_path):
-                for file in files:
-                    if any(file.lower().endswith(ext) for ext in save_extensions):
-                        full_path = os.path.join(root, file)
-                        found_saves.append(full_path)
-        except PermissionError:
-            continue
+    for save_path in standard_saves:
+        if os.path.exists(save_path):
+            found_saves.append(save_path)
+            print(f"✅ Found save state: {save_path}")
     
-    if found_saves:
-        print(f"✅ Found {len(found_saves)} save state file(s):")
-        for save in found_saves:
-            print(f"   • {save}")
-        return found_saves
-    else:
-        print("ℹ️ No save state files found (will start from beginning)")
-        return []
+    if not found_saves:
+        print("ℹ️ No save state files found at standard locations")
+        print("💡 Expected locations:")
+        for save_path in standard_saves:
+            print(f"   • {save_path}")
+        print("   (Will start from beginning if none found)")
+    
+    return found_saves
 
 def show_training_options():
     """Display available training modes and options"""
