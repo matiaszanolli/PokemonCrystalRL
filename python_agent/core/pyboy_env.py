@@ -19,9 +19,20 @@ import os
 from typing import Dict, Any, Tuple, Optional
 from pyboy import PyBoy
 
-from memory_map import MEMORY_ADDRESSES
-from utils import calculate_reward, preprocess_state
-from monitoring_client import MonitoringClient
+try:
+    from .memory_map import MEMORY_ADDRESSES
+except ImportError:
+    from memory_map import MEMORY_ADDRESSES
+
+try:
+    from ..utils.utils import calculate_reward, preprocess_state
+except ImportError:
+    from utils.utils import calculate_reward, preprocess_state
+
+try:
+    from ..monitoring.monitoring_client import MonitoringClient
+except ImportError:
+    from monitoring.monitoring_client import MonitoringClient
 
 
 class PyBoyPokemonCrystalEnv(gym.Env):

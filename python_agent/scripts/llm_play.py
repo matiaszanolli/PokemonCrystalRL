@@ -12,8 +12,8 @@ import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
-from pyboy_env import PyBoyPokemonCrystalEnv
-from local_llm_agent import LocalLLMPokemonAgent
+from ..core.pyboy_env import PyBoyPokemonCrystalEnv
+from ..agents.local_llm_agent import LocalLLMPokemonAgent
 
 
 class LLMPokemonPlayer:

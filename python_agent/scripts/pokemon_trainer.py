@@ -37,13 +37,13 @@ except ImportError:
 
 # Optional imports for different modes
 try:
-    from pyboy_env import PyBoyPokemonCrystalEnv
+    from ..core.pyboy_env import PyBoyPokemonCrystalEnv
     PYBOY_ENV_AVAILABLE = True
 except ImportError:
     PYBOY_ENV_AVAILABLE = False
 
 try:
-    from enhanced_llm_agent import EnhancedLLMPokemonAgent
+    from ..agents.enhanced_llm_agent import EnhancedLLMPokemonAgent
     ENHANCED_AGENT_AVAILABLE = True
 except ImportError:
     ENHANCED_AGENT_AVAILABLE = False
@@ -520,55 +520,85 @@ Action:"""
         print("📸 Screen capture started")
     
     def _capture_loop(self):
-        """Improved screen capture loop with better error handling"""
+        """Fixed screen capture loop with proper RGBA handling"""
         consecutive_errors = 0
         max_consecutive_errors = 10
+        
+        print("🔍 Starting screen capture loop...")
         
         while self.capture_active:
             try:
                 if self.pyboy:
-                    # Get screen with fallback methods
+                    # Get screen data using the confirmed working method
                     screen_array = None
                     try:
-                        screen_array = self.pyboy.screen.ndarray.copy()
-                    except AttributeError:
+                        # Method 1: Use screen.ndarray (confirmed working)
+                        screen_array = self.pyboy.screen.ndarray
+                        if screen_array is not None:
+                            screen_array = screen_array.copy()  # Make a copy to be safe
+                    except Exception as e:
+                        print(f"⚠️ Screen ndarray failed: {e}")
+                        # Fallback: Try screen.image
                         try:
-                            # Fallback: screen.image is a PIL Image object, not callable
                             if hasattr(self.pyboy.screen, 'image'):
                                 pil_image = self.pyboy.screen.image
-                                screen_array = np.array(pil_image)
-                        except Exception:
-                            # Skip this frame if we can't get screen data
+                                if pil_image is not None:
+                                    screen_array = np.array(pil_image)
+                        except Exception as e2:
+                            print(f"⚠️ Screen image fallback failed: {e2}")
                             continue
                     
                     # Validate screen array
                     if screen_array is None or screen_array.size == 0:
+                        consecutive_errors += 1
+                        if consecutive_errors <= 3:
+                            print(f"⚠️ Invalid screen data: None or empty")
                         continue
                     
-                    # Process screen with error handling
+                    # Process screen with detailed error handling
                     try:
-                        # Handle RGBA format (convert to RGB)
-                        if screen_array.shape[-1] == 4:  # RGBA
-                            screen_rgb = screen_array[:, :, :3]  # Drop alpha channel
-                            screen_pil = Image.fromarray(screen_rgb)
-                        else:
-                            screen_pil = Image.fromarray(screen_array)
+                        # Debug info on first successful capture
+                        if consecutive_errors == 0 and self.stats['total_actions'] < 10:
+                            print(f"📊 Screen data - Shape: {screen_array.shape}, Type: {screen_array.dtype}, Range: {screen_array.min()}-{screen_array.max()}")
                         
+                        # Handle different data formats
+                        if len(screen_array.shape) == 3:
+                            # Multi-channel image data
+                            if screen_array.shape[-1] == 4:  # RGBA
+                                # Convert RGBA to RGB by dropping alpha channel
+                                screen_rgb = screen_array[:, :, :3].astype(np.uint8)
+                                screen_pil = Image.fromarray(screen_rgb, mode='RGB')
+                            elif screen_array.shape[-1] == 3:  # RGB
+                                screen_pil = Image.fromarray(screen_array.astype(np.uint8), mode='RGB')
+                            else:
+                                print(f"⚠️ Unexpected channel count: {screen_array.shape[-1]}")
+                                continue
+                        elif len(screen_array.shape) == 2:
+                            # Grayscale or palette data
+                            screen_pil = Image.fromarray(screen_array.astype(np.uint8), mode='L')
+                            # Convert to RGB for consistency
+                            screen_pil = screen_pil.convert('RGB')
+                        else:
+                            print(f"⚠️ Unexpected array shape: {screen_array.shape}")
+                            continue
+                        
+                        # Resize the image
                         screen_resized = screen_pil.resize(self.config.screen_resize, Image.NEAREST)
                         
-                        # Convert to base64 with compression
+                        # Convert to base64
                         buffer = io.BytesIO()
                         screen_resized.save(buffer, format='PNG', optimize=True, compress_level=6)
                         screen_b64 = base64.b64encode(buffer.getvalue()).decode()
                         
                         # Validate the encoded data
-                        if len(screen_b64) > 0:
+                        if len(screen_b64) > 100:  # Reasonable minimum size for a PNG
                             # Update latest screen atomically
                             self.latest_screen = {
                                 'image_b64': screen_b64,
                                 'timestamp': time.time(),
                                 'size': screen_resized.size,
-                                'frame_id': int(time.time() * 1000)  # Unique frame ID
+                                'frame_id': int(time.time() * 1000),  # Unique frame ID
+                                'data_length': len(screen_b64)
                             }
                             
                             # Add to queue (drop old frames if full)
@@ -581,6 +611,13 @@ Action:"""
                                 self.screen_queue.put_nowait(self.latest_screen)
                             except:
                                 pass  # Queue operations are non-critical
+                            
+                            # Debug info on first successful capture
+                            if consecutive_errors > 0 or (self.stats['total_actions'] < 10 and self.stats['total_actions'] % 5 == 0):
+                                print(f"✅ Screen captured - Size: {screen_resized.size}, B64 length: {len(screen_b64)}")
+                        else:
+                            print(f"⚠️ Base64 data too small: {len(screen_b64)} chars")
+                            continue
                         
                         # Reset error counter on success
                         consecutive_errors = 0
@@ -589,16 +626,17 @@ Action:"""
                         consecutive_errors += 1
                         if consecutive_errors <= 3:  # Only log first few errors
                             print(f"⚠️ Screen processing error: {e}")
+                            import traceback
+                            print(f"📊 Error details: {traceback.format_exc()[:200]}...")
                 
-                # Frame rate limiting with adaptive delay
+                # Frame rate limiting
                 base_delay = 1.0 / self.config.capture_fps
-                error_delay = min(consecutive_errors * 0.1, 1.0)  # Exponential backoff
-                time.sleep(base_delay + error_delay)
+                time.sleep(base_delay)
             
             except Exception as e:
                 consecutive_errors += 1
                 if consecutive_errors <= 3:
-                    print(f"⚠️ Screen capture error: {e}")
+                    print(f"⚠️ Screen capture loop error: {e}")
                 
                 # Break loop if too many consecutive errors
                 if consecutive_errors >= max_consecutive_errors:
@@ -607,6 +645,8 @@ Action:"""
                     break
                 
                 time.sleep(0.5)  # Longer delay on critical errors
+        
+        print("🔍 Screen capture loop ended")
     
     def _update_stats(self):
         """Update performance statistics"""

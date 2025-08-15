@@ -13,7 +13,7 @@ from datetime import datetime
 import ollama
 import numpy as np
 
-from pyboy_env import PyBoyPokemonCrystalEnv
+from ..core.pyboy_env import PyBoyPokemonCrystalEnv
 
 
 class LocalLLMPokemonAgent:
@@ -23,7 +23,7 @@ class LocalLLMPokemonAgent:
     
     def __init__(self, 
                  model_name: str = "llama3.2:3b",
-                 memory_db: str = "pokemon_agent_memory.db"):
+                 memory_db: str = "../data/pokemon_agent_memory.db"):
         """
         Initialize the local LLM Pokemon agent
         
