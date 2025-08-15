@@ -1,13 +1,13 @@
-# Pokemon Crystal RL - Unified Training System
+# 🎮 Pokemon Crystal AI Agent - Local LLM Edition
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyBoy](https://img.shields.io/badge/PyBoy-2.6.0-green.svg)](https://github.com/Baekalfen/PyBoy)
-[![SmolLM2](https://img.shields.io/badge/SmolLM2-1.7B-orange.svg)](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B)
+[![Ollama](https://img.shields.io/badge/Ollama-Llama3.2-blue.svg)](https://ollama.com/)
 
-> **🎮 The most advanced Pokemon Crystal RL training system ever built**
-> 
-> Train AI agents to play Pokemon Crystal using state-of-the-art LLMs, real-time monitoring, and progressive curriculum learning. Achieve speeds of 600+ actions/second with intelligent decision-making.
+**A cost-free, intelligent Pokemon Crystal AI agent powered by local Llama models via Ollama.**
+
+> **🎯 Latest Script: `llm_play.py` - The current main script for local LLM-powered gameplay**
 
 <p align="center">
   <img src="docs/assets/pokemon-crystal-rl-banner.png" alt="Pokemon Crystal RL" width="600">
@@ -15,15 +15,27 @@
 
 ---
 
-## 🌟 **Highlights**
+## 🧠 **Features**
 
-- **🚀 Ultra-Fast Performance**: Up to 630+ actions/second
-- **🧠 LLM-Powered**: SmolLM2-1.7B integration for intelligent decisions  
-- **📚 Curriculum Learning**: Progressive 5-stage skill development
-- **📺 Real-Time Monitoring**: Web interface with live gameplay
-- **🎯 Multiple Training Modes**: From speed testing to research
-- **📊 Comprehensive Analytics**: Detailed performance tracking
-- **🔧 Easy to Use**: One unified script for all functionality
+### **Local LLM Intelligence**
+- ✅ **Cost-Free**: No OpenAI/API fees - runs entirely locally
+- ✅ **Fast**: ~10 steps/second decision making with local models
+- ✅ **Strategic**: Analyzes game state and makes intelligent decisions
+- ✅ **Learning**: Stores decisions and game states for improvement
+
+### **Technical Stack**
+- 🎮 **PyBoy Emulator**: Pure Python Game Boy emulator
+- 🤖 **Ollama + Llama 3.2**: Local 3B parameter language model
+- 💾 **SQLite Memory**: Episodic memory for decision tracking
+- 🐍 **PyBoy Environment**: Clean OpenAI Gym-style interface
+
+### **Performance Comparison**
+
+| Method | Cost | Speed | Intelligence | Privacy |
+|--------|------|-------|--------------|---------|
+| **Local LLM** | $0 | ~0.1s | ⭐⭐⭐⭐ | 🔒 100% |
+| Traditional RL | $0 | ~0.01s | ⭐⭐ | 🔒 100% |
+| OpenAI GPT-4 | ~$0.03/1K | ~2-5s | ⭐⭐⭐⭐⭐ | ❌ Cloud |
 
 ---
 
@@ -44,31 +56,116 @@
 
 ## 🚀 **Quick Start**
 
-### **1. Install Dependencies**
+### **1. Install Ollama & Dependencies**
 ```bash
-# Install core dependencies
-pip install pyboy pillow numpy ollama
+# 1. Install Ollama (if not already installed)
+curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull the recommended LLM model
-ollama pull smollm2:1.7b
+# 2. Pull the local LLM model
+ollama pull llama3.2:3b
+
+# 3. Install Python dependencies
+pip install pyboy pillow numpy ollama
 ```
 
-### **2. Run Training**
+### **2. Run LLM-Powered Gameplay (Latest)**
 ```bash
-# Fast training with web interface (recommended)
+# 🎯 Main script - Watch AI play intelligently with local LLM
+cd python_agent
+python llm_play.py --no-headless  # Watch it play!
+
+# Fast training session
+python llm_play.py --fast --max-steps 50000
+
+# Custom LLM model
+python llm_play.py --model llama3.2:7b --max-steps 10000
+```
+
+### **3. Alternative Training Modes**
+```bash
+# Unified trainer with web interface
 python pokemon_trainer.py --rom path/to/pokemon_crystal.gbc --mode fast_local --web
 
-# Ultra-fast speed testing  
+# Ultra-fast rule-based training
 python pokemon_trainer.py --rom path/to/pokemon_crystal.gbc --mode ultra_fast --no-llm
-
-# Progressive curriculum learning
-python pokemon_trainer.py --rom path/to/pokemon_crystal.gbc --mode curriculum --episodes 50
 ```
 
-### **3. Monitor Progress**
-- **Web Interface**: Visit `http://localhost:8080` for real-time monitoring
-- **Statistics**: Check `training_stats.json` for detailed metrics
-- **Terminal**: Watch live progress updates during training
+### **4. Monitor Progress**
+- **Terminal Output**: Real-time gameplay decisions and progress
+- **Agent Memory**: SQLite database with decision history
+- **Web Interface**: Visit `http://localhost:8080` for unified trainer monitoring
+
+---
+
+## 🎯 **LLM Play - Interactive Gameplay**
+
+The `llm_play.py` script is the latest and most intelligent way to run the Pokemon Crystal AI agent using local LLM models.
+
+### **📁 Script Features**
+- ✅ **Cost-Free**: Uses local Ollama models (no API fees)
+- ✅ **Strategic Decision Making**: Analyzes game state contextually
+- ✅ **Memory Formation**: Records 295+ decisions per session
+- ✅ **Real-Time Monitoring**: Watch AI decisions in terminal
+- ✅ **Speed**: 2-10 steps/second intelligent gameplay
+
+### **🎮 Usage Examples**
+
+```bash
+# Watch the AI play (recommended first run)
+python llm_play.py --no-headless --max-steps 5000
+
+# Fast training session (headless)
+python llm_play.py --fast --max-steps 50000
+
+# Try different LLM models
+ollama pull phi3.5:3.8b-mini-instruct
+python llm_play.py --model phi3.5:3.8b-mini-instruct
+
+# Custom ROM and save state
+python llm_play.py --rom-path ../custom.gbc --save-state-path ../custom.state
+
+# Long training session with custom delay
+python llm_play.py --max-steps 100000 --step-delay 0.05
+```
+
+### **🧠 Game State Analysis**
+
+The agent tracks comprehensive game state:
+- **Player Position**: Map coordinates and location
+- **Party Status**: Pokemon levels, HP, species
+- **Game Progress**: Badges, money, items
+- **Strategic Context**: Current goals and threats
+
+### **💭 Sample Agent Decision**
+```
+Pokemon Crystal - Current Situation:
+
+LOCATION: Map 1, Position (5, 10)
+MONEY: $3000
+BADGES: 0
+
+TEAM: 1 Pokemon
+  1. Cyndaquil (Fire) - Level 8 (HP: 25/30)
+
+GAME PHASE: early_game
+GOALS: Catch more Pokemon, Train team, Head to first gym
+
+What should I do next? → Action: A (interact)
+```
+
+### **📊 Monitoring & Analytics**
+
+```bash
+# View agent's memory database
+sqlite3 pokemon_agent_memory.db
+.tables  # See stored decisions and game states
+
+# Session summary shows:
+# - Duration and steps completed
+# - Actions per second
+# - Memory formation statistics
+# - Game progress indicators
+```
 
 ---
 

@@ -92,8 +92,8 @@ class TrainingConfig:
     
     # Screen capture
     capture_screens: bool = True
-    capture_fps: int = 10              # Frames per second
-    screen_resize: tuple = (320, 288)
+    capture_fps: int = 5               # Reduced FPS for stability
+    screen_resize: tuple = (240, 216)  # Smaller size for column width
     
     # Curriculum settings (for curriculum mode)
     curriculum_stages: int = 5
@@ -520,41 +520,93 @@ Action:"""
         print("📸 Screen capture started")
     
     def _capture_loop(self):
-        """Screen capture loop"""
+        """Improved screen capture loop with better error handling"""
+        consecutive_errors = 0
+        max_consecutive_errors = 10
+        
         while self.capture_active:
             try:
                 if self.pyboy:
-                    # Get screen
+                    # Get screen with fallback methods
+                    screen_array = None
                     try:
-                        screen_array = self.pyboy.screen.ndarray
+                        screen_array = self.pyboy.screen.ndarray.copy()
                     except AttributeError:
-                        screen_array = np.array(self.pyboy.screen.image)
+                        try:
+                            # Fallback: screen.image is a PIL Image object, not callable
+                            if hasattr(self.pyboy.screen, 'image'):
+                                pil_image = self.pyboy.screen.image
+                                screen_array = np.array(pil_image)
+                        except Exception:
+                            # Skip this frame if we can't get screen data
+                            continue
                     
-                    # Process screen
-                    screen_pil = Image.fromarray(screen_array)
-                    screen_resized = screen_pil.resize(self.config.screen_resize, Image.NEAREST)
+                    # Validate screen array
+                    if screen_array is None or screen_array.size == 0:
+                        continue
                     
-                    # Convert to base64
-                    buffer = io.BytesIO()
-                    screen_resized.save(buffer, format='PNG', optimize=True)
-                    screen_b64 = base64.b64encode(buffer.getvalue()).decode()
-                    
-                    # Update latest screen
-                    self.latest_screen = {
-                        'image_b64': screen_b64,
-                        'timestamp': time.time(),
-                        'size': screen_resized.size
-                    }
-                    
-                    # Add to queue
-                    if not self.screen_queue.full():
-                        self.screen_queue.put(self.latest_screen)
+                    # Process screen with error handling
+                    try:
+                        # Handle RGBA format (convert to RGB)
+                        if screen_array.shape[-1] == 4:  # RGBA
+                            screen_rgb = screen_array[:, :, :3]  # Drop alpha channel
+                            screen_pil = Image.fromarray(screen_rgb)
+                        else:
+                            screen_pil = Image.fromarray(screen_array)
+                        
+                        screen_resized = screen_pil.resize(self.config.screen_resize, Image.NEAREST)
+                        
+                        # Convert to base64 with compression
+                        buffer = io.BytesIO()
+                        screen_resized.save(buffer, format='PNG', optimize=True, compress_level=6)
+                        screen_b64 = base64.b64encode(buffer.getvalue()).decode()
+                        
+                        # Validate the encoded data
+                        if len(screen_b64) > 0:
+                            # Update latest screen atomically
+                            self.latest_screen = {
+                                'image_b64': screen_b64,
+                                'timestamp': time.time(),
+                                'size': screen_resized.size,
+                                'frame_id': int(time.time() * 1000)  # Unique frame ID
+                            }
+                            
+                            # Add to queue (drop old frames if full)
+                            try:
+                                if self.screen_queue.full():
+                                    try:
+                                        self.screen_queue.get_nowait()  # Remove oldest
+                                    except:
+                                        pass
+                                self.screen_queue.put_nowait(self.latest_screen)
+                            except:
+                                pass  # Queue operations are non-critical
+                        
+                        # Reset error counter on success
+                        consecutive_errors = 0
+                        
+                    except Exception as e:
+                        consecutive_errors += 1
+                        if consecutive_errors <= 3:  # Only log first few errors
+                            print(f"⚠️ Screen processing error: {e}")
                 
-                time.sleep(1.0 / self.config.capture_fps)
+                # Frame rate limiting with adaptive delay
+                base_delay = 1.0 / self.config.capture_fps
+                error_delay = min(consecutive_errors * 0.1, 1.0)  # Exponential backoff
+                time.sleep(base_delay + error_delay)
             
             except Exception as e:
-                print(f"⚠️ Screen capture error: {e}")
-                time.sleep(0.1)
+                consecutive_errors += 1
+                if consecutive_errors <= 3:
+                    print(f"⚠️ Screen capture error: {e}")
+                
+                # Break loop if too many consecutive errors
+                if consecutive_errors >= max_consecutive_errors:
+                    print(f"❌ Too many screen capture errors ({consecutive_errors}), stopping capture")
+                    self.capture_active = False
+                    break
+                
+                time.sleep(0.5)  # Longer delay on critical errors
     
     def _update_stats(self):
         """Update performance statistics"""
@@ -632,12 +684,65 @@ Action:"""
 <head>
     <title>Pokemon Crystal Trainer</title>
     <style>
-        body { font-family: Arial; margin: 20px; background: #1a1a1a; color: white; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .stats { background: #333; padding: 15px; border-radius: 5px; margin: 10px 0; }
-        .screen { border: 2px solid #4CAF50; margin: 20px 0; text-align: center; }
-        img { max-width: 100%; height: auto; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        body { 
+            font-family: 'Courier New', monospace; 
+            margin: 20px; 
+            background: #1a1a1a; 
+            color: white; 
+            line-height: 1.4;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+        .stats { 
+            background: #333; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 10px 0; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .screen { 
+            border: 3px solid #4CAF50; 
+            margin: 20px 0; 
+            text-align: center;
+            background: #000;
+            border-radius: 8px;
+            padding: 10px;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        .screen img { 
+            max-width: 100%;
+            max-height: 400px;
+            height: auto;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            border: 1px solid #666;
+        }
+        .grid { 
+            display: grid; 
+            grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); 
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            .screen {
+                margin: 10px 0;
+            }
+        }
+        h1 { 
+            text-align: center; 
+            color: #4CAF50; 
+            margin-bottom: 30px;
+        }
+        h3 { 
+            color: #4CAF50; 
+            margin-top: 0;
+        }
     </style>
 </head>
 <body>
