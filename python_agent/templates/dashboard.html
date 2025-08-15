@@ -546,12 +546,26 @@
             connectionStatus.textContent = 'Connected';
             connectionStatus.classList.remove('disconnected');
             console.log('Connected to server');
+            
+            // Stop HTTP polling if we got Socket.IO connection
+            if (useHttpPolling) {
+                stopHttpPolling();
+            }
         });
         
         socket.on('disconnect', function() {
             connectionStatus.textContent = 'Disconnected';
             connectionStatus.classList.add('disconnected');
             console.log('Disconnected from server');
+            
+            // Start HTTP polling fallback on disconnect
+            if (!useHttpPolling) {
+                setTimeout(() => {
+                    if (!socket.connected) {
+                        startHttpPolling();
+                    }
+                }, 1000); // Wait 1 second before starting polling
+            }
         });
         
         // Initialize charts
@@ -819,13 +833,13 @@
                         document.getElementById('currentStep').textContent = data.total_actions || '-';
                         document.getElementById('actionsPerSec').textContent = (data.actions_per_second || 0).toFixed(1);
                         
-                        // Map additional fields
-                        document.getElementById('currentReward').textContent = '0.0'; // Not available in unified trainer
-                        document.getElementById('totalReward').textContent = '0.0';
-                        document.getElementById('screenType').textContent = 'Game';
-                        document.getElementById('mapId').textContent = '-';
-                        document.getElementById('playerX').textContent = '-';
-                        document.getElementById('playerY').textContent = '-';
+                        // Map additional fields - use actual data when available
+                        document.getElementById('currentReward').textContent = (data.current_reward || 0).toFixed(2);
+                        document.getElementById('totalReward').textContent = (data.total_reward || 0).toFixed(2);
+                        document.getElementById('screenType').textContent = data.game_state || 'Game';
+                        document.getElementById('mapId').textContent = data.map_id || '-';
+                        document.getElementById('playerX').textContent = data.player_x || '-';
+                        document.getElementById('playerY').textContent = data.player_y || '-';
                         
                         // Calculate uptime
                         if (data.start_time) {
@@ -841,19 +855,29 @@
                         const statusText = data.is_training ? 'Training Active' : 'Training Stopped';
                         document.getElementById('currentEpisode').textContent = statusText;
                         
-                        // Update performance metrics
-                        document.getElementById('avgReward').textContent = '0.0';
+                        // Update performance metrics with available data
+                        document.getElementById('avgReward').textContent = (data.avg_reward || 0).toFixed(1);
                         document.getElementById('avgSteps').textContent = data.total_actions || '0';
-                        document.getElementById('successRate').textContent = '-%';
+                        document.getElementById('successRate').textContent = data.success_rate ? (data.success_rate * 100).toFixed(1) + '%' : '-%';
                         
                         // Set FPS to actions per second (approximation)
                         document.getElementById('fps').textContent = (data.actions_per_second || 0).toFixed(1);
                     })
                     .catch(err => {
                         console.log('Stats update failed:', err);
-                        // Show connection error in UI
-                        connectionStatus.textContent = 'Connection Error';
-                        connectionStatus.classList.add('disconnected');
+                        // Show connection error in UI, but only if not already in error state
+                        if (connectionStatus.textContent !== 'Connection Error') {
+                            connectionStatus.textContent = 'Connection Error';
+                            connectionStatus.classList.add('disconnected');
+                        }
+                        
+                        // Attempt to recover after 5 seconds
+                        if (!window.errorRecoveryTimeout) {
+                            window.errorRecoveryTimeout = setTimeout(() => {
+                                window.errorRecoveryTimeout = null;
+                                console.log('Attempting connection recovery...');
+                            }, 5000);
+                        }
                     });
                 
                 // Update system stats

@@ -27,8 +27,26 @@ from flask_socketio import SocketIO, emit
 import sqlite3
 
 # Import our modules
-from enhanced_llm_agent import EnhancedLLMPokemonAgent
-from vision_enhanced_training import VisionEnhancedTrainingSession
+try:
+    from ..agents.enhanced_llm_agent import EnhancedLLMPokemonAgent
+except ImportError:
+    try:
+        from agents.enhanced_llm_agent import EnhancedLLMPokemonAgent
+    except ImportError:
+        # Create a stub if the agent is not available
+        class EnhancedLLMPokemonAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+try:
+    from ..core.vision_enhanced_training import VisionEnhancedTrainingSession
+except ImportError:
+    try:
+        from vision_enhanced_training import VisionEnhancedTrainingSession
+    except ImportError:
+        # Create a stub if the training session is not available
+        class VisionEnhancedTrainingSession:
+            def __init__(self, *args, **kwargs):
+                pass
 
 
 class PokemonRLWebMonitor:

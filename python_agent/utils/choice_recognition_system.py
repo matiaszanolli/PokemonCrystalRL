@@ -17,7 +17,10 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 
-from vision_processor import DetectedText, VisualContext
+try:
+    from ..vision.vision_processor import DetectedText, VisualContext
+except ImportError:
+    from vision.vision_processor import DetectedText, VisualContext
 
 
 class ChoiceType(Enum):

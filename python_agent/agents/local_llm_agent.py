@@ -13,7 +13,15 @@ from datetime import datetime
 import ollama
 import numpy as np
 
-from ..core.pyboy_env import PyBoyPokemonCrystalEnv
+try:
+    from ..core.pyboy_env import PyBoyPokemonCrystalEnv
+except ImportError:
+    try:
+        from core.pyboy_env import PyBoyPokemonCrystalEnv
+    except ImportError:
+        # Create a stub if PyBoyPokemonCrystalEnv is not available
+        class PyBoyPokemonCrystalEnv:
+            pass
 
 
 class LocalLLMPokemonAgent:

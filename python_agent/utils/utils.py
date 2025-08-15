@@ -8,9 +8,17 @@ import torch.nn as nn
 from typing import Dict, Any, List, Tuple
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.policies import ActorCriticPolicy
-from gym import spaces
+try:
+    import gymnasium as gym
+    from gymnasium import spaces
+except ImportError:
+    import gym
+    from gym import spaces
 
-from memory_map import MEMORY_ADDRESSES, DERIVED_VALUES, IMPORTANT_LOCATIONS, BADGE_MASKS
+try:
+    from ..core.memory_map import MEMORY_ADDRESSES, DERIVED_VALUES, IMPORTANT_LOCATIONS, BADGE_MASKS
+except ImportError:
+    from core.memory_map import MEMORY_ADDRESSES, DERIVED_VALUES, IMPORTANT_LOCATIONS, BADGE_MASKS
 
 
 def normalize_value(value: float, min_val: float, max_val: float) -> float:

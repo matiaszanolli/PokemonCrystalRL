@@ -14,16 +14,37 @@ import ollama
 import numpy as np
 
 # Import our custom modules
-from pyboy_env import PyBoyPokemonCrystalEnv
-from vision_processor import PokemonVisionProcessor, VisualContext
+try:
+    from ..core.pyboy_env import PyBoyPokemonCrystalEnv
+except ImportError:
+    try:
+        from core.pyboy_env import PyBoyPokemonCrystalEnv
+    except ImportError:
+        class PyBoyPokemonCrystalEnv:
+            pass
+
+try:
+    from ..vision.vision_processor import PokemonVisionProcessor, VisualContext
+except ImportError:
+    try:
+        from vision.vision_processor import PokemonVisionProcessor, VisualContext
+    except ImportError:
+        class PokemonVisionProcessor:
+            pass
+        class VisualContext:
+            pass
 
 # Import dialogue state machine
 try:
-    from dialogue_state_machine import DialogueStateMachine, DialogueState
+    from ..utils.dialogue_state_machine import DialogueStateMachine, DialogueState
     DIALOGUE_STATE_AVAILABLE = True
 except ImportError:
-    DIALOGUE_STATE_AVAILABLE = False
-    print("⚠️ Dialogue state machine not available")
+    try:
+        from utils.dialogue_state_machine import DialogueStateMachine, DialogueState
+        DIALOGUE_STATE_AVAILABLE = True
+    except ImportError:
+        DIALOGUE_STATE_AVAILABLE = False
+        print("⚠️ Dialogue state machine not available")
 
 
 class EnhancedLLMPokemonAgent:

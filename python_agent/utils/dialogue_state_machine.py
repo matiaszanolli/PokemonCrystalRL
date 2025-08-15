@@ -15,15 +15,39 @@ from enum import Enum
 from pathlib import Path
 import hashlib
 
-from vision_processor import DetectedText, VisualContext
+try:
+    from ..vision.vision_processor import DetectedText, VisualContext
+except ImportError:
+    from vision.vision_processor import DetectedText, VisualContext
 
 # Import semantic context system
 try:
-    from semantic_context_system import SemanticContextSystem, GameContext, DialogueIntent
+    from .semantic_context_system import SemanticContextSystem, GameContext, DialogueIntent
     SEMANTIC_CONTEXT_AVAILABLE = True
 except ImportError:
-    SEMANTIC_CONTEXT_AVAILABLE = False
-    print("⚠️ Semantic context system not available")
+    try:
+        from semantic_context_system import SemanticContextSystem, GameContext, DialogueIntent
+        SEMANTIC_CONTEXT_AVAILABLE = True
+    except ImportError:
+        # Create stub classes if semantic context system is not available
+        SEMANTIC_CONTEXT_AVAILABLE = False
+        
+        class GameContext:
+            def __init__(self, current_objective, player_progress, location_info, recent_events, active_quests):
+                self.current_objective = current_objective
+                self.player_progress = player_progress
+                self.location_info = location_info
+                self.recent_events = recent_events
+                self.active_quests = active_quests
+        
+        class DialogueIntent:
+            pass
+        
+        class SemanticContextSystem:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        print("⚠️ Semantic context system not available - using stubs")
 
 
 class DialogueState(Enum):

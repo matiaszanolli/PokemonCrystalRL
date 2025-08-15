@@ -25,6 +25,8 @@ from enum import Enum
 from dataclasses import dataclass
 from PIL import Image
 import ollama
+import logging
+from contextlib import contextmanager
 
 # System monitoring
 try:
@@ -122,6 +124,9 @@ class UnifiedPokemonTrainer:
     def __init__(self, config: TrainingConfig):
         self.config = config
         
+        # Initialize logging system
+        self._setup_logging()
+        
         # Initialize components based on mode
         self.pyboy = None
         self.env = None
@@ -155,7 +160,76 @@ class UnifiedPokemonTrainer:
         self.intro_progress = 0
         self.stuck_counter = 0
         
+        # Error tracking and recovery
+        self.error_count = {'pyboy_crashes': 0, 'llm_failures': 0, 'capture_errors': 0, 'total_errors': 0}
+        self.last_error_time = None
+        self.recovery_attempts = 0
+        
         self._initialize_components()
+    
+    def _setup_logging(self):
+        """Setup comprehensive logging system"""
+        # Create logger
+        self.logger = logging.getLogger('pokemon_trainer')
+        self.logger.setLevel(getattr(logging, self.config.log_level.upper()))
+        
+        # Clear any existing handlers
+        self.logger.handlers.clear()
+        
+        # Create formatter
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)8s | %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        self.logger.addHandler(console_handler)
+        
+        # File handler for detailed logs
+        try:
+            file_handler = logging.FileHandler('pokemon_trainer.log')
+            file_handler.setLevel(getattr(logging, self.config.log_level.upper()))
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+        except Exception as e:
+            print(f"⚠️ Could not setup file logging: {e}")
+        
+        self.logger.info("Logging system initialized")
+    
+    @contextmanager
+    def _handle_errors(self, operation_name: str, error_type: str = 'general'):
+        """Context manager for consistent error handling and recovery"""
+        try:
+            yield
+        except KeyboardInterrupt:
+            self.logger.info(f"Operation {operation_name} interrupted by user")
+            raise
+        except Exception as e:
+            self.error_count[error_type] += 1
+            self.error_count['total_errors'] += 1
+            self.last_error_time = time.time()
+            
+            error_msg = f"Error in {operation_name}: {str(e)}"
+            
+            if self.config.debug_mode:
+                self.logger.exception(error_msg)
+            else:
+                self.logger.error(error_msg)
+            
+            # Attempt recovery based on error type
+            if error_type == 'pyboy_crashes' and self.error_count[error_type] < 5:
+                self.logger.info(f"Attempting PyBoy recovery (attempt {self.recovery_attempts + 1})")
+                self.recovery_attempts += 1
+                if self._attempt_pyboy_recovery():
+                    self.logger.info("Recovery successful")
+                else:
+                    self.logger.error("Recovery failed")
+            
+            # Re-raise for caller to handle
+            raise
     
     def _initialize_components(self):
         """Initialize training components based on mode"""
@@ -659,53 +733,34 @@ Action:"""
             self.pyboy.tick()
     
     def _capture_synchronized_screenshot(self) -> Optional[np.ndarray]:
-        """Capture screenshot synchronously for decision making with crash detection"""
+        """Capture screenshot synchronously for decision making with lightweight crash detection"""
         try:
             if not self.pyboy:
-                print("⚠️ PyBoy instance is None")
                 return None
             
-            # Check if PyBoy is still alive
-            if not self._is_pyboy_alive():
-                print("❌ PyBoy instance has crashed or become unresponsive")
+            # Lightweight PyBoy health check - just check if we can access frame_count
+            try:
+                _ = self.pyboy.frame_count
+            except Exception:
+                # PyBoy is likely crashed, attempt recovery
+                print("🩹 PyBoy health check failed, attempting recovery...")
                 if self._attempt_pyboy_recovery():
-                    print("✅ PyBoy recovery successful")
-                else:
-                    print("💀 PyBoy recovery failed, training cannot continue")
-                    return None
+                    # Try screenshot capture again after recovery
+                    return self._simple_screenshot_capture()
+                return None
             
             # Get current screen data
             screen_array = self.pyboy.screen.ndarray
             if screen_array is None:
-                print("⚠️ PyBoy screen.ndarray returned None")
                 return None
             
-            # Convert to standard format (RGB)
-            if len(screen_array.shape) == 3 and screen_array.shape[-1] == 4:
-                # RGBA to RGB
-                screen_rgb = screen_array[:, :, :3].astype(np.uint8)
-            elif len(screen_array.shape) == 3 and screen_array.shape[-1] == 3:
-                # Already RGB
-                screen_rgb = screen_array.astype(np.uint8)
-            elif len(screen_array.shape) == 2:
-                # Grayscale, convert to RGB
-                screen_rgb = np.stack([screen_array, screen_array, screen_array], axis=2).astype(np.uint8)
-            else:
-                print(f"⚠️ Unexpected screen array shape: {screen_array.shape}")
-                return None
-            
-            return screen_rgb.copy()  # Return a copy for safety
+            # Convert to standard format (RGB) with error handling
+            return self._convert_screen_format(screen_array)
             
         except Exception as e:
-            print(f"⚠️ Synchronized screenshot failed: {e}")
-            # Check if this is a PyBoy crash
-            if "PyBoy" in str(e) or "segmentation" in str(e).lower():
-                print("💥 Detected PyBoy crash during screenshot capture")
-                if self._attempt_pyboy_recovery():
-                    print("✅ PyBoy recovery after crash successful")
-                    return self._capture_synchronized_screenshot()  # Retry once
-                else:
-                    print("💀 PyBoy recovery after crash failed")
+            # Less verbose error handling - just log and return None
+            if self.config.debug_mode:
+                print(f"Screenshot capture failed: {e}")
             return None
     
     def _get_llm_action_with_vision(self, screenshot: Optional[np.ndarray]) -> int:
@@ -949,6 +1004,23 @@ Action:"""
         pattern = unstuck_patterns[pattern_idx]
         return pattern[step % len(pattern)]
     
+    def _convert_screen_format(self, screen_array: np.ndarray) -> Optional[np.ndarray]:
+        """Convert screen array to standard RGB format with error handling"""
+        try:
+            if len(screen_array.shape) == 3 and screen_array.shape[-1] == 4:
+                # RGBA to RGB
+                return screen_array[:, :, :3].astype(np.uint8).copy()
+            elif len(screen_array.shape) == 3 and screen_array.shape[-1] == 3:
+                # Already RGB
+                return screen_array.astype(np.uint8).copy()
+            elif len(screen_array.shape) == 2:
+                # Grayscale, convert to RGB
+                return np.stack([screen_array, screen_array, screen_array], axis=2).astype(np.uint8)
+            else:
+                return None
+        except Exception:
+            return None
+    
     def _simple_screenshot_capture(self) -> Optional[np.ndarray]:
         """Simple screenshot capture without crash detection (to avoid recursion)"""
         try:
@@ -980,69 +1052,67 @@ Action:"""
             return None
     
     def _is_pyboy_alive(self) -> bool:
-        """Check if PyBoy instance is still alive and responsive"""
+        """Lightweight check if PyBoy instance is still alive and responsive"""
         try:
             if not self.pyboy:
                 return False
             
-            # Try to access a simple property that should always work
-            _ = self.pyboy.frame_count
+            # Just check frame_count - most reliable indicator
+            current_frame = self.pyboy.frame_count
             
-            # Try to access the screen (most common crash point)
-            screen = self.pyboy.screen.ndarray
+            # Basic sanity check - frame count should be reasonable
+            return isinstance(current_frame, int) and current_frame >= 0
             
-            # If we got here, PyBoy seems alive
-            return screen is not None
-            
-        except Exception as e:
-            print(f"💀 PyBoy alive check failed: {e}")
+        except Exception:
             return False
     
     def _attempt_pyboy_recovery(self) -> bool:
-        """Attempt to recover from PyBoy crash"""
-        print("🩹 Attempting PyBoy recovery...")
+        """Attempt to recover from PyBoy crash with improved error handling"""
+        if self.config.debug_mode:
+            print("🩹 Attempting PyBoy recovery...")
         
         try:
-            # First, try to gracefully stop the current instance
+            # Clean up current instance
             if self.pyboy:
                 try:
                     self.pyboy.stop()
                 except:
-                    pass  # May already be dead
+                    pass  # Instance might already be dead
+                
+                # Give some time for cleanup
+                time.sleep(0.2)  # Reduced wait time
                 self.pyboy = None
             
-            # Wait a moment for cleanup
-            time.sleep(0.5)
-            
-            # Attempt to reinitialize PyBoy
-            print("🔄 Reinitializing PyBoy...")
-            
+            # Reinitialize PyBoy with the same configuration
             self.pyboy = PyBoy(
                 self.config.rom_path,
                 window="null" if self.config.headless else "SDL2",
-                debug=self.config.debug_mode
+                debug=False  # Always disable debug on recovery to avoid issues
             )
             
-            # Test if the new instance works
+            # Quick health check
             if self._is_pyboy_alive():
-                print("✅ PyBoy recovery successful")
+                if self.config.debug_mode:
+                    print("✅ PyBoy recovery successful")
                 
-                # Try to reload save state if available
+                # Attempt to reload save state if available
                 if self.config.save_state_path:
                     try:
-                        with open(self.config.save_state_path, 'rb') as f:
-                            self.pyboy.load_state(f)
-                        print("💾 Save state reloaded after recovery")
-                    except Exception as e:
-                        print(f"⚠️ Could not reload save state after recovery: {e}")
+                        self.pyboy.load_state(io.open(self.config.save_state_path, 'rb'))
+                        if self.config.debug_mode:
+                            print("💾 Save state reloaded after recovery")
+                    except Exception:
+                        # Don't fail recovery if save state loading fails
+                        pass
                 
                 return True
             else:
-                print("❌ PyBoy recovery failed - new instance not responsive")
+                self.pyboy = None
                 return False
                 
         except Exception as e:
-            print(f"💀 PyBoy recovery attempt failed: {e}")
+            if self.config.debug_mode:
+                print(f"💀 PyBoy recovery failed: {e}")
             self.pyboy = None
             return False
     
