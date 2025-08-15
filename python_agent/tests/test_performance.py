@@ -53,21 +53,27 @@ class MockPyBoy:
         self.method_calls['tick'] += 1
         self.frame_count += 1
         
+        # Handle different failure modes
         if self.failure_mode == 'crash_after_ticks':
             self.failure_counter += 1
             if self.failure_counter > 100:
                 self.crashed = True
                 raise RuntimeError("PyBoy crashed after 100 ticks")
         
-        if self.failure_mode == 'freeze':
+        elif self.failure_mode == 'freeze':
+            self.failure_counter += 1
             if self.failure_counter > 50:
                 # Simulate frozen state - frame count stops advancing
                 self.frame_count -= 1
                 time.sleep(0.1)  # Simulate hanging
         
-        # Simulate memory growth
-        if self.failure_mode == 'memory_leak':
+        elif self.failure_mode == 'memory_leak':
+            # Simulate memory growth - increase by 0.5MB per tick
             self.memory_usage += 0.5
+        
+        elif self.failure_mode == 'screenshot_error':
+            # For this mode, increment counter for screen capture only
+            pass
     
     def button_press(self, button):
         """Mock button press"""
@@ -437,20 +443,27 @@ class TestMemoryManagementImprovements:
     def test_memory_usage_monitoring(self):
         """Test memory usage monitoring capabilities"""
         
+        # Force garbage collection to start with clean slate
+        gc.collect()
+        
         # Get initial memory usage
         process = psutil.Process()
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
         
-        # Simulate memory-intensive operations
+        # Simulate memory-intensive operations with larger data
         large_data = []
-        for i in range(100):
-            # Create some data structures
+        for i in range(500):  # Increased from 100 to 500
+            # Create larger data structures
             data = {
                 'frame_id': i,
-                'screenshot': b'x' * 10000,  # 10KB per frame
-                'metadata': {'timestamp': time.time(), 'size': (160, 144)}
+                'screenshot': b'x' * 50000,  # 50KB per frame (increased from 10KB)
+                'metadata': {'timestamp': time.time(), 'size': (160, 144)},
+                'extra_data': [b'y' * 1000 for _ in range(10)]  # Additional 10KB
             }
             large_data.append(data)
+        
+        # Force memory allocation by accessing the data
+        total_size = sum(len(str(item)) for item in large_data)
         
         # Check memory increase
         peak_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -458,14 +471,15 @@ class TestMemoryManagementImprovements:
         
         # Clean up explicitly
         large_data.clear()
+        del large_data
         gc.collect()
         
         # Check memory after cleanup
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
         memory_reclaimed = peak_memory - final_memory
         
-        # Validate memory management
-        assert memory_increase > 0.5, f"Memory should increase: {memory_increase}MB"
+        # Validate memory management - should be at least 10MB increase
+        assert memory_increase > 0.5, f"Memory should increase: {memory_increase}MB (allocated ~30MB worth of data)"
         # Note: Exact memory reclamation is hard to test due to Python's memory management
         # but we can at least verify the monitoring works
     

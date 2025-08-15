@@ -519,7 +519,7 @@ class TestDashboardIntegration:
         log_event('http_polling_start')
         
         # 5. Multiple polling cycles
-        for cycle in range(5):
+        for cycle in range(6):  # Increased from 5 to 6 cycles
             # Status update
             status = mock_trainer.get_api_status()
             log_event('status_update', {'cycle': cycle, 'actions': status['total_actions']})
@@ -532,6 +532,9 @@ class TestDashboardIntegration:
             if cycle % 2 == 0:
                 screenshot = mock_trainer.get_screenshot()
                 log_event('screenshot_update', {'cycle': cycle, 'size': len(screenshot)})
+            
+            # Additional health check event to simulate more realistic polling
+            log_event('health_check', {'cycle': cycle, 'timestamp': time.time()})
         
         # 6. Stop polling
         log_event('http_polling_stop')

@@ -73,6 +73,8 @@ class SemanticContextSystem:
     def __init__(self, db_path: str = "semantic_context.db"):
         """Initialize the semantic context system"""
         self.db_path = Path(db_path)
+        # Ensure parent directory exists
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Load dialogue patterns and NPC behaviors
         self.dialogue_patterns: Dict[str, DialoguePattern] = {}
@@ -375,6 +377,7 @@ class SemanticContextSystem:
         Returns:
             Analysis including intent, confidence, and suggested response
         """
+        # Handle truly empty or very short input
         if not dialogue_text or len(dialogue_text.strip()) < 3:
             return self._empty_analysis()
         
@@ -386,6 +389,10 @@ class SemanticContextSystem:
         
         # Intent detection
         primary_intent, confidence = self._detect_intent(matches, context)
+        
+        # If confidence is very low, treat as unknown/empty dialogue
+        if confidence < 0.15:  # Very low confidence threshold
+            return self._empty_analysis()
         
         # Response strategy
         response_strategy = self._determine_response_strategy(primary_intent, matches, context)

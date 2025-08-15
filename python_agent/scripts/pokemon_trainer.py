@@ -161,7 +161,7 @@ class UnifiedPokemonTrainer:
         self.stuck_counter = 0
         
         # Error tracking and recovery
-        self.error_count = {'pyboy_crashes': 0, 'llm_failures': 0, 'capture_errors': 0, 'total_errors': 0}
+        self.error_count = {'pyboy_crashes': 0, 'llm_failures': 0, 'capture_errors': 0, 'general': 0, 'total_errors': 0}
         self.last_error_time = None
         self.recovery_attempts = 0
         
@@ -991,16 +991,20 @@ Action:"""
     
     def _get_unstuck_action(self, step: int) -> int:
         """Get action to break out of stuck situations"""
-        # Aggressive unstuck pattern
+        # Aggressive unstuck pattern with more variety
         unstuck_patterns = [
-            [6, 6, 6],         # B spam (back out)
-            [7, 5, 5],         # START, A, A (menu access)
-            [8, 5],            # SELECT, A (alternative menu)
-            [1, 2, 3, 4],      # Movement in all directions
-            [5, 6, 5, 6],      # A-B alternating
+            [6, 6, 6, 1, 1],       # B spam then up movement
+            [7, 5, 2, 5, 4],       # START, A, DOWN, A, RIGHT
+            [8, 5, 3, 5, 2],       # SELECT, A, LEFT, A, DOWN
+            [1, 2, 3, 4, 5, 6],    # Movement in all directions + buttons
+            [5, 6, 5, 6, 1, 2],    # A-B alternating + movement
+            [4, 4, 5, 3, 3, 5],    # Right spam, A, Left spam, A
+            [2, 2, 6, 1, 1, 6],    # Down spam, B, Up spam, B
+            [7, 1, 5, 7, 2, 5],    # START, UP, A, START, DOWN, A
         ]
         
-        pattern_idx = (self.stuck_counter // 10) % len(unstuck_patterns)
+        # Use both step and stuck_counter to create more variety
+        pattern_idx = ((self.stuck_counter * 3) + (step // 5)) % len(unstuck_patterns)
         pattern = unstuck_patterns[pattern_idx]
         return pattern[step % len(pattern)]
     
