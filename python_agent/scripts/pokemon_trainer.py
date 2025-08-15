@@ -91,6 +91,9 @@ class TrainingConfig:
     debug_mode: bool = False
     save_state_path: Optional[str] = None
     
+    # Frame timing (Game Boy runs at 60 FPS)
+    frames_per_action: int = 24         # Standard RL timing: 24 frames = 400ms = 2.5 actions/sec
+    
     # Web interface
     enable_web: bool = False
     web_port: int = 8080
@@ -246,6 +249,9 @@ class UnifiedPokemonTrainer:
         print("=" * 60)
         self._print_config_summary()
         
+        # Set training active flag (for API status)
+        self._training_active = True
+        
         # Start screen capture if enabled
         if self.config.capture_screens:
             self._start_screen_capture()
@@ -262,6 +268,76 @@ class UnifiedPokemonTrainer:
     
     def _run_fast_monitored_training(self):
         """Run unified fast training with comprehensive monitoring"""
+        # Check if synchronized training is requested
+        if self.config.capture_screens:
+            return self._run_synchronized_training()
+        
+        # Fallback to legacy fast training
+        return self._run_legacy_fast_training()
+    
+    def _run_synchronized_training(self):
+        """Run frame-synchronized training with screenshot-decision-action cycles"""
+        actions_taken = 0
+        
+        # Load save state if available
+        if self.config.save_state_path and self.pyboy:
+            try:
+                with open(self.config.save_state_path, 'rb') as f:
+                    self.pyboy.load_state(f)
+                print(f"💾 Loaded save state: {self.config.save_state_path}")
+            except Exception as e:
+                print(f"⚠️ Could not load save state: {e}")
+        
+        frame_duration_ms = 1000.0 / 60.0  # Game Boy runs at 60 FPS
+        action_duration_ms = self.config.frames_per_action * frame_duration_ms
+        
+        print(f"🔄 Synchronized training: {self.config.frames_per_action} frames per action ({action_duration_ms:.1f}ms)")
+        print(f"⏱️ Expected speed: {1000.0 / action_duration_ms:.1f} actions/second")
+        
+        try:
+            while actions_taken < self.config.max_actions:
+                cycle_start = time.time()
+                
+                # 1. SCREENSHOT PHASE - Capture current game state
+                screenshot = self._capture_synchronized_screenshot()
+                
+                # 2. DECISION PHASE - Make intelligent decision
+                if self.config.llm_backend and actions_taken % self.config.llm_interval == 0:
+                    action = self._get_llm_action_with_vision(screenshot)
+                    self.stats['llm_calls'] += 1
+                else:
+                    # Use rule-based logic or previous decision
+                    action = self._get_rule_based_action(actions_taken)
+                
+                # 3. ACTION EXECUTION PHASE - Execute for exact frame duration
+                self._execute_synchronized_action(action, self.config.frames_per_action)
+                
+                actions_taken += 1
+                self.stats['total_actions'] = actions_taken
+                
+                # Progress monitoring
+                if actions_taken % 50 == 0:
+                    self._update_stats()
+                    elapsed = time.time() - self.stats['start_time']
+                    aps = actions_taken / elapsed
+                    cycle_time = (time.time() - cycle_start) * 1000
+                    print(f"🔄 Step {actions_taken}: Action {action}, Cycle: {cycle_time:.0f}ms, Speed: {aps:.1f} a/s")
+                    
+                    # Detailed monitoring every 200 actions
+                    if actions_taken % 200 == 0:
+                        llm_ratio = self.stats['llm_calls'] / actions_taken * 100
+                        print(f"📊 Progress: {actions_taken}/{self.config.max_actions} | 🤖 LLM: {llm_ratio:.1f}%")
+                        if self.config.enable_web:
+                            print(f"🌐 Monitor: http://{self.config.web_host}:{self.config.web_port}")
+        
+        except KeyboardInterrupt:
+            print("\n⏸️ Synchronized training interrupted")
+        
+        finally:
+            self._finalize_training()
+    
+    def _run_legacy_fast_training(self):
+        """Legacy fast training method (no synchronization)"""
         actions_taken = 0
         last_llm_action = 5  # Default to A button
         
@@ -274,7 +350,7 @@ class UnifiedPokemonTrainer:
             except Exception as e:
                 print(f"⚠️ Could not load save state: {e}")
         
-        print("⚡ Fast monitored training: balancing speed with comprehensive monitoring")
+        print("⚡ Legacy fast training: maximum speed without synchronization")
         
         try:
             while actions_taken < self.config.max_actions:
@@ -575,6 +651,122 @@ Action:"""
             self.pyboy.send_input(self.actions[action])
             self.pyboy.tick()
     
+    def _capture_synchronized_screenshot(self) -> Optional[np.ndarray]:
+        """Capture screenshot synchronously for decision making"""
+        try:
+            if not self.pyboy:
+                return None
+            
+            # Get current screen data
+            screen_array = self.pyboy.screen.ndarray
+            if screen_array is None:
+                return None
+            
+            # Convert to standard format (RGB)
+            if len(screen_array.shape) == 3 and screen_array.shape[-1] == 4:
+                # RGBA to RGB
+                screen_rgb = screen_array[:, :, :3].astype(np.uint8)
+            elif len(screen_array.shape) == 3 and screen_array.shape[-1] == 3:
+                # Already RGB
+                screen_rgb = screen_array.astype(np.uint8)
+            elif len(screen_array.shape) == 2:
+                # Grayscale, convert to RGB
+                screen_rgb = np.stack([screen_array, screen_array, screen_array], axis=2).astype(np.uint8)
+            else:
+                return None
+            
+            return screen_rgb.copy()  # Return a copy for safety
+            
+        except Exception as e:
+            print(f"⚠️ Synchronized screenshot failed: {e}")
+            return None
+    
+    def _get_llm_action_with_vision(self, screenshot: Optional[np.ndarray]) -> int:
+        """Get LLM action using visual input"""
+        if not self.config.llm_backend:
+            return self._get_rule_based_action(self.stats['total_actions'])
+        
+        # For now, use text-based LLM (vision integration can be added later)
+        # Include visual context in the prompt
+        visual_context = "Screen captured" if screenshot is not None else "No screen data"
+        
+        prompt = f"""Pokemon Crystal RL Training
+
+Visual Context: {visual_context}
+Current Step: {self.stats['total_actions']}
+
+Choose action number:
+1=UP, 2=DOWN, 3=LEFT, 4=RIGHT, 5=A, 6=B, 7=START, 8=SELECT
+
+Action:"""
+        
+        try:
+            response = ollama.generate(
+                model=self.config.llm_backend.value,
+                prompt=prompt,
+                options={
+                    'num_predict': 2,
+                    'temperature': 0.3,
+                    'top_k': 8
+                }
+            )
+            
+            # Parse action from response
+            text = response['response'].strip()
+            for char in text:
+                if char.isdigit() and '1' <= char <= '8':
+                    return int(char)
+            
+            # Fallback to rule-based if parsing fails
+            return self._get_rule_based_action(self.stats['total_actions'])
+            
+        except Exception as e:
+            print(f"⚠️ LLM vision action failed: {e}")
+            return self._get_rule_based_action(self.stats['total_actions'])
+    
+    def _get_rule_based_action(self, step: int) -> int:
+        """Get rule-based action for synchronized training"""
+        # Smart rule-based logic for Pokemon Crystal
+        action_patterns = {
+            # Early game: Navigate menus and start game
+            'menu_navigation': [7, 5, 5, 2, 5],  # START, A, A, DOWN, A
+            'exploration': [1, 1, 4, 4, 2, 2, 3, 3, 5, 5],  # Basic movement + interactions
+            'dialogue': [5, 5, 5, 2, 5],  # A spam for dialogue
+            'battle': [5, 1, 5, 2, 5],  # Simple battle actions
+        }
+        
+        # Determine current phase based on step count
+        if step < 50:
+            pattern = action_patterns['menu_navigation']
+        elif step < 200:
+            pattern = action_patterns['exploration']
+        elif step < 400:
+            pattern = action_patterns['dialogue']
+        else:
+            pattern = action_patterns['exploration']
+        
+        # Select action from pattern
+        pattern_index = step % len(pattern)
+        return pattern[pattern_index]
+    
+    def _execute_synchronized_action(self, action: int, frames: int):
+        """Execute action for exact frame duration"""
+        if not self.pyboy:
+            return
+        
+        # Press the button (if action is not 0/no-op)
+        if action in self.actions and self.actions[action]:
+            self.pyboy.send_input(self.actions[action])
+        
+        # Run the exact number of frames
+        for frame in range(frames):
+            self.pyboy.tick()
+            
+            # Optional: Release button halfway through for more realistic timing
+            if frame == frames // 2 and action in self.actions and self.actions[action]:
+                # Release the button (this helps with some games that need button releases)
+                pass  # PyBoy handles button releases automatically
+    
     def _start_screen_capture(self):
         """Start screen capture thread"""
         self.capture_active = True
@@ -718,6 +910,9 @@ Action:"""
     
     def _finalize_training(self):
         """Cleanup and final statistics"""
+        # Clear training active flag
+        self._training_active = False
+        
         # Stop capture
         if self.capture_active:
             self.capture_active = False
@@ -778,6 +973,8 @@ Action:"""
                     self._serve_comprehensive_dashboard()
                 elif self.path.startswith('/screen'):
                     self._serve_screen()
+                elif self.path.startswith('/api/screenshot'):
+                    self._serve_screen()  # Alias for screenshot endpoint
                 elif self.path == '/stats':
                     self._serve_stats()
                 elif self.path == '/api/status':
@@ -786,6 +983,8 @@ Action:"""
                     self._serve_api_system()
                 elif self.path == '/api/runs':
                     self._serve_api_runs()
+                elif self.path.startswith('/socket.io/'):
+                    self._handle_socketio_fallback()
                 else:
                     self.send_error(404)
             
@@ -800,7 +999,8 @@ Action:"""
             def _serve_comprehensive_dashboard(self):
                 """Serve the comprehensive dashboard from templates"""
                 try:
-                    template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'templates', 'dashboard.html')
+                    # Use local templates directory relative to python_agent
+                    template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'dashboard.html')
                     with open(template_path, 'r', encoding='utf-8') as f:
                         html = f.read()
                     
@@ -975,6 +1175,19 @@ Action:"""
                 self.end_headers()
                 self.wfile.write(json.dumps(response).encode())
             
+            def _handle_socketio_fallback(self):
+                """Handle socket.io requests gracefully"""
+                # Return a polite 404 for socket.io requests since we don't implement WebSockets
+                response = {
+                    'error': 'WebSocket/Socket.IO not implemented',
+                    'message': 'This trainer uses HTTP polling instead of WebSockets'
+                }
+                self.send_response(404)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+            
             def _send_error_response(self, error_msg):
                 response = {'success': False, 'error': error_msg}
                 self.send_response(500)
@@ -1035,6 +1248,7 @@ Examples:
     parser.add_argument('--actions', type=int, default=1000, help='Maximum actions')
     parser.add_argument('--episodes', type=int, default=10, help='Maximum episodes')
     parser.add_argument('--llm-interval', type=int, default=10, help='Actions between LLM calls')
+    parser.add_argument('--frames-per-action', type=int, default=24, help='Frames per action (24=standard, 16=faster, 8=legacy)')
     
     # Interface options
     parser.add_argument('--web', action='store_true', help='Enable web interface')
@@ -1056,6 +1270,7 @@ Examples:
         max_actions=args.actions,
         max_episodes=args.episodes,
         llm_interval=args.llm_interval,
+        frames_per_action=args.frames_per_action,
         headless=not args.windowed,
         debug_mode=args.debug,
         save_state_path=args.save_state,
