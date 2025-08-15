@@ -1,358 +1,208 @@
-# 🎮 Pokemon Crystal Vision-Enhanced LLM Training System
+# 📚 Pokemon Crystal RL Documentation
 
-## Overview
+Welcome to the comprehensive documentation for the Pokemon Crystal RL unified training system!
 
-This is a complete reinforcement learning training system for Pokemon Crystal that combines:
+## 🚀 **Quick Navigation**
 
-- **🎯 PyBoy Emulator**: Clean, headless Game Boy Color emulation
-- **🤖 Local LLM Agent**: Strategic decision making using Ollama + Llama 3.2
-- **👁️ Computer Vision**: Screenshot analysis with OCR and UI detection  
-- **💾 Episodic Memory**: SQLite-based learning from past decisions
-- **📊 Training Pipeline**: Complete training loop with analytics
+### **👋 New Users**
+- [🚀 Getting Started](guides/getting-started.md) - **Start here!** Complete setup in 10 minutes
+- [🎯 Training Modes Overview](guides/POKEMON_TRAINER_GUIDE.md) - Understanding different training modes
+- [🎬 Content Creation](examples/content-creation.md) - Create engaging videos and streams
 
-## Key Features
-
-### ✅ No API Costs
-- Runs entirely locally using Ollama
-- No OpenAI API calls required
-- Uses lightweight Llama 3.2 3B model
-
-### ✅ Visual Understanding
-- Real-time screenshot analysis
-- Text detection using EasyOCR
-- UI element recognition (health bars, menus, dialogue boxes)
-- Game phase detection (battle, overworld, dialogue, menu)
-
-### ✅ Strategic Intelligence
-- Context-aware decision making
-- Memory of past actions and outcomes
-- Visual cues integrated with game state data
-- Pokemon type effectiveness knowledge
-
-### ✅ Complete Training Pipeline
-- Episode-based training sessions
-- Progress tracking (badges, Pokemon caught, money)
-- Detailed analytics and reporting
-- Screenshot analysis saving
-
-## System Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   PyBoy Env     │    │ Vision Processor │    │ Enhanced Agent  │
-│                 │    │                 │    │                 │
-│ • ROM loading   │◄──►│ • Screenshot    │◄──►│ • Local LLM     │
-│ • Save states   │    │ • OCR detection │    │ • Memory system │
-│ • Game state    │    │ • UI analysis   │    │ • Strategy      │
-│ • Actions       │    │ • Context       │    │ • Decision      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                        │                        │
-         └────────────────────────┼────────────────────────┘
-                                  │
-                    ┌─────────────────┐
-                    │ Training System │
-                    │                 │
-                    │ • Episode loop  │
-                    │ • Progress      │
-                    │ • Analytics     │
-                    │ • Reporting     │
-                    └─────────────────┘
-```
-
-## Files Overview
-
-### Core Components
-
-- **`pyboy_env.py`** - Pokemon Crystal PyBoy environment with Gym interface
-- **`vision_processor.py`** - Computer vision module for screenshot analysis  
-- **`enhanced_llm_agent.py`** - Local LLM agent with visual context integration
-- **`vision_enhanced_training.py`** - Complete training pipeline
-
-### Legacy Files
-
-- **`local_llm_agent.py`** - Original text-only LLM agent
-- **`pokemon_crystal_train.py`** - Original training script
-
-## Installation
-
-### Prerequisites
-
-```bash
-# Install Python dependencies
-pip install numpy opencv-python easyocr pillow ollama pyboy stable-baselines3 matplotlib
-
-# Install and start Ollama
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama serve
-
-# Pull the Llama model
-ollama pull llama3.2:3b
-```
-
-### Game Files
-
-You need to provide your own Pokemon Crystal ROM file:
-
-```bash
-mkdir -p /path/to/project/roms/
-# Place your pokemon_crystal.gbc file in the roms/ directory
-```
-
-### Optional: Save States
-
-Create save states to skip the intro:
-
-```bash
-mkdir -p /path/to/project/save_states/
-# Use PyBoy or other tools to create save states
-```
-
-## Usage
-
-### Quick Test
-
-Test individual components:
-
-```python
-# Test vision processor
-python vision_processor.py
-
-# Test enhanced LLM agent  
-python enhanced_llm_agent.py
-```
-
-### Training Session
-
-Run a complete training session:
-
-```python
-python vision_enhanced_training.py
-```
-
-### Custom Training
-
-```python
-from vision_enhanced_training import VisionEnhancedTrainingSession
-
-# Initialize training
-session = VisionEnhancedTrainingSession(
-    rom_path="roms/pokemon_crystal.gbc",
-    save_state_path="save_states/intro_done.state",  # Optional
-    model_name="llama3.2:3b",
-    max_steps_per_episode=3000,
-    screenshot_interval=10  # Visual analysis every 10 steps
-)
-
-# Run training
-session.run_training_session(num_episodes=10)
-
-# Save screenshot analysis
-session.save_screenshot_analysis()
-```
-
-## Training Output
-
-### Console Logs
-
-```
-🎮 Initializing PyBoy environment...
-🤖 Initializing Enhanced LLM Agent...
-👁️ Computer vision enabled
-✅ Training session initialized
-
-🚀 Starting Episode 1
-👁️ Visual: Screen: overworld | UI: | Colors: green, bright
-🎯 Decided action with vision: 1 (UP)
-  📊 Step 100: {'step': 100, 'location': 'Map 1 (5, 8)', 'money': 3000, 'badges': 0, 'party_size': 1, 'last_action': 'A'}
-🏆 PROGRESS: Caught new Pokemon! Party size: 2
-```
-
-### Generated Files
-
-- **`training_report_YYYYMMDD_HHMMSS.json`** - Detailed training analytics
-- **`screenshot_analysis/`** - Screenshots with visual analysis JSON files  
-- **`pokemon_agent_memory.db`** - SQLite database with decision history
-
-## Configuration Options
-
-### Training Parameters
-
-```python
-VisionEnhancedTrainingSession(
-    rom_path="roms/pokemon_crystal.gbc",         # Required
-    save_state_path="save_states/game.state",   # Optional
-    model_name="llama3.2:3b",                   # Ollama model
-    max_steps_per_episode=5000,                 # Episode length
-    log_interval=100,                           # Progress logging
-    screenshot_interval=10                      # Visual analysis frequency
-)
-```
-
-### Vision Processing
-
-```python
-EnhancedLLMPokemonAgent(
-    model_name="llama3.2:3b",      # LLM model
-    memory_db="memory.db",         # SQLite database  
-    use_vision=True                # Enable/disable vision
-)
-```
-
-## Example Training Report
-
-```json
-{
-  "session_info": {
-    "duration": 1234.5,
-    "episodes": 5,
-    "total_steps": 12500,
-    "model_used": "llama3.2:3b"
-  },
-  "training_stats": {
-    "decisions_made": 12500,
-    "visual_analyses": 1250,
-    "last_progress": {
-      "badges": 1,
-      "money": 15000,
-      "party_size": 3,
-      "location": [10, 15, 5]
-    }
-  },
-  "memory_summary": {
-    "decisions_stored": 12500,
-    "visual_analyses": 1250,
-    "screen_type_breakdown": {
-      "overworld": 800,
-      "battle": 200,
-      "dialogue": 150,
-      "menu": 100
-    }
-  }
-}
-```
-
-## Computer Vision Analysis
-
-### Detected Screen Types
-
-- **`overworld`** - Normal gameplay exploration
-- **`battle`** - Pokemon battles with health bars
-- **`dialogue`** - Conversations with NPCs  
-- **`menu`** - Game menus and interfaces
-- **`intro`** - Title screens and intro sequences
-
-### Visual Context Features
-
-- **Text Detection**: OCR extraction of on-screen text
-- **UI Elements**: Health bars, dialogue boxes, menus
-- **Color Analysis**: Dominant colors for environment detection
-- **Location Classification**: Indoor/outdoor, grass/water areas
-
-## Memory System
-
-### Database Schema
-
-```sql
--- Strategic decisions with visual context
-CREATE TABLE strategic_decisions (
-    id INTEGER PRIMARY KEY,
-    timestamp TEXT,
-    situation TEXT,      -- Game state analysis
-    decision TEXT,       -- Action taken
-    reasoning TEXT,      -- LLM reasoning
-    visual_context TEXT, -- Screenshot analysis
-    confidence_score REAL
-);
-
--- Game state snapshots
-CREATE TABLE game_states (
-    id INTEGER PRIMARY KEY,
-    timestamp TEXT,
-    player_x INTEGER,
-    player_y INTEGER,
-    player_map INTEGER,
-    party_size INTEGER,
-    money INTEGER,
-    badges INTEGER,
-    visual_summary TEXT,
-    screen_type TEXT
-);
-
--- Visual analysis results
-CREATE TABLE visual_analysis (
-    id INTEGER PRIMARY KEY,
-    timestamp TEXT,
-    screen_type TEXT,
-    game_phase TEXT,
-    detected_text TEXT,
-    ui_elements TEXT,
-    dominant_colors TEXT,
-    visual_summary TEXT
-);
-```
-
-## Performance Considerations
-
-### System Requirements
-
-- **RAM**: 4GB+ recommended (EasyOCR model loading)
-- **CPU**: Multi-core recommended for vision processing
-- **GPU**: Optional, can accelerate EasyOCR if available
-- **Storage**: ~1GB for models and game files
-
-### Optimization Settings
-
-```python
-# Faster training with less vision processing
-screenshot_interval=20  # Analyze every 20 steps instead of 10
-
-# Shorter episodes for rapid iteration  
-max_steps_per_episode=2000
-
-# Smaller LLM for faster responses
-model_name="llama3.2:1b"  # Lighter model
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Vision processor fails to initialize**
-```bash
-# Install required packages
-pip install easyocr opencv-python pillow
-```
-
-**Ollama connection errors**
-```bash
-# Start Ollama service
-ollama serve
-
-# Verify model is available
-ollama list
-```
-
-**ROM file not found**
-```
-Place your Pokemon Crystal ROM file in the roms/ directory
-```
-
-**Memory database errors**  
-The system automatically handles database schema updates for backward compatibility.
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branches for new functionality
-3. Add tests for new components
-4. Submit pull requests with detailed descriptions
-
-## License
-
-This project is for educational and research purposes. Ensure you own legal copies of any ROM files used.
+### **⚡ Quick Reference**
+- [📋 Installation Guide](guides/getting-started.md#installation) - Dependencies and setup
+- [🤖 Model Comparison](../README.md#llm-models) - Choose the right LLM
+- [📊 Performance Benchmarks](../README.md#performance) - Speed and resource usage
+- [🔧 Troubleshooting](guides/getting-started.md#troubleshooting) - Common issues and solutions
 
 ---
 
-**Happy Training! 🎉**
+## 📖 **Complete Documentation**
 
-For questions or issues, please check the troubleshooting section or create an issue in the repository.
+### **📚 User Guides**
+Essential guides for users at all levels:
+
+| Guide | Description | Audience |
+|-------|-------------|----------|
+| [🚀 Getting Started](guides/getting-started.md) | Complete setup and first run | **Everyone** |
+| [🎯 Pokemon Trainer Guide](guides/POKEMON_TRAINER_GUIDE.md) | Unified trainer usage | Intermediate |
+| [🚀 Quick Start (Legacy)](guides/QUICK_START_FAST.md) | Fast setup guide | Advanced |
+| [🌐 Web Monitor](guides/README_WEB_MONITOR.md) | Web interface guide | All users |
+| [📊 Speed Optimization](guides/SPEED_OPTIMIZATION_REPORT.md) | Performance tuning | Advanced |
+| [🔤 ROM Font Extraction](guides/ROM_FONT_EXTRACTION_GUIDE.md) | Text extraction setup | Developers |
+| [📝 Text Logging](guides/TEXT_LOGGING_GUIDE.md) | Logging configuration | Developers |
+
+### **📖 Examples and Tutorials**
+Practical examples for different use cases:
+
+| Example | Description | Use Case |
+|---------|-------------|----------|
+| [🎬 Content Creation](examples/content-creation.md) | YouTube, streaming, social media | **Content creators** |
+
+### **🔧 API Reference**
+Technical documentation for developers:
+
+| API Doc | Description | Audience |
+|---------|-------------|----------|
+| [🔧 Unified Trainer API](api/unified-trainer-api.md) | Complete API reference | **Developers** |
+
+### **🔬 Research Documentation**
+Academic and research-oriented documentation:
+
+| Research Doc | Description | Audience |
+|--------------|-------------|----------|
+| [📚 Curriculum Training](research/CURRICULUM_TRAINING_GUIDE.md) | Progressive learning guide | **Researchers** |
+| [📖 Progressive Curriculum](research/progressive_training_curriculum.md) | Curriculum design theory | Researchers |
+
+---
+
+## 🎯 **Documentation by Use Case**
+
+### **🎬 Content Creators**
+Perfect for YouTubers, streamers, and social media creators:
+1. [🚀 Getting Started](guides/getting-started.md) - Basic setup
+2. [🎬 Content Creation Guide](examples/content-creation.md) - Recording and streaming
+3. [🌐 Web Interface](guides/README_WEB_MONITOR.md) - Live monitoring
+4. [📊 Performance Tuning](guides/SPEED_OPTIMIZATION_REPORT.md) - Optimize for recording
+
+### **🔬 Researchers**
+Academic research and experimentation:
+1. [🚀 Getting Started](guides/getting-started.md) - Initial setup
+2. [📚 Curriculum Training](research/CURRICULUM_TRAINING_GUIDE.md) - Progressive learning
+3. [🔧 API Reference](api/unified-trainer-api.md) - Technical details
+4. [📝 Text Logging](guides/TEXT_LOGGING_GUIDE.md) - Data collection
+
+### **💻 Developers**
+Software development and integration:
+1. [🚀 Getting Started](guides/getting-started.md) - Development setup
+2. [🔧 API Reference](api/unified-trainer-api.md) - Complete API docs
+3. [🔤 ROM Font Extraction](guides/ROM_FONT_EXTRACTION_GUIDE.md) - Advanced features
+4. [📊 Speed Optimization](guides/SPEED_OPTIMIZATION_REPORT.md) - Performance optimization
+
+### **🎮 Gamers**
+Casual users who want to see AI play Pokemon:
+1. [🚀 Getting Started](guides/getting-started.md) - Quick setup
+2. [🎯 Pokemon Trainer Guide](guides/POKEMON_TRAINER_GUIDE.md) - Usage guide
+3. [🌐 Web Interface](guides/README_WEB_MONITOR.md) - Watch AI play
+
+---
+
+## 📋 **Documentation Status**
+
+### **✅ Complete Documentation**
+- ✅ Getting Started Guide
+- ✅ Content Creation Guide
+- ✅ API Reference
+- ✅ Performance Optimization
+- ✅ Curriculum Training
+- ✅ Web Interface Guide
+
+### **🔄 In Progress**
+- 🔄 Advanced Configuration Guide
+- 🔄 Troubleshooting Expanded Guide
+- 🔄 Model Comparison Deep Dive
+- 🔄 Research Paper References
+
+### **📝 Planned Documentation**
+- 📝 Multi-game Support Guide
+- 📝 Community Contributions Guide
+- 📝 Performance Benchmarking Guide
+- 📝 Educational Use Cases
+
+---
+
+## 🆘 **Getting Help**
+
+### **First Steps**
+1. **Check [Getting Started](guides/getting-started.md)** - Covers 90% of common issues
+2. **Review [Troubleshooting](guides/getting-started.md#troubleshooting)** - Common problems and solutions
+3. **Search existing documentation** - Use Ctrl+F to search this page
+
+### **Still Need Help?**
+- 🐛 **Bug Reports**: [File an issue](https://github.com/your-repo/issues) with detailed steps
+- 💡 **Feature Requests**: [Suggest improvements](https://github.com/your-repo/issues) 
+- 💬 **Questions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- 📧 **Direct Contact**: Reach out to maintainers
+
+### **Community Resources**
+- 🌟 **GitHub Repository**: Star and follow updates
+- 📢 **Discord/Slack**: Join the community (if available)
+- 📹 **Video Tutorials**: Community-created content
+- 📝 **Blog Posts**: Technical deep-dives and tutorials
+
+---
+
+## 🔍 **Search Tips**
+
+### **Finding Information Quickly**
+- Use **Ctrl+F** to search this page for keywords
+- Check the **Table of Contents** in each guide
+- Look for **🎯 Quick Reference** sections
+- Use **emoji indicators** to find the right section type
+
+### **Common Search Terms**
+- **"setup"** → [Getting Started](guides/getting-started.md)
+- **"speed"** → [Speed Optimization](guides/SPEED_OPTIMIZATION_REPORT.md)
+- **"web"** → [Web Interface](guides/README_WEB_MONITOR.md)
+- **"content"** → [Content Creation](examples/content-creation.md)
+- **"API"** → [API Reference](api/unified-trainer-api.md)
+- **"curriculum"** → [Curriculum Training](research/CURRICULUM_TRAINING_GUIDE.md)
+
+---
+
+## 🏆 **Documentation Quality**
+
+### **Our Standards**
+- 📝 **Clear Writing**: No jargon, simple explanations
+- 🎯 **Practical Examples**: Real commands and code
+- 📊 **Comprehensive Coverage**: All features documented
+- 🔄 **Up-to-date**: Synchronized with code changes
+- 🎨 **Well-organized**: Easy navigation and search
+
+### **Feedback Welcome**
+Help us improve! If you find:
+- ❌ **Outdated information**
+- 🔍 **Missing details**
+- 😕 **Confusing explanations**
+- 💡 **Suggested improvements**
+
+Please [file an issue](https://github.com/your-repo/issues) or contribute directly!
+
+---
+
+## 🚀 **Quick Start Paths**
+
+Choose your path based on your goal:
+
+### **⚡ "I want to see AI play Pokemon NOW!"**
+```bash
+# 1. Install dependencies (2 minutes)
+pip install pyboy pillow numpy ollama
+
+# 2. Get the model (1 minute)
+ollama pull smollm2:1.7b
+
+# 3. Run training (30 seconds to results!)
+python pokemon_trainer.py --rom your_rom.gbc --mode ultra_fast --actions 100 --no-llm
+```
+
+### **🎬 "I want to create content!"**
+1. Complete [Getting Started](guides/getting-started.md) (10 min)
+2. Read [Content Creation Guide](examples/content-creation.md) (5 min)
+3. Record your first video! (∞ fun)
+
+### **🔬 "I want to do research!"**
+1. Complete [Getting Started](guides/getting-started.md) (10 min)
+2. Study [Curriculum Training](research/CURRICULUM_TRAINING_GUIDE.md) (20 min)
+3. Review [API Reference](api/unified-trainer-api.md) (30 min)
+4. Start experimenting! (∞ learning)
+
+---
+
+<div align="center">
+
+**📚 Ready to dive into Pokemon Crystal RL?**
+
+[🚀 Get Started](guides/getting-started.md) | [🎬 Create Content](examples/content-creation.md) | [🔧 View API](api/unified-trainer-api.md)
+
+</div>
