@@ -1,10 +1,10 @@
 {
-  "start_time": 1755228777.0362494,
-  "total_actions": 2836,
+  "start_time": 1755231962.8973632,
+  "total_actions": 5,
   "total_episodes": 0,
-  "llm_calls": 142,
-  "actions_per_second": 100.97847588679853,
+  "llm_calls": 0,
+  "actions_per_second": 0.20135161952306282,
   "mode": "fast_monitored",
-  "model": "smollm2:1.7b",
-  "end_time": 1755228805.1214883
+  "model": "rule-based",
+  "end_time": 1755231987.7295985
 }

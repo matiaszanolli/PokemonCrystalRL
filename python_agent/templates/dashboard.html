@@ -351,7 +351,7 @@
     </style>
 </head>
 <body>
-    <div class="connection-status" id="connectionStatus">Connected</div>
+    <div class="connection-status" id="connectionStatus">Connecting...</div>
     
     <header class="header">
         <h1>Pokemon Crystal RL Training Monitor <span class="status-indicator"></span></h1>
@@ -525,7 +525,7 @@
 
     <script>
         // Initialize Socket.IO connection
-        const socket = io();
+        const socket = io({autoConnect: false});
         
         // Chart instances
         let rewardChart, progressChart, sessionChart;
@@ -794,20 +794,146 @@
                 .then(data => console.log('Agent reset:', data));
         }
         
+        // HTTP polling fallback for unified trainer (no Socket.IO)
+        let useHttpPolling = false;
+        let pollingIntervals = [];
+        let previousScreenshotUrl = null;
+        
+        function startHttpPolling() {
+            if (useHttpPolling) return; // Prevent multiple polling instances
+            
+            useHttpPolling = true;
+            console.log('Starting HTTP polling fallback...');
+            connectionStatus.textContent = 'HTTP Polling';
+            connectionStatus.classList.remove('disconnected');
+            
+            // Poll for stats updates
+            const statsInterval = setInterval(() => {
+                if (!useHttpPolling) return;
+                
+                // Update stats from /api/status endpoint
+                fetch('/api/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Map unified trainer data to dashboard format
+                        document.getElementById('currentStep').textContent = data.total_actions || '-';
+                        document.getElementById('actionsPerSec').textContent = (data.actions_per_second || 0).toFixed(1);
+                        
+                        // Map additional fields
+                        document.getElementById('currentReward').textContent = '0.0'; // Not available in unified trainer
+                        document.getElementById('totalReward').textContent = '0.0';
+                        document.getElementById('screenType').textContent = 'Game';
+                        document.getElementById('mapId').textContent = '-';
+                        document.getElementById('playerX').textContent = '-';
+                        document.getElementById('playerY').textContent = '-';
+                        
+                        // Calculate uptime
+                        if (data.start_time) {
+                            const uptime = Math.floor((Date.now() / 1000) - data.start_time);
+                            const hours = Math.floor(uptime / 3600);
+                            const minutes = Math.floor((uptime % 3600) / 60);
+                            const seconds = uptime % 60;
+                            document.getElementById('uptime').textContent = 
+                                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                        }
+                        
+                        // Show training status
+                        const statusText = data.is_training ? 'Training Active' : 'Training Stopped';
+                        document.getElementById('currentEpisode').textContent = statusText;
+                        
+                        // Update performance metrics
+                        document.getElementById('avgReward').textContent = '0.0';
+                        document.getElementById('avgSteps').textContent = data.total_actions || '0';
+                        document.getElementById('successRate').textContent = '-%';
+                        
+                        // Set FPS to actions per second (approximation)
+                        document.getElementById('fps').textContent = (data.actions_per_second || 0).toFixed(1);
+                    })
+                    .catch(err => {
+                        console.log('Stats update failed:', err);
+                        // Show connection error in UI
+                        connectionStatus.textContent = 'Connection Error';
+                        connectionStatus.classList.add('disconnected');
+                    });
+                
+                // Update system stats
+                fetch('/api/system')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('cpuUsage').textContent = (data.cpu_percent || 0).toFixed(1) + '%';
+                        document.getElementById('memoryUsage').textContent = (data.memory_percent || 0).toFixed(1) + '%';
+                        
+                        // Reset connection status if it was in error state
+                        if (connectionStatus.textContent === 'Connection Error') {
+                            connectionStatus.textContent = 'HTTP Polling';
+                            connectionStatus.classList.remove('disconnected');
+                        }
+                    })
+                    .catch(err => console.log('System stats update failed:', err));
+                    
+            }, 1000);
+            
+            // Update screenshot
+            const screenshotInterval = setInterval(() => {
+                if (!useHttpPolling) return;
+                
+                fetch('/api/screenshot')
+                    .then(response => response.blob())
+                    .then(blob => {
+                        // Clean up previous URL to prevent memory leak
+                        if (previousScreenshotUrl) {
+                            URL.revokeObjectURL(previousScreenshotUrl);
+                        }
+                        
+                        const url = URL.createObjectURL(blob);
+                        document.getElementById('gameScreen').src = url;
+                        previousScreenshotUrl = url;
+                    })
+                    .catch(err => console.log('Screenshot refresh failed:', err));
+            }, 2000); // Update screenshots every 2 seconds (less frequent)
+            
+            // Store interval IDs for cleanup
+            pollingIntervals.push(statsInterval, screenshotInterval);
+        }
+        
+        function stopHttpPolling() {
+            useHttpPolling = false;
+            
+            // Clear all polling intervals
+            pollingIntervals.forEach(interval => clearInterval(interval));
+            pollingIntervals = [];
+            
+            // Clean up screenshot URL
+            if (previousScreenshotUrl) {
+                URL.revokeObjectURL(previousScreenshotUrl);
+                previousScreenshotUrl = null;
+            }
+            
+            console.log('HTTP polling stopped');
+        }
+        
         // Initialize everything when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initCharts();
             
-            // Refresh screenshot every 2 seconds
-            setInterval(() => {
-                fetch('/api/screenshot')
-                    .then(response => response.blob())
-                    .then(blob => {
-                        const url = URL.createObjectURL(blob);
-                        document.getElementById('gameScreen').src = url;
-                    })
-                    .catch(err => console.log('Screenshot refresh failed:', err));
-            }, 2000);
+            // Try to connect with Socket.IO
+            socket.connect();
+
+            // Fallback to HTTP polling if Socket.IO fails
+            socket.on('connect_error', () => {
+                console.log('Socket.IO connection failed, falling back to HTTP polling');
+                socket.disconnect();
+                startHttpPolling();
+            });
+
+            // Timeout fallback if Socket.IO doesn't connect within 3 seconds
+            setTimeout(() => {
+                if (!socket.connected && !useHttpPolling) {
+                    console.log('Socket.IO connection timeout, falling back to HTTP polling');
+                    socket.disconnect();
+                    startHttpPolling();
+                }
+            }, 3000);
         });
     </script>
 </body>

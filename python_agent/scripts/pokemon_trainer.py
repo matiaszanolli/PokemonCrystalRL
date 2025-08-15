@@ -102,7 +102,7 @@ class TrainingConfig:
     # Screen capture
     capture_screens: bool = True
     capture_fps: int = 5               # Reduced FPS for stability
-    screen_resize: tuple = (240, 216)  # Smaller size for column width
+    screen_resize: tuple = (240, 216)  # Full resolution for CV/OCR, scaled in UI
     
     # Curriculum settings (for curriculum mode)
     curriculum_stages: int = 5
@@ -147,6 +147,13 @@ class UnifiedPokemonTrainer:
         # Web server
         self.web_server = None
         self.web_thread = None
+        
+        # Improved state tracking
+        self.game_state = "title_screen"
+        self.consecutive_same_screens = 0
+        self.last_screen_hash = None
+        self.intro_progress = 0
+        self.stuck_counter = 0
         
         self._initialize_components()
     
@@ -652,14 +659,25 @@ Action:"""
             self.pyboy.tick()
     
     def _capture_synchronized_screenshot(self) -> Optional[np.ndarray]:
-        """Capture screenshot synchronously for decision making"""
+        """Capture screenshot synchronously for decision making with crash detection"""
         try:
             if not self.pyboy:
+                print("⚠️ PyBoy instance is None")
                 return None
+            
+            # Check if PyBoy is still alive
+            if not self._is_pyboy_alive():
+                print("❌ PyBoy instance has crashed or become unresponsive")
+                if self._attempt_pyboy_recovery():
+                    print("✅ PyBoy recovery successful")
+                else:
+                    print("💀 PyBoy recovery failed, training cannot continue")
+                    return None
             
             # Get current screen data
             screen_array = self.pyboy.screen.ndarray
             if screen_array is None:
+                print("⚠️ PyBoy screen.ndarray returned None")
                 return None
             
             # Convert to standard format (RGB)
@@ -673,12 +691,21 @@ Action:"""
                 # Grayscale, convert to RGB
                 screen_rgb = np.stack([screen_array, screen_array, screen_array], axis=2).astype(np.uint8)
             else:
+                print(f"⚠️ Unexpected screen array shape: {screen_array.shape}")
                 return None
             
             return screen_rgb.copy()  # Return a copy for safety
             
         except Exception as e:
             print(f"⚠️ Synchronized screenshot failed: {e}")
+            # Check if this is a PyBoy crash
+            if "PyBoy" in str(e) or "segmentation" in str(e).lower():
+                print("💥 Detected PyBoy crash during screenshot capture")
+                if self._attempt_pyboy_recovery():
+                    print("✅ PyBoy recovery after crash successful")
+                    return self._capture_synchronized_screenshot()  # Retry once
+                else:
+                    print("💀 PyBoy recovery after crash failed")
             return None
     
     def _get_llm_action_with_vision(self, screenshot: Optional[np.ndarray]) -> int:
@@ -725,47 +752,334 @@ Action:"""
             return self._get_rule_based_action(self.stats['total_actions'])
     
     def _get_rule_based_action(self, step: int) -> int:
-        """Get rule-based action for synchronized training"""
-        # Smart rule-based logic for Pokemon Crystal
-        action_patterns = {
-            # Early game: Navigate menus and start game
-            'menu_navigation': [7, 5, 5, 2, 5],  # START, A, A, DOWN, A
-            'exploration': [1, 1, 4, 4, 2, 2, 3, 3, 5, 5],  # Basic movement + interactions
-            'dialogue': [5, 5, 5, 2, 5],  # A spam for dialogue
-            'battle': [5, 1, 5, 2, 5],  # Simple battle actions
-        }
+        """Improved rule-based action with game state awareness"""
         
-        # Determine current phase based on step count
-        if step < 50:
-            pattern = action_patterns['menu_navigation']
-        elif step < 200:
-            pattern = action_patterns['exploration']
-        elif step < 400:
-            pattern = action_patterns['dialogue']
+        # Get current screen for state detection - use simple capture to avoid recursion
+        screenshot = self._simple_screenshot_capture()
+        current_state = self._detect_game_state(screenshot)
+        
+        # Update game state and stuck detection
+        screen_hash = self._get_screen_hash(screenshot)
+        if screen_hash == self.last_screen_hash:
+            self.consecutive_same_screens += 1
         else:
-            pattern = action_patterns['exploration']
+            self.consecutive_same_screens = 0
+            self.last_screen_hash = screen_hash
         
-        # Select action from pattern
-        pattern_index = step % len(pattern)
-        return pattern[pattern_index]
+        # Anti-stuck mechanism
+        if self.consecutive_same_screens > 15:
+            self.stuck_counter += 1
+            if step % 10 == 0:
+                print(f"🔄 Anti-stuck: Been stuck for {self.consecutive_same_screens} frames")
+            return self._get_unstuck_action(step)
+        
+        # State-based action selection
+        if current_state == "title_screen":
+            return self._handle_title_screen(step)
+        elif current_state == "intro_sequence":
+            return self._handle_intro_sequence(step)
+        elif current_state == "new_game_menu":
+            return self._handle_new_game_menu(step)
+        elif current_state == "dialogue":
+            return self._handle_dialogue(step)
+        elif current_state == "overworld":
+            return self._handle_overworld(step)
+        elif current_state == "menu":
+            return self._handle_menu(step)
+        else:
+            return self._handle_unknown_state(step)
+    
+    def _detect_game_state(self, screenshot: Optional[np.ndarray]) -> str:
+        """Detect current game state from screenshot"""
+        if screenshot is None:
+            return "unknown"
+        
+        # Simple state detection based on screen characteristics
+        # This is a simplified approach - in practice you'd use more sophisticated detection
+        
+        # Check if screen is mostly black (loading/transition)
+        if np.mean(screenshot) < 10:
+            return "loading"
+        
+        # Check if screen is mostly white (intro text)
+        if np.mean(screenshot) > 240:
+            return "intro_sequence"
+        
+        # Look for common patterns
+        height, width = screenshot.shape[:2]
+        
+        # Check bottom section for dialogue boxes (common in Pokemon)
+        bottom_section = screenshot[int(height * 0.7):, :]
+        bottom_brightness = np.mean(bottom_section)
+        
+        if bottom_brightness > 200:  # Bright bottom = dialogue box
+            return "dialogue"
+        
+        # Check for menu-like patterns
+        if self._has_menu_pattern(screenshot):
+            return "menu"
+        
+        # Check for title screen patterns
+        if self._has_title_screen_pattern(screenshot):
+            return "title_screen"
+        
+        # Check for overworld patterns
+        if self._has_overworld_pattern(screenshot):
+            return "overworld"
+        
+        # Default fallback
+        return "unknown"
+    
+    def _get_screen_hash(self, screenshot: Optional[np.ndarray]) -> int:
+        """Get a simple hash of the screen for stuck detection"""
+        if screenshot is None:
+            return 0
+        # Simple hash based on mean values of screen sections
+        h, w = screenshot.shape[:2]
+        sections = [
+            screenshot[:h//2, :w//2],      # Top-left
+            screenshot[:h//2, w//2:],      # Top-right  
+            screenshot[h//2:, :w//2],      # Bottom-left
+            screenshot[h//2:, w//2:]       # Bottom-right
+        ]
+        return hash(tuple(int(np.mean(section)) for section in sections))
+    
+    def _has_title_screen_pattern(self, screenshot: np.ndarray) -> bool:
+        """Check if screenshot looks like title screen"""
+        # Title screens often have logos in the upper portion
+        upper_section = screenshot[:screenshot.shape[0]//3, :]
+        upper_contrast = np.std(upper_section)
+        return upper_contrast > 30  # High contrast suggests logo/graphics
+    
+    def _has_menu_pattern(self, screenshot: np.ndarray) -> bool:
+        """Check if screenshot looks like a menu"""
+        # Menus often have structured layouts
+        return False  # Simplified for now
+    
+    def _has_overworld_pattern(self, screenshot: np.ndarray) -> bool:
+        """Check if screenshot looks like overworld"""
+        # Overworld has varied textures and colors
+        color_variance = np.var(screenshot)
+        return color_variance > 1000  # High variance suggests detailed graphics
+    
+    def _handle_title_screen(self, step: int) -> int:
+        """Handle title screen navigation"""
+        if step % 10 == 0:
+            print(f"🎮 Title screen detected at step {step}")
+        
+        # Cycle through menu options to start game
+        pattern = [7, 5, 5, 5, 2, 5, 5, 1, 5, 5]  # START, A spam, DOWN, A, UP, A
+        return pattern[step % len(pattern)]
+    
+    def _handle_intro_sequence(self, step: int) -> int:
+        """Handle intro/cutscene sequences"""
+        if step % 20 == 0:
+            print(f"🎬 Intro sequence detected at step {step}")
+        
+        # Rapidly skip through intro text
+        pattern = [5, 5, 5, 7, 5, 5]  # A spam + occasional START to skip
+        return pattern[step % len(pattern)]
+    
+    def _handle_new_game_menu(self, step: int) -> int:
+        """Handle new game character creation"""
+        if step % 15 == 0:
+            print(f"👤 New game menu detected at step {step}")
+        
+        # Navigate new game menus (select options and confirm)
+        pattern = [5, 5, 2, 5, 1, 5, 5]  # A, A, DOWN, A, UP, A, A
+        return pattern[step % len(pattern)]
+    
+    def _handle_dialogue(self, step: int) -> int:
+        """Handle dialogue boxes"""
+        if step % 25 == 0:
+            print(f"💬 Dialogue detected at step {step}")
+        
+        # Advance through dialogue quickly but not too fast
+        pattern = [5, 0, 5, 0, 5]  # A, wait, A, wait, A (0 = no action)
+        action = pattern[step % len(pattern)]
+        return 5 if action == 0 else action  # Convert 0 to A button
+    
+    def _handle_overworld(self, step: int) -> int:
+        """Handle overworld movement"""
+        if step % 30 == 0:
+            print(f"🗺️ Overworld detected at step {step}")
+        
+        # Explore the world with varied movement
+        movement_patterns = [
+            [1, 1, 1, 5],      # Up, interact
+            [2, 2, 2, 5],      # Down, interact  
+            [3, 3, 3, 5],      # Left, interact
+            [4, 4, 4, 5],      # Right, interact
+        ]
+        
+        pattern_idx = (step // 20) % len(movement_patterns)
+        pattern = movement_patterns[pattern_idx]
+        return pattern[step % len(pattern)]
+    
+    def _handle_menu(self, step: int) -> int:
+        """Handle menu navigation"""
+        if step % 20 == 0:
+            print(f"📋 Menu detected at step {step}")
+        
+        # Navigate menus efficiently
+        pattern = [1, 5, 2, 5, 6]  # UP, A, DOWN, A, B (to exit)
+        return pattern[step % len(pattern)]
+    
+    def _handle_unknown_state(self, step: int) -> int:
+        """Handle unknown game states"""
+        if step % 40 == 0:
+            print(f"❓ Unknown state at step {step}")
+        
+        # Conservative exploration pattern
+        pattern = [5, 5, 1, 4, 2, 3, 5, 6]  # A spam, movement, A, B
+        return pattern[step % len(pattern)]
+    
+    def _get_unstuck_action(self, step: int) -> int:
+        """Get action to break out of stuck situations"""
+        # Aggressive unstuck pattern
+        unstuck_patterns = [
+            [6, 6, 6],         # B spam (back out)
+            [7, 5, 5],         # START, A, A (menu access)
+            [8, 5],            # SELECT, A (alternative menu)
+            [1, 2, 3, 4],      # Movement in all directions
+            [5, 6, 5, 6],      # A-B alternating
+        ]
+        
+        pattern_idx = (self.stuck_counter // 10) % len(unstuck_patterns)
+        pattern = unstuck_patterns[pattern_idx]
+        return pattern[step % len(pattern)]
+    
+    def _simple_screenshot_capture(self) -> Optional[np.ndarray]:
+        """Simple screenshot capture without crash detection (to avoid recursion)"""
+        try:
+            if not self.pyboy:
+                return None
+            
+            # Get current screen data directly
+            screen_array = self.pyboy.screen.ndarray
+            if screen_array is None:
+                return None
+            
+            # Convert to standard format (RGB)
+            if len(screen_array.shape) == 3 and screen_array.shape[-1] == 4:
+                # RGBA to RGB
+                screen_rgb = screen_array[:, :, :3].astype(np.uint8)
+            elif len(screen_array.shape) == 3 and screen_array.shape[-1] == 3:
+                # Already RGB
+                screen_rgb = screen_array.astype(np.uint8)
+            elif len(screen_array.shape) == 2:
+                # Grayscale, convert to RGB
+                screen_rgb = np.stack([screen_array, screen_array, screen_array], axis=2).astype(np.uint8)
+            else:
+                return None
+            
+            return screen_rgb.copy()  # Return a copy for safety
+            
+        except Exception:
+            # Silently fail - this is used for state detection, not critical path
+            return None
+    
+    def _is_pyboy_alive(self) -> bool:
+        """Check if PyBoy instance is still alive and responsive"""
+        try:
+            if not self.pyboy:
+                return False
+            
+            # Try to access a simple property that should always work
+            _ = self.pyboy.frame_count
+            
+            # Try to access the screen (most common crash point)
+            screen = self.pyboy.screen.ndarray
+            
+            # If we got here, PyBoy seems alive
+            return screen is not None
+            
+        except Exception as e:
+            print(f"💀 PyBoy alive check failed: {e}")
+            return False
+    
+    def _attempt_pyboy_recovery(self) -> bool:
+        """Attempt to recover from PyBoy crash"""
+        print("🩹 Attempting PyBoy recovery...")
+        
+        try:
+            # First, try to gracefully stop the current instance
+            if self.pyboy:
+                try:
+                    self.pyboy.stop()
+                except:
+                    pass  # May already be dead
+                self.pyboy = None
+            
+            # Wait a moment for cleanup
+            time.sleep(0.5)
+            
+            # Attempt to reinitialize PyBoy
+            print("🔄 Reinitializing PyBoy...")
+            
+            self.pyboy = PyBoy(
+                self.config.rom_path,
+                window="null" if self.config.headless else "SDL2",
+                debug=self.config.debug_mode
+            )
+            
+            # Test if the new instance works
+            if self._is_pyboy_alive():
+                print("✅ PyBoy recovery successful")
+                
+                # Try to reload save state if available
+                if self.config.save_state_path:
+                    try:
+                        with open(self.config.save_state_path, 'rb') as f:
+                            self.pyboy.load_state(f)
+                        print("💾 Save state reloaded after recovery")
+                    except Exception as e:
+                        print(f"⚠️ Could not reload save state after recovery: {e}")
+                
+                return True
+            else:
+                print("❌ PyBoy recovery failed - new instance not responsive")
+                return False
+                
+        except Exception as e:
+            print(f"💀 PyBoy recovery attempt failed: {e}")
+            self.pyboy = None
+            return False
     
     def _execute_synchronized_action(self, action: int, frames: int):
-        """Execute action for exact frame duration"""
+        """Execute action for exact frame duration with proper timing"""
         if not self.pyboy:
             return
+        
+        # Calculate timing for real Game Boy speed (60 FPS)
+        frame_duration = 1.0 / 60.0  # 16.67ms per frame
+        total_duration = frames * frame_duration
+        
+        start_time = time.time()
         
         # Press the button (if action is not 0/no-op)
         if action in self.actions and self.actions[action]:
             self.pyboy.send_input(self.actions[action])
         
-        # Run the exact number of frames
+        # Run the exact number of frames with proper timing
         for frame in range(frames):
+            frame_start = time.time()
+            
+            # Execute one frame
             self.pyboy.tick()
             
-            # Optional: Release button halfway through for more realistic timing
-            if frame == frames // 2 and action in self.actions and self.actions[action]:
-                # Release the button (this helps with some games that need button releases)
-                pass  # PyBoy handles button releases automatically
+            # Calculate how long this frame took
+            frame_elapsed = time.time() - frame_start
+            
+            # Sleep for remainder of frame duration to maintain 60 FPS timing
+            remaining_time = frame_duration - frame_elapsed
+            if remaining_time > 0:
+                time.sleep(remaining_time)
+        
+        # Ensure total action duration is correct
+        total_elapsed = time.time() - start_time
+        if total_elapsed < total_duration:
+            time.sleep(total_duration - total_elapsed)
     
     def _start_screen_capture(self):
         """Start screen capture thread"""
@@ -1029,7 +1343,7 @@ Action:"""
         .container { max-width: 1200px; margin: 0 auto; }
         .stats { background: #333; padding: 15px; border-radius: 8px; margin: 10px 0; }
         .screen { border: 3px solid #4CAF50; margin: 20px 0; text-align: center; background: #000; border-radius: 8px; padding: 10px; }
-        .screen img { max-width: 100%; image-rendering: pixelated; }
+        .screen img { width: 120px; height: 108px; image-rendering: pixelated; }
         h1 { text-align: center; color: #4CAF50; }
     </style>
 </head>
@@ -1044,9 +1358,18 @@ Action:"""
     </div>
     <script>
         setInterval(() => {
+            // Try the main stats endpoint first
             fetch('/stats').then(r => r.json()).then(data => {
                 document.getElementById('stats').innerHTML = 
-                    `🎯 Actions: ${data.total_actions} | ⚡ Speed: ${data.actions_per_second.toFixed(1)} a/s | 🧠 LLM: ${data.llm_calls}`;
+                    `🎯 Actions: ${data.total_actions} | ⚡ Speed: ${data.actions_per_second.toFixed(1)} a/s | 🧠 LLM: ${data.llm_calls} | 🎮 Mode: ${data.mode}`;
+            }).catch(() => {
+                // Fallback to API status endpoint
+                fetch('/api/status').then(r => r.json()).then(data => {
+                    document.getElementById('stats').innerHTML = 
+                        `🎯 Actions: ${data.total_actions} | ⚡ Speed: ${data.actions_per_second.toFixed(1)} a/s | 🧠 LLM: ${data.llm_calls} | Status: ${data.is_training ? 'Training' : 'Stopped'}`;
+                }).catch(() => {
+                    document.getElementById('stats').innerHTML = 'Stats unavailable';
+                });
             });
             document.getElementById('gameScreen').src = '/screen?' + Date.now();
         }, 1000);
@@ -1177,14 +1500,22 @@ Action:"""
             
             def _handle_socketio_fallback(self):
                 """Handle socket.io requests gracefully"""
-                # Return a polite 404 for socket.io requests since we don't implement WebSockets
+                # Return a structured response indicating HTTP polling should be used
                 response = {
                     'error': 'WebSocket/Socket.IO not implemented',
-                    'message': 'This trainer uses HTTP polling instead of WebSockets'
+                    'message': 'This trainer uses HTTP polling instead of WebSockets',
+                    'use_polling': True,
+                    'polling_endpoints': {
+                        'status': '/api/status',
+                        'system': '/api/system', 
+                        'screenshot': '/api/screenshot'
+                    }
                 }
-                self.send_response(404)
+                self.send_response(200)  # Changed from 404 to 200 to avoid browser errors
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
                 self.end_headers()
                 self.wfile.write(json.dumps(response).encode())
             
