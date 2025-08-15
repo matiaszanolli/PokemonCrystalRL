@@ -26,6 +26,13 @@ from dataclasses import dataclass
 from PIL import Image
 import ollama
 
+# System monitoring
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
 # Core imports
 try:
     from pyboy import PyBoy
@@ -756,8 +763,10 @@ Action:"""
         print()
     
     def _create_web_server(self):
-        """Create web monitoring server"""
+        """Create comprehensive web monitoring server"""
         from http.server import HTTPServer, BaseHTTPRequestHandler
+        import os
+        import psutil
         
         class TrainingHandler(BaseHTTPRequestHandler):
             def __init__(self, trainer, *args, **kwargs):
@@ -766,15 +775,45 @@ Action:"""
             
             def do_GET(self):
                 if self.path == '/':
-                    self._serve_dashboard()
+                    self._serve_comprehensive_dashboard()
                 elif self.path.startswith('/screen'):
                     self._serve_screen()
                 elif self.path == '/stats':
                     self._serve_stats()
+                elif self.path == '/api/status':
+                    self._serve_api_status()
+                elif self.path == '/api/system':
+                    self._serve_api_system()
+                elif self.path == '/api/runs':
+                    self._serve_api_runs()
                 else:
                     self.send_error(404)
             
-            def _serve_dashboard(self):
+            def do_POST(self):
+                if self.path == '/api/start_training':
+                    self._handle_start_training()
+                elif self.path == '/api/stop_training':
+                    self._handle_stop_training()
+                else:
+                    self.send_error(404)
+            
+            def _serve_comprehensive_dashboard(self):
+                """Serve the comprehensive dashboard from templates"""
+                try:
+                    template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'templates', 'dashboard.html')
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        html = f.read()
+                    
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html; charset=utf-8')
+                    self.end_headers()
+                    self.wfile.write(html.encode('utf-8'))
+                except Exception as e:
+                    print(f"⚠️ Error loading dashboard template: {e}")
+                    self._serve_fallback_dashboard()
+            
+            def _serve_fallback_dashboard(self):
+                """Fallback simple dashboard if template fails"""
                 html = """<!DOCTYPE html>
 <html>
 <head>
@@ -787,95 +826,30 @@ Action:"""
             color: white; 
             line-height: 1.4;
         }
-        .container { 
-            max-width: 1200px; 
-            margin: 0 auto; 
-        }
-        .stats { 
-            background: #333; 
-            padding: 15px; 
-            border-radius: 8px; 
-            margin: 10px 0; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-        .screen { 
-            border: 3px solid #4CAF50; 
-            margin: 20px 0; 
-            text-align: center;
-            background: #000;
-            border-radius: 8px;
-            padding: 10px;
-            max-width: 100%;
-            overflow: hidden;
-        }
-        .screen img { 
-            max-width: 100%;
-            max-height: 400px;
-            height: auto;
-            image-rendering: pixelated;
-            image-rendering: -moz-crisp-edges;
-            image-rendering: crisp-edges;
-            border: 1px solid #666;
-        }
-        .grid { 
-            display: grid; 
-            grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); 
-            gap: 20px;
-        }
-        @media (max-width: 768px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
-            .screen {
-                margin: 10px 0;
-            }
-        }
-        h1 { 
-            text-align: center; 
-            color: #4CAF50; 
-            margin-bottom: 30px;
-        }
-        h3 { 
-            color: #4CAF50; 
-            margin-top: 0;
-        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .stats { background: #333; padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .screen { border: 3px solid #4CAF50; margin: 20px 0; text-align: center; background: #000; border-radius: 8px; padding: 10px; }
+        .screen img { max-width: 100%; image-rendering: pixelated; }
+        h1 { text-align: center; color: #4CAF50; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>⚡ Pokemon Crystal Unified Trainer</h1>
         <div class="stats" id="stats">Loading...</div>
-        <div class="grid">
-            <div class="screen">
-                <h3>🎮 Game Screen</h3>
-                <img id="gameScreen" src="/screen" alt="Game Screen">
-            </div>
-            <div>
-                <h3>📊 Training Info</h3>
-                <div id="details">Loading...</div>
-            </div>
+        <div class="screen">
+            <h3>🎮 Game Screen</h3>
+            <img id="gameScreen" src="/screen" alt="Game Screen">
         </div>
     </div>
     <script>
-        function updateAll() {
+        setInterval(() => {
             fetch('/stats').then(r => r.json()).then(data => {
                 document.getElementById('stats').innerHTML = 
-                    `🎯 Actions: ${data.total_actions} | ` +
-                    `⚡ Speed: ${data.actions_per_second.toFixed(1)} a/s | ` +
-                    `📈 Episodes: ${data.total_episodes} | ` +
-                    `🧠 LLM Calls: ${data.llm_calls}`;
-                
-                document.getElementById('details').innerHTML = 
-                    `<p><strong>Mode:</strong> ${data.mode}</p>` +
-                    `<p><strong>Model:</strong> ${data.model}</p>` +
-                    `<p><strong>Runtime:</strong> ${((Date.now()/1000) - data.start_time).toFixed(1)}s</p>`;
+                    `🎯 Actions: ${data.total_actions} | ⚡ Speed: ${data.actions_per_second.toFixed(1)} a/s | 🧠 LLM: ${data.llm_calls}`;
             });
-            
             document.getElementById('gameScreen').src = '/screen?' + Date.now();
-        }
-        
-        setInterval(updateAll, 1000);
-        updateAll();
+        }, 1000);
     </script>
 </body>
 </html>"""
@@ -889,6 +863,7 @@ Action:"""
                     img_data = base64.b64decode(self.trainer.latest_screen['image_b64'])
                     self.send_response(200)
                     self.send_header('Content-type', 'image/png')
+                    self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
                     self.end_headers()
                     self.wfile.write(img_data)
                 else:
@@ -898,8 +873,115 @@ Action:"""
                 self.trainer._update_stats()
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps(self.trainer.stats).encode())
+            
+            def _serve_api_status(self):
+                """API endpoint for training status"""
+                status = {
+                    'is_training': hasattr(self.trainer, '_training_active') and self.trainer._training_active,
+                    'current_run_id': getattr(self.trainer, 'current_run_id', None),
+                    'mode': self.trainer.config.mode.value,
+                    'model': self.trainer.config.llm_backend.value if self.trainer.config.llm_backend else 'rule-based',
+                    'start_time': self.trainer.stats.get('start_time'),
+                    'total_actions': self.trainer.stats.get('total_actions', 0),
+                    'llm_calls': self.trainer.stats.get('llm_calls', 0),
+                    'actions_per_second': self.trainer.stats.get('actions_per_second', 0.0)
+                }
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(status).encode())
+            
+            def _serve_api_system(self):
+                """API endpoint for system statistics"""
+                try:
+                    stats = {
+                        'cpu_percent': psutil.cpu_percent(),
+                        'memory_percent': psutil.virtual_memory().percent,
+                        'disk_usage': psutil.disk_usage('/').percent,
+                        'gpu_available': False  # Could be enhanced to detect GPU
+                    }
+                except Exception as e:
+                    stats = {
+                        'cpu_percent': 0.0,
+                        'memory_percent': 0.0,
+                        'disk_usage': 0.0,
+                        'gpu_available': False,
+                        'error': str(e)
+                    }
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(stats).encode())
+            
+            def _serve_api_runs(self):
+                """API endpoint for training runs history"""
+                # For now, return current run as a single entry
+                current_run = {
+                    'id': 1,
+                    'algorithm': self.trainer.config.mode.value,
+                    'start_time': datetime.fromtimestamp(self.trainer.stats['start_time']).isoformat(),
+                    'end_time': None,
+                    'status': 'running' if hasattr(self.trainer, '_training_active') and self.trainer._training_active else 'completed',
+                    'total_timesteps': self.trainer.stats.get('total_actions', 0),
+                    'final_reward': 'N/A'
+                }
+                
+                runs = [current_run]
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(runs).encode())
+            
+            def _handle_start_training(self):
+                """Handle training start request"""
+                try:
+                    content_length = int(self.headers['Content-Length'])
+                    post_data = self.rfile.read(content_length)
+                    config = json.loads(post_data.decode('utf-8'))
+                    
+                    response = {
+                        'success': False,
+                        'message': 'Training control not implemented in unified trainer yet'
+                    }
+                    
+                    self.send_response(501)  # Not implemented
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response).encode())
+                    
+                except Exception as e:
+                    self._send_error_response(str(e))
+            
+            def _handle_stop_training(self):
+                """Handle training stop request"""
+                response = {
+                    'success': False,
+                    'message': 'Training control not implemented in unified trainer yet'
+                }
+                
+                self.send_response(501)  # Not implemented
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+            
+            def _send_error_response(self, error_msg):
+                response = {'success': False, 'error': error_msg}
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
         
         # Create handler class with trainer reference
         def handler_factory(trainer):
@@ -942,7 +1024,7 @@ Examples:
     
     # Training mode
     parser.add_argument('--mode', choices=[m.value for m in TrainingMode], 
-                       default='fast_local', help='Training mode')
+                       default='fast_monitored', help='Training mode')
     
     # LLM settings
     parser.add_argument('--model', choices=[m.value for m in LLMBackend if m.value], 
