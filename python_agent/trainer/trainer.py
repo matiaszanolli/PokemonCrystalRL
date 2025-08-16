@@ -592,21 +592,27 @@ class UnifiedPokemonTrainer:
         # Add response time to history
         self.llm_response_times.append(response_time)
         
-        # Keep only last 20 response times for window
-        if len(self.llm_response_times) > 20:
-            self.llm_response_times = self.llm_response_times[-20:]
+        # Update stats with total time and call count
+        self.stats['llm_total_time'] += response_time
+        if self.stats['llm_calls'] > 0:
+            self.stats['llm_avg_time'] = self.stats['llm_total_time'] / self.stats['llm_calls']
+        
+        # Keep only last 10 response times for window - smaller window for faster adaptation
+        if len(self.llm_response_times) > 10:
+            self.llm_response_times = self.llm_response_times[-10:]
         
         # Calculate average response time
-        if len(self.llm_response_times) >= 5:
+        if len(self.llm_response_times) >= 3:
             avg_time = sum(self.llm_response_times) / len(self.llm_response_times)
             
             # Adjust adaptive interval based on performance
-            if avg_time > 2.0:  # Slow responses (>2s)
+            if avg_time > 3.0:  # Slow responses (>3s) - raised threshold
                 self.adaptive_llm_interval = min(self.adaptive_llm_interval * 1.2, 50)
                 if self.config.debug_mode:
                     self.logger.debug(f"LLM slow ({avg_time:.1f}s), increasing interval to {self.adaptive_llm_interval}")
-            elif avg_time < 0.5:  # Fast responses (<0.5s)
-                self.adaptive_llm_interval = max(self.adaptive_llm_interval * 0.9, self.config.llm_interval)
+            elif avg_time < 1.5:  # Fast responses (<1.5s) - raised threshold to account for sliding window
+                # Make sure it definitely decreases even with large intervals
+                self.adaptive_llm_interval = max(self.adaptive_llm_interval * 0.8, self.config.llm_interval)
                 if self.config.debug_mode:
                     self.logger.debug(f"LLM fast ({avg_time:.1f}s), decreasing interval to {self.adaptive_llm_interval}")
     
@@ -636,7 +642,7 @@ class UnifiedPokemonTrainer:
         """Get action to escape stuck situation"""
         # Cycle through different actions to get unstuck
         unstuck_actions = [1, 2, 3, 4, 8, 5]  # Up, Down, Left, Right, B, A
-        return unstuck_actions[self.stuck_counter % len(unstuck_actions)]
+        return unstuck_actions[step % len(unstuck_actions)]
     
     def _capture_and_process_screen(self):
         """Capture and process screen for monitoring (alias for _capture_and_queue_screen)"""

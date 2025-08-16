@@ -1104,16 +1104,16 @@ class TestLLMBackendSwitching:
         
         trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
         
-        # Add more than 20 response times
-        for i in range(25):
+        # Add more than 10 response times (new window size)
+        for i in range(15):
             trainer.stats['llm_calls'] = i + 1
             trainer._track_llm_performance(1.0 + i * 0.1)
         
-        # Should only keep last 20
-        assert len(trainer.llm_response_times) == 20
-        # Should have the most recent values
-        assert trainer.llm_response_times[0] == 1.5  # 5th response time
-        assert trainer.llm_response_times[-1] == 3.4  # 25th response time
+        # Should only keep last 10
+        assert len(trainer.llm_response_times) == 10
+        # Should have the most recent values (use approximate comparison for floating point)
+        assert abs(trainer.llm_response_times[0] - 1.5) < 1e-10  # 6th response time (index 5)
+        assert abs(trainer.llm_response_times[-1] - 2.4) < 1e-10  # 15th response time (index 14)
     
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
