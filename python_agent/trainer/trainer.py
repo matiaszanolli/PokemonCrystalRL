@@ -182,6 +182,18 @@ class UnifiedPokemonTrainer:
         # Initialize PyBoy
         self._init_pyboy()
         
+        # Initialize optimized video streaming if enabled
+        if self.config.capture_screens and self.pyboy and VIDEO_STREAMING_AVAILABLE:
+            try:
+                self.video_streamer = create_video_streamer(self.pyboy, quality="medium")
+                self.video_streamer.start_streaming()
+                self.logger.info("📹 Optimized video streaming initialized")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not initialize video streamer: {e}")
+                self.video_streamer = None
+        else:
+            self.video_streamer = None
+        
         # Initialize LLM manager
         if self.config.llm_backend and self.config.llm_backend != LLMBackend.NONE:
             self.llm_manager = LLMManager(self.config, self.game_state_detector)

@@ -6,13 +6,15 @@ Welcome to the comprehensive documentation for the Pokemon Crystal RL unified tr
 
 ### **👋 New Users**
 - [🚀 Getting Started](guides/getting-started.md) - **Start here!** Complete setup in 10 minutes
-- [🎯 Training Modes Overview](guides/POKEMON_TRAINER_GUIDE.md) - Understanding different training modes
+- [🎯 Pokemon Trainer Guide](guides/POKEMON_TRAINER_GUIDE.md) - Unified trainer system usage
+- [📹 Video Streaming Integration](VIDEO_STREAMING_INTEGRATION.md) - Optimized streaming documentation
 - [🎬 Content Creation](examples/content-creation.md) - Create engaging videos and streams
 
 ### **⚡ Quick Reference**
 - [📋 Installation Guide](guides/getting-started.md#installation) - Dependencies and setup
-- [🤖 Model Comparison](../README.md#llm-models) - Choose the right LLM
-- [📊 Performance Benchmarks](../README.md#performance) - Speed and resource usage
+- [📹 Video Streaming](VIDEO_STREAMING_INTEGRATION.md) - 10x performance improvement
+- [🌐 Web Monitoring](WEB_MONITORING.md) - Real-time dashboard usage
+- [🔧 API Reference](api/unified-trainer-api.md) - Complete developer docs
 - [🔧 Troubleshooting](guides/getting-started.md#troubleshooting) - Common issues and solutions
 
 ---
@@ -185,13 +187,16 @@ Choose your path based on your goal:
 ### **⚡ "I want to see AI play Pokemon NOW!"**
 ```bash
 # 1. Install dependencies (2 minutes)
-pip install pyboy pillow numpy ollama
+pip install -r requirements.txt
 
-# 2. Get the model (1 minute)
+# 2. Get the model (1 minute, optional for ultra_fast mode)
 ollama pull smollm2:1.7b
 
 # 3. Run training (30 seconds to results!)
-python pokemon_trainer.py --rom your_rom.gbc --mode ultra_fast --actions 100 --no-llm
+python pokemon_trainer.py --rom your_rom.gbc --mode ultra_fast --actions 1000 --no-llm --enable-web
+
+# 4. Watch in browser
+open http://localhost:8080
 ```
 
 ### **🎬 "I want to create content!"**

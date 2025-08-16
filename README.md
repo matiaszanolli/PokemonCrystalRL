@@ -1,40 +1,50 @@
-# 🎮 Pokemon Crystal AI Agent - Local LLM Edition
+# 🎮 Pokemon Crystal RL - Unified Training System
 
-**A cost-free, intelligent Pokemon Crystal AI agent powered by local Llama models via Ollama.**
+**An advanced Pokemon Crystal AI training platform with multiple training modes, optimized streaming, and intelligent LLM integration.**
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Install Ollama (if not already installed)
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 2. Pull the local LLM model
-ollama pull llama3.2:3b
-
-# 3. Install Python dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# 4. Install PyBoy emulator
-pip install pyboy
+# 2. For LLM modes - Install Ollama and pull model
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull smollm2:1.7b
 
-# 5. Run the AI agent
+# 3. Run the unified trainer
 cd python_agent
-python llm_play.py --no-headless  # Watch it play!
+python pokemon_trainer.py --rom path/to/pokecrystal.gbc --mode ultra_fast --actions 1000
+
+# 4. Monitor training with web interface
+open http://localhost:8080
 ```
 
 ## 🧠 Features
 
-### **Local LLM Intelligence**
-- ✅ **Cost-Free**: No OpenAI/API fees - runs entirely locally
-- ✅ **Fast**: ~10 steps/second decision making
-- ✅ **Strategic**: Analyzes game state and makes intelligent decisions
-- ✅ **Learning**: Stores decisions and game states for improvement
+### **🎯 Multiple Training Modes**
+- ✅ **Ultra Fast**: 100+ FPS rule-based training for speed
+- ✅ **Synchronized**: Frame-perfect LLM decision making
+- ✅ **Curriculum**: Progressive learning with adaptive difficulty
+- ✅ **Legacy Fast**: Traditional high-speed training
 
-### **Technical Stack**
+### **🚀 Performance Optimizations**
+- ✅ **Optimized Video Streaming**: 10x latency reduction, 4x smaller frames
+- ✅ **Smart Screen Capture**: Adaptive quality and compression
+- ✅ **Real-time Monitoring**: Web dashboard with live metrics
+- ✅ **Error Recovery**: Automatic crash detection and recovery
+
+### **🤖 LLM Integration**
+- ✅ **Multiple Backends**: Ollama, OpenAI, Anthropic support
+- ✅ **Vision Processing**: OCR and game state analysis
+- ✅ **Strategic Planning**: Long-term goal understanding
+- ✅ **Cost-Efficient**: Local models with zero API costs
+
+### **🔧 Technical Stack**
 - 🎮 **PyBoy Emulator**: Pure Python Game Boy emulator
-- 🤖 **Ollama + Llama 3.2**: Local 3B parameter language model
-- 💾 **SQLite Memory**: Episodic memory for decision tracking
-- 🐍 **PyBoy Environment**: Clean OpenAI Gym-style interface
+- 🌐 **Web Interface**: Real-time monitoring and control
+- 📊 **Advanced Analytics**: Performance metrics and statistics
+- 🖼️ **Vision Pipeline**: OCR and visual context processing
 
 ### **Performance Comparison**
 
@@ -48,84 +58,128 @@ python llm_play.py --no-headless  # Watch it play!
 
 ```
 pokemon_crystal_rl/
-├── python_agent/               # Main agent code
-│   ├── local_llm_agent.py     # Local LLM Pokemon agent
-│   ├── llm_play.py            # Interactive gameplay script
-│   ├── pyboy_env.py           # PyBoy Gym environment
-│   ├── train_pyboy.py         # Traditional RL training
-│   └── pokemon_agent_memory.db # Agent's episodic memory
-├── pokecrystal.gbc            # Pokemon Crystal ROM
-├── pokemon_crystal_intro.state # PyBoy save state
-└── requirements.txt           # Python dependencies
+├── python_agent/
+│   ├── pokemon_trainer.py      # 🎯 Main unified trainer entry point
+│   ├── trainer/                # 🏗️ Core training system
+│   │   ├── trainer.py         # Main orchestrator
+│   │   ├── config.py          # Training configuration
+│   │   ├── training_strategies.py # Mode-specific strategies
+│   │   └── web_server.py      # Real-time web interface
+│   ├── core/                  # 🔧 Core modules
+│   │   ├── video_streaming.py # Optimized streaming
+│   │   └── monitoring.py      # Performance monitoring
+│   ├── vision/                # 👁️ Computer vision
+│   │   └── vision_processor.py # OCR and analysis
+│   ├── llm/                   # 🧠 LLM integration
+│   │   └── llm_manager.py     # Multi-backend LLM support
+│   ├── demos/                 # 📖 Example scripts
+│   └── docs/                  # 📚 Documentation
+├── requirements.txt
+└── README.md
 ```
 
 ## 🎯 Usage Examples
 
-### **Watch the AI Play**
+### **🚀 Ultra-Fast Training (Recommended)**
 ```bash
 cd python_agent
-python llm_play.py --no-headless --max-steps 5000
+python pokemon_trainer.py --rom pokecrystal.gbc --mode ultra_fast --actions 10000 --no-llm
 ```
 
-### **Fast Training Session**  
+### **🧠 LLM-Powered Strategic Training**
 ```bash
-python llm_play.py --fast --max-steps 50000
+python pokemon_trainer.py --rom pokecrystal.gbc --mode synchronized --llm-backend ollama --model smollm2:1.7b --actions 1000
 ```
 
-### **Custom LLM Model**
+### **🌐 Web Monitoring**
 ```bash
-# Try a different model
-ollama pull phi3.5:3.8b-mini-instruct
-python llm_play.py --model phi3.5:3.8b-mini-instruct
+# Start with web interface
+python pokemon_trainer.py --rom pokecrystal.gbc --mode curriculum --enable-web --port 8080
+# Open http://localhost:8080 to monitor
 ```
 
-### **Traditional RL Comparison**
+### **🎬 Content Creation Mode**
 ```bash
-python train_pyboy.py --algorithm ppo --total-timesteps 100000
+# High-quality streaming for recording
+python pokemon_trainer.py --rom pokecrystal.gbc --mode synchronized --capture-screens --quality high
+```
+
+### **📊 Performance Testing**
+```bash
+# Run demo with metrics
+python demos/optimized_streaming_demo.py
 ```
 
 ## 🔧 Advanced Configuration
 
-### **LLM Model Options**
+### **📊 Training Modes**
 ```bash
-# Fast & efficient (recommended)
-ollama pull llama3.2:3b         # 2GB VRAM, ~0.1s inference
+# Ultra Fast: Rule-based, 100+ FPS
+--mode ultra_fast --no-llm
 
-# Even faster for real-time
-ollama pull phi3.5:3.8b-mini    # 1.5GB VRAM, ~0.05s inference
+# Synchronized: Frame-perfect LLM decisions
+--mode synchronized --llm-backend ollama --model smollm2:1.7b
 
-# More capable for complex reasoning  
-ollama pull llama3.2:7b         # 4GB VRAM, ~0.2s inference
+# Curriculum: Progressive difficulty
+--mode curriculum --curriculum-stages 5
+
+# Legacy Fast: Traditional fast training
+--mode legacy_fast --target-fps 30
 ```
 
-### **Agent Behavior Tuning**
-Edit `local_llm_agent.py` to customize:
-- Game knowledge database
-- Decision-making prompts
-- Exploration vs exploitation balance
-- Memory storage and retrieval
+### **🤖 LLM Model Options**
+```bash
+# Ultra-fast for real-time (recommended)
+ollama pull smollm2:1.7b        # 1GB VRAM, ~50ms inference
 
-### **Environment Settings**
-```python
-# In llm_play.py, customize:
-step_delay = 0.1        # Time between actions
-max_steps = 10000       # Session length
-headless = True         # GUI on/off
+# Balanced performance
+ollama pull llama3.2:3b         # 2GB VRAM, ~100ms inference
+
+# High capability
+ollama pull qwen2.5:7b          # 4GB VRAM, ~200ms inference
+```
+
+### **⚡ Performance Tuning**
+```bash
+# Optimize for speed
+--target-fps 60 --no-capture --disable-vision
+
+# Optimize for quality
+--capture-screens --quality high --enable-ocr
+
+# Optimize for streaming
+--enable-web --stream-quality medium --compression-level 6
 ```
 
 ## 📊 Monitoring & Analytics
 
-### **View Agent's Memory**
+### **🌐 Web Dashboard**
 ```bash
-cd python_agent
-sqlite3 pokemon_agent_memory.db
-.tables  # See stored decisions and game states
+# Real-time monitoring interface
+open http://localhost:8080
+
+# API endpoints
+curl http://localhost:8080/api/status
+curl http://localhost:8080/api/screenshot
+curl http://localhost:8080/api/stats
 ```
 
-### **Training Logs**
+### **📈 Performance Metrics**
 ```bash
-tensorboard --logdir logs/
-# View traditional RL training progress
+# View trainer logs
+tail -f pokemon_trainer.log
+
+# Check performance stats
+python -c "from trainer.trainer import UnifiedPokemonTrainer; trainer = UnifiedPokemonTrainer(); print(trainer.get_stats())"
+```
+
+### **🔍 Debug Information**
+```bash
+# Enable debug mode
+python pokemon_trainer.py --debug --log-level DEBUG
+
+# View captured text (OCR)
+curl http://localhost:8080/api/ocr_text
 ```
 
 ## 🎮 Game State Analysis
