@@ -719,40 +719,29 @@ class TestIntegrationScenarios:
         
         # Simulate PyBoy crash and recovery during training
         call_count = [0]
-        recovery_flag = [False]
+        recovery_triggered = [False]
         
-        def simulate_crash(*args):
+        # Mock the frame_count access to trigger crash detection
+        def mock_frame_count_getter():
             call_count[0] += 1
-            if call_count[0] == 25 and not recovery_flag[0]:  # Crash once
-                recovery_flag[0] = True  # Mark that recovery was triggered
+            if call_count[0] == 25 and not recovery_triggered[0]:  # Crash once
+                recovery_triggered[0] = True
                 raise Exception("Simulated PyBoy crash")
-            return np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+            return 1000
         
         # Create a proper recovery mock that actually resets things
         def mock_recovery():
-            # Reset the screen capture mock to stop throwing exceptions
+            # Reset the call count to stop throwing exceptions
             # This simulates the PyBoy instance being recovered
             call_count[0] = 0  # Reset call count
             return True
         
-        trainer._simple_screenshot_capture = Mock(side_effect=simulate_crash)
+        # Mock PyBoy properties to simulate crash in frame_count access
+        type(mock_pyboy_instance).frame_count = property(mock_frame_count_getter)
         trainer._attempt_pyboy_recovery = Mock(side_effect=mock_recovery)
         
-        # Patch _get_rule_based_action to handle exceptions and call recovery
-        original_get_rule_based_action = trainer._get_rule_based_action
-        
-        def patched_rule_based_action(step):
-            try:
-                return original_get_rule_based_action(step)
-            except Exception:
-                # If the screenshot method fails, increment error count and recover
-                trainer.error_count['total_errors'] += 1
-                trainer._attempt_pyboy_recovery()
-                return 5  # Default action after recovery
-        
-        trainer._get_rule_based_action = patched_rule_based_action
-        
-        # Run training
+        # Run training - the crash will be triggered in _capture_synchronized_screenshot
+        # which calls frame_count for health checking
         trainer._run_synchronized_training()
         
         # Verify recovery was attempted
