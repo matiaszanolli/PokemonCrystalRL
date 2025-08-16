@@ -338,15 +338,16 @@ class TestLLMInferenceBenchmarks:
             
             print(f"✅ Adaptive Interval Increased: {original_interval} → {increased_interval}")
             
-            # Now mock fast responses
+            # Now mock fast responses - clear the window first with many fast responses
             def fast_generate(*args, **kwargs):
                 time.sleep(0.001)  # 1ms delay (simulated fast)
                 return {'response': '5'}
             
             mock_ollama.generate.side_effect = fast_generate
             
-            # Trigger 10 fast LLM calls
-            for i in range(10, 20):
+            # Add enough fast calls to fill the entire sliding window (25 calls)
+            # This ensures the average drops below the 1.5s threshold
+            for i in range(10, 35):
                 trainer.stats['llm_calls'] = i + 1
                 trainer._track_llm_performance(0.8)  # Report fast response times
             
