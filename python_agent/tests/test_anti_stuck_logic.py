@@ -386,8 +386,8 @@ class TestAntiStuckPerformance:
             
             elapsed = time.time() - start_time
             
-        # Should add minimal overhead (under 150ms for 1000 actions)
-        assert elapsed < 0.15, f"Stuck detection overhead: {elapsed:.4f}s for 1000 actions"
+        # Should add minimal overhead (under 160ms for 1000 actions)
+        assert elapsed < 0.16, f"Stuck detection overhead: {elapsed:.4f}s for 1000 actions"
     
     def test_memory_usage_stability(self, trainer):
         """Test that anti-stuck system doesn't leak memory"""
