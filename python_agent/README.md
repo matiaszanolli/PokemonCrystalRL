@@ -30,8 +30,9 @@
 - 🤖 **Enhanced LLM Pipeline**: State detection + context-aware prompting
 - 📸 **Real-time Capture**: 5 FPS synchronized screenshot analysis
 - 👁️ **Vision Processing**: OCR text detection and game UI analysis
-- 🌐 **Web Dashboard**: Live monitoring with performance charts and OCR display
+- 🌐 **Real-time Web Monitor**: Live Pokemon game streaming with WebSocket updates
 - 🧠 **Smart Decision Making**: Temperature-adjusted responses based on game context
+- 🔄 **Integrated Monitoring**: Seamless bridge connecting trainer to web dashboard
 
 ### **Performance Comparison**
 
@@ -272,25 +273,78 @@ Based on testing with Pokemon Crystal ROM:
 
 ---
 
-## 🌐 **Web Interface**
+## 🌐 **Web Interface - NEW! Real-time Game Monitoring**
 
-Real-time monitoring dashboard available at `http://localhost:8080`:
+Watch your AI play Pokemon in real-time with our completely redesigned web monitoring system!
 
-### **Features**
-- 📸 **Live Gameplay**: 10 FPS screen capture
-- 📊 **Performance Metrics**: Actions/sec, LLM calls, episodes
-- 🎯 **Training Progress**: Stage advancement, success rates
-- 📈 **Real-time Charts**: Performance graphs and trends
-- 🔧 **Configuration**: Runtime parameter adjustment
+### **🎥 Live Game Streaming**
+- **Real-time Screenshots**: Watch the actual Pokemon game screen at 2 FPS
+- **WebSocket Streaming**: Instant updates with no page refreshes
+- **Pixelated Rendering**: Authentic Game Boy visual experience
+- **Responsive Design**: Works on desktop and mobile
 
-### **Usage**
-```bash
-# Enable web interface for any mode
-python pokemon_trainer.py --rom game.gbc --mode fast_local --web --port 8080
+### **📊 Training Analytics Dashboard**
+- **Live Statistics**: Player position, money, badges, Pokemon party
+- **Training Metrics**: Episodes completed, total steps, decisions made
+- **Action History**: Recent 20 actions with timestamps and reasoning
+- **Agent Decisions**: LLM decision logs with confidence scores
+- **Performance Tracking**: Actions/sec, LLM response times, error rates
+
+### **🚀 Quick Setup (Integrated Monitoring)**
+
+```python
+# New! Integrated web monitoring with trainer
+from monitoring.trainer_monitor_bridge import create_integrated_monitoring_system
+
+# Create trainer (your existing setup)
+trainer = UnifiedPokemonTrainer(config)
+
+# Add web monitoring in 3 lines!
+web_monitor, bridge, thread = create_integrated_monitoring_system(trainer)
+bridge.start_bridge()
+trainer.start_training()
+
+# Visit http://localhost:5000 to see live gameplay!
 ```
 
-### **Screenshots**
-See [📖 Web Interface Guide](docs/guides/web-interface.md) for detailed screenshots and usage instructions.
+### **⚡ Legacy Trainer Web Interface**
+```bash
+# Built-in trainer web interface (alternative)
+python pokemon_trainer.py --rom game.gbc --mode fast_monitored --web --port 8080
+# Visit http://localhost:8080 for trainer dashboard
+```
+
+### **🎯 Web Interface Features**
+
+| Feature | Integrated Monitor | Legacy Interface |
+|---------|-------------------|------------------|
+| **Live Game Screen** | ✅ 2 FPS WebSocket | ✅ 1 FPS HTTP |
+| **Real-time Updates** | ✅ WebSocket | ✅ Polling |
+| **Action History** | ✅ With reasoning | ✅ Basic |
+| **Training Stats** | ✅ Comprehensive | ✅ Limited |
+| **Agent Decisions** | ✅ LLM insights | ❌ Not available |
+| **Modern UI** | ✅ Responsive | ✅ Functional |
+
+### **📱 Monitoring URLs**
+- **Integrated Monitor**: `http://localhost:5000` (default)
+- **Trainer Dashboard**: `http://localhost:8080` (with --web flag)
+- **Custom Port**: Configure via `create_integrated_monitoring_system(port=YOUR_PORT)`
+
+### **🔧 Advanced Configuration**
+```python
+# Custom monitoring setup
+bridge.screenshot_update_interval = 0.3  # 3.3 FPS
+bridge.stats_update_interval = 1.0       # Update stats every second
+bridge.bridge_fps = 15                   # Higher bridge update rate
+```
+
+### **📖 Web Monitoring Documentation**
+See [📖 Web Monitor Integration Guide](docs/WEB_MONITOR_INTEGRATION.md) for:
+- Complete setup instructions
+- API reference
+- Performance tuning
+- Troubleshooting
+- Advanced integration examples
 
 ---
 

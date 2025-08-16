@@ -1,10 +1,13 @@
 {
-  "start_time": 1755358748.6225493,
-  "total_actions": 1000,
+  "start_time": 1755385020.5623653,
+  "total_actions": 12,
   "total_episodes": 0,
-  "actions_per_second": 823.1868288662886,
-  "mode": "ultra_fast",
-  "model": "rule-based",
-  "elapsed_time": 1.1944255828857422,
-  "end_time": 1755358749.837714
+  "actions_per_second": 1.4191392448063616,
+  "mode": "fast_monitored",
+  "model": null,
+  "llm_calls": 0,
+  "llm_total_time": 0.0,
+  "llm_avg_time": 0.0,
+  "llm_success_rate": 0.0,
+  "end_time": 1755385029.018623
 }
