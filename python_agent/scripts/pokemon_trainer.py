@@ -181,6 +181,10 @@ class UnifiedPokemonTrainer:
         self.recent_text = []
         self.text_frequency = {}
         
+        # LLM decision tracking for web monitoring
+        self.llm_decisions = []
+        self.last_llm_decision = None
+        
         # Web server
         self.web_server = None
         self.web_thread = None
@@ -415,7 +419,7 @@ class UnifiedPokemonTrainer:
                 screenshot = self._capture_synchronized_screenshot()
                 
                 # 2. DECISION PHASE - Make intelligent decision
-                if self.config.llm_backend and actions_taken % self.config.llm_interval == 0:
+                if self.config.llm_backend and actions_taken % self.adaptive_llm_interval == 0:
                     try:
                         action = self._get_llm_action_with_vision(screenshot)
                         self.stats['llm_calls'] += 1  # Count successful LLM calls
@@ -481,7 +485,7 @@ class UnifiedPokemonTrainer:
                     self.pyboy.tick()
                 
                 # Get action - LLM decisions at intervals for intelligence
-                if self.config.llm_backend and actions_taken % self.config.llm_interval == 0:
+                if self.config.llm_backend and actions_taken % self.adaptive_llm_interval == 0:
                     try:
                         action = self._get_llm_action()
                         last_llm_action = action
@@ -534,7 +538,7 @@ class UnifiedPokemonTrainer:
                     self.pyboy.tick()
                 
                 # Get action
-                if self.config.llm_backend and actions_taken % self.config.llm_interval == 0:
+                if self.config.llm_backend and actions_taken % self.adaptive_llm_interval == 0:
                     action = self._get_llm_action()
                     last_llm_action = action
                 else:
@@ -805,11 +809,16 @@ Choose action number (1-8):"""
             
             # Parse action
             text = response['response'].strip()
+            action = 5  # Default
             for char in text:
                 if char.isdigit() and '1' <= char <= '8':
-                    return int(char)
+                    action = int(char)
+                    break
             
-            return 5  # Default
+            # Save LLM decision for monitoring
+            self._save_llm_decision(action, current_state, prompt, text, total_time)
+            
+            return action
         
         except Exception as e:
             total_time = time.time() - llm_start_time
@@ -940,6 +949,9 @@ Respond with only one digit (1-8):
             # Total timing
             total_time = time.time() - llm_start_time
             
+            # Track response times for adaptive performance
+            self._track_llm_performance(total_time)
+            
             # Log performance periodically
             if self.config.debug_mode or self.stats['llm_calls'] % 10 == 0:
                 print(f"⚡ LLM Vision Performance: Total={total_time:.2f}s "
@@ -957,12 +969,18 @@ Respond with only one digit (1-8):
             text = response['response'].strip().lower()
             
             # Look for numbers in response
+            action = None
             for char in text:
                 if char.isdigit() and '1' <= char <= '8':
                     action = int(char)
                     if self.config.debug_mode and self.stats['total_actions'] % 20 == 0:
                         print(f"🤖 LLM chose action {action} for state '{current_state}'")
-                    return action
+                    break
+            
+            if action is not None:
+                # Save LLM decision for monitoring
+                self._save_llm_decision(action, current_state, prompt, text, total_time)
+                return action
             
             # Fallback to rule-based if parsing fails
             if self.config.debug_mode:
@@ -1895,6 +1913,28 @@ Context: You are playing Pokemon Crystal. Your goal is to progress through the g
             if self.config.debug_mode:
                 self.logger.warning(f"Text recognition failed: {e}")
     
+    def _save_llm_decision(self, action: int, state: str, prompt: str, response_text: str, response_time: float):
+        """Save LLM decision for web monitoring and debugging"""
+        decision_data = {
+            'timestamp': time.time(),
+            'timestamp_iso': datetime.now().isoformat(),
+            'step': self.stats['total_actions'],
+            'action': action,
+            'state': state,
+            'prompt': prompt[:200] + '...' if len(prompt) > 200 else prompt,  # Truncate long prompts
+            'response': response_text[:100] + '...' if len(response_text) > 100 else response_text,
+            'response_time': response_time,
+            'model': self.config.llm_backend.value if self.config.llm_backend else 'unknown',
+        }
+        
+        # Update last decision for quick access
+        self.last_llm_decision = decision_data
+        
+        # Add to history (keep last 50 decisions)
+        self.llm_decisions.append(decision_data)
+        if len(self.llm_decisions) > 50:
+            self.llm_decisions = self.llm_decisions[-25:]  # Keep last 25
+    
     def _track_llm_performance(self, response_time: float):
         """Track LLM performance and adapt interval if needed"""
         # Add to response times (keep last 20 calls)
@@ -2031,6 +2071,8 @@ Context: You are playing Pokemon Crystal. Your goal is to progress through the g
                     self._serve_api_runs()
                 elif self.path == '/api/text':
                     self._serve_api_text()
+                elif self.path == '/api/llm_decisions':
+                    self._serve_api_llm_decisions()
                 elif self.path.startswith('/socket.io/'):
                     self._handle_socketio_fallback()
                 else:
@@ -2288,6 +2330,56 @@ Context: You are playing Pokemon Crystal. Your goal is to progress through the g
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps(text_data).encode())
+            
+            def _serve_api_llm_decisions(self):
+                """API endpoint for LLM decision history and monitoring"""
+                llm_data = {
+                    'recent_decisions': self.trainer.llm_decisions[-20:] if self.trainer.llm_decisions else [],
+                    'last_decision': self.trainer.last_llm_decision,
+                    'total_decisions': len(self.trainer.llm_decisions),
+                    'performance_metrics': {
+                        'total_llm_calls': self.trainer.stats.get('llm_calls', 0),
+                        'avg_response_time': self.trainer.stats.get('llm_avg_time', 0.0),
+                        'total_llm_time': self.trainer.stats.get('llm_total_time', 0.0),
+                        'adaptive_interval': getattr(self.trainer, 'adaptive_llm_interval', self.trainer.config.llm_interval),
+                        'current_model': self.trainer.config.llm_backend.value if self.trainer.config.llm_backend else 'rule-based'
+                    },
+                    'state_distribution': self._calculate_state_distribution(),
+                    'action_distribution': self._calculate_action_distribution()
+                }
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(llm_data).encode())
+            
+            def _calculate_state_distribution(self):
+                """Calculate distribution of game states from recent LLM decisions"""
+                if not self.trainer.llm_decisions:
+                    return {}
+                
+                state_counts = {}
+                for decision in self.trainer.llm_decisions[-30:]:  # Last 30 decisions
+                    state = decision.get('state', 'unknown')
+                    state_counts[state] = state_counts.get(state, 0) + 1
+                
+                return state_counts
+            
+            def _calculate_action_distribution(self):
+                """Calculate distribution of actions from recent LLM decisions"""
+                if not self.trainer.llm_decisions:
+                    return {}
+                
+                action_counts = {}
+                action_names = {1: 'UP', 2: 'DOWN', 3: 'LEFT', 4: 'RIGHT', 5: 'A', 6: 'B', 7: 'START', 8: 'SELECT'}
+                
+                for decision in self.trainer.llm_decisions[-30:]:  # Last 30 decisions
+                    action = decision.get('action', 0)
+                    action_name = action_names.get(action, f'UNKNOWN({action})')
+                    action_counts[action_name] = action_counts.get(action_name, 0) + 1
+                
+                return action_counts
             
             def _send_error_response(self, error_msg):
                 response = {'success': False, 'error': error_msg}
