@@ -7,7 +7,7 @@
 
 **A cost-free, intelligent Pokemon Crystal AI agent powered by local Llama models via Ollama.**
 
-> **🎯 Latest Script: `llm_play.py` - The current main script for local LLM-powered gameplay**
+> **🎯 Latest Script: `pokemon_trainer.py` - Unified training system with intelligent LLM decision-making and real-time monitoring**
 
 <p align="center">
   <img src="docs/assets/pokemon-crystal-rl-banner.png" alt="Pokemon Crystal RL" width="600">
@@ -17,17 +17,21 @@
 
 ## 🧠 **Features**
 
-### **Local LLM Intelligence**
+### **Enhanced LLM Intelligence**
 - ✅ **Cost-Free**: No OpenAI/API fees - runs entirely locally
-- ✅ **Fast**: ~10 steps/second decision making with local models
-- ✅ **Strategic**: Analyzes game state and makes intelligent decisions
-- ✅ **Learning**: Stores decisions and game states for improvement
+- ✅ **Fast**: ~2.3 actions/second with intelligent decision making
+- ✅ **State-Aware**: Detects game states (menus, dialogue, overworld, battles)
+- ✅ **Anti-Stuck Logic**: Automatically breaks out of loops and stuck situations
+- ✅ **Context-Driven**: Uses state-specific guidance for optimal gameplay
+- ✅ **Multi-Model**: Supports SmolLM2, Llama3.2 1B/3B, and rule-based fallback
 
-### **Technical Stack**
-- 🎮 **PyBoy Emulator**: Pure Python Game Boy emulator
-- 🤖 **Ollama + Llama 3.2**: Local 3B parameter language model
-- 💾 **SQLite Memory**: Episodic memory for decision tracking
-- 🐍 **PyBoy Environment**: Clean OpenAI Gym-style interface
+### **Advanced Technical Stack**
+- 🎮 **PyBoy Emulator**: Direct Game Boy emulation with frame-perfect timing
+- 🤖 **Enhanced LLM Pipeline**: State detection + context-aware prompting
+- 📸 **Real-time Capture**: 5 FPS synchronized screenshot analysis
+- 👁️ **Vision Processing**: OCR text detection and game UI analysis
+- 🌐 **Web Dashboard**: Live monitoring with performance charts and OCR display
+- 🧠 **Smart Decision Making**: Temperature-adjusted responses based on game context
 
 ### **Performance Comparison**
 
@@ -68,26 +72,29 @@ ollama pull llama3.2:3b
 pip install pyboy pillow numpy ollama
 ```
 
-### **2. Run LLM-Powered Gameplay (Latest)**
+### **2. Run Intelligent Gameplay (Enhanced Unified Trainer)**
 ```bash
-# 🎯 Main script - Watch AI play intelligently with local LLM
+# 🎯 Main script - Watch AI play intelligently with enhanced LLM decision-making
 cd python_agent
-python llm_play.py --no-headless  # Watch it play!
+python pokemon_trainer.py --rom ../roms/pokemon_crystal.gbc --mode fast_monitored --debug --web
 
-# Fast training session
-python llm_play.py --fast --max-steps 50000
+# Fast training with SmolLM2 (recommended)
+python pokemon_trainer.py --rom ../roms/pokemon_crystal.gbc --actions 1000 --llm-interval 10
 
-# Custom LLM model
-python llm_play.py --model llama3.2:7b --max-steps 10000
+# Ultra-fast training with different models
+python pokemon_trainer.py --rom ../roms/pokemon_crystal.gbc --model llama3.2:1b --actions 5000
 ```
 
 ### **3. Alternative Training Modes**
 ```bash
-# Unified trainer with web interface
-python pokemon_trainer.py --rom path/to/pokemon_crystal.gbc --mode fast_local --web
+# Legacy LLM play script (still available)
+python llm_play.py --no-headless --max-steps 5000
 
 # Ultra-fast rule-based training
-python pokemon_trainer.py --rom path/to/pokemon_crystal.gbc --mode ultra_fast --no-llm
+python pokemon_trainer.py --rom ../roms/pokemon_crystal.gbc --mode ultra_fast --no-llm
+
+# Curriculum-based progressive learning
+python pokemon_trainer.py --rom ../roms/pokemon_crystal.gbc --mode curriculum --episodes 50
 ```
 
 ### **4. Monitor Progress**

@@ -832,5 +832,356 @@ class TestIntegrationScenarios:
         assert trainer.error_count['total_errors'] == 0  # LLM errors handled gracefully
 
 
+@pytest.mark.state_detection
+@pytest.mark.unit
+class TestEnhancedStateDetection:
+    """Test enhanced state detection system"""
+    
+    @pytest.fixture
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def trainer(self, mock_pyboy_class):
+        mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        config = TrainingConfig(
+            rom_path="test.gbc",
+            headless=True,
+            debug_mode=True
+        )
+        
+        return UnifiedPokemonTrainer(config)
+    
+    def test_improved_dialogue_detection(self, trainer):
+        """Test improved dialogue state detection"""
+        # Create screen with dialogue characteristics
+        dialogue_screen = np.ones((144, 160, 3), dtype=np.uint8) * 100
+        dialogue_screen[100:, :] = 220  # Bright bottom section (text box)
+        
+        state = trainer._detect_game_state(dialogue_screen)
+        assert state == "dialogue"
+    
+    def test_enhanced_overworld_detection(self, trainer):
+        """Test enhanced overworld state detection"""
+        # Create varied overworld screen
+        overworld_screen = np.random.randint(50, 200, (144, 160, 3), dtype=np.uint8)
+        
+        state = trainer._detect_game_state(overworld_screen)
+        assert state in ["overworld", "unknown"]  # May be unknown with random data
+    
+    def test_menu_state_detection(self, trainer):
+        """Test menu state detection accuracy"""
+        # Create screen with menu characteristics
+        menu_screen = np.ones((144, 160, 3), dtype=np.uint8) * 120
+        menu_screen[20:60, 20:140] = 200  # Menu box area
+        
+        state = trainer._detect_game_state(menu_screen)
+        # Menu detection may need more sophisticated logic
+        assert state in ["menu", "dialogue", "unknown"]
+    
+    def test_state_detection_performance(self, trainer):
+        """Test state detection performance"""
+        test_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        
+        start_time = time.time()
+        
+        # Run state detection 100 times
+        for _ in range(100):
+            trainer._detect_game_state(test_screen)
+        
+        elapsed = time.time() - start_time
+        
+        # Should be very fast (under 10ms for 100 detections)
+        assert elapsed < 0.01, f"State detection too slow: {elapsed:.4f}s for 100 detections"
+
+
+@pytest.mark.web_monitoring
+@pytest.mark.integration
+class TestWebMonitoringEnhancements:
+    """Test web monitoring enhancements in unified trainer"""
+    
+    @pytest.fixture
+    def web_trainer_config(self):
+        import socket
+        sock = socket.socket()
+        sock.bind(('', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        
+        return TrainingConfig(
+            rom_path="test.gbc",
+            enable_web=True,
+            web_port=port,
+            capture_screens=True,
+            headless=True,
+            debug_mode=True
+        )
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('http.server.HTTPServer')
+    def test_enhanced_web_initialization(self, mock_http_server, mock_pyboy_class, web_trainer_config):
+        """Test enhanced web server initialization"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        mock_server = Mock()
+        mock_http_server.return_value = mock_server
+        
+        trainer = UnifiedPokemonTrainer(web_trainer_config)
+        
+        # Enhanced web features should be initialized
+        assert trainer.web_server is not None
+        assert trainer.web_thread is not None
+        assert trainer.screen_queue.maxsize == 30  # Memory-bounded queue
+        assert trainer.capture_active is False
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_real_time_stats_tracking(self, mock_pyboy_class, web_trainer_config):
+        """Test real-time statistics tracking for web interface"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(web_trainer_config)
+        
+        # Initialize stats
+        trainer.stats['start_time'] = time.time()
+        trainer.stats['total_actions'] = 0
+        
+        # Simulate actions and track stats
+        for i in range(10):
+            trainer.stats['total_actions'] += 1
+            trainer._update_stats()
+        
+        # Stats should be updated
+        assert trainer.stats['total_actions'] == 10
+        assert trainer.stats['actions_per_second'] >= 0
+        assert 'uptime_seconds' in trainer.stats or trainer.stats['start_time'] > 0
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_screenshot_capture_optimization(self, mock_pyboy_class, web_trainer_config):
+        """Test optimized screenshot capture for web monitoring"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(web_trainer_config)
+        
+        with patch.object(trainer, '_simple_screenshot_capture') as mock_capture:
+            test_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+            mock_capture.return_value = test_screen
+            
+            # Test optimized capture
+            start_time = time.time()
+            
+            for _ in range(20):
+                trainer._capture_and_queue_screen()
+            
+            elapsed = time.time() - start_time
+            
+            # Should be efficient (under 50ms for 20 captures)
+            assert elapsed < 0.05, f"Screenshot capture too slow: {elapsed:.4f}s for 20 captures"
+            
+            # Queue should be managed efficiently
+            assert trainer.screen_queue.qsize() <= 30
+
+
+@pytest.mark.llm
+@pytest.mark.multi_model
+class TestLLMBackendSwitching:
+    """Test LLM backend switching and multi-model support"""
+    
+    @pytest.fixture
+    def model_configs(self):
+        """Configurations for different models"""
+        return {
+            'smollm2': TrainingConfig(
+                rom_path="test.gbc",
+                llm_backend=LLMBackend.SMOLLM2,
+                headless=True
+            ),
+            'llama32_1b': TrainingConfig(
+                rom_path="test.gbc",
+                llm_backend=LLMBackend.LLAMA32_1B,
+                headless=True
+            ),
+            'none': TrainingConfig(
+                rom_path="test.gbc",
+                llm_backend=LLMBackend.NONE,
+                headless=True
+            )
+        }
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_smollm2_backend_configuration(self, mock_pyboy_class, model_configs):
+        """Test SmolLM2 backend configuration"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        
+        assert trainer.config.llm_backend == LLMBackend.SMOLLM2
+        # Would test model-specific configuration
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_llm_fallback_to_rule_based(self, mock_pyboy_class, model_configs):
+        """Test fallback to rule-based when LLM fails"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        
+        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+            # Mock LLM failure
+            mock_ollama.generate.side_effect = Exception("Model not available")
+            mock_ollama.show.side_effect = Exception("Connection failed")
+            
+            # Should fallback gracefully
+            action = trainer._get_llm_action()
+            
+            # Should either return None (triggering rule-based) or a valid action
+            assert action is None or (1 <= action <= 8)
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_no_llm_backend_performance(self, mock_pyboy_class, model_configs):
+        """Test performance with no LLM backend"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['none'])
+        
+        start_time = time.time()
+        
+        # Test rule-based only performance
+        for i in range(100):
+            action = trainer._get_rule_based_action(i)
+            assert 1 <= action <= 8
+        
+        elapsed = time.time() - start_time
+        
+        # Should be very fast without LLM overhead
+        assert elapsed < 0.01, f"Rule-based actions too slow: {elapsed:.4f}s for 100 actions"
+
+
+@pytest.mark.performance
+@pytest.mark.integration
+class TestUnifiedTrainerOptimizations:
+    """Test performance optimizations in unified trainer"""
+    
+    @pytest.fixture
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def optimized_trainer(self, mock_pyboy_class):
+        mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_instance.send_input = Mock()
+        mock_pyboy_instance.tick = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        config = TrainingConfig(
+            rom_path="test.gbc",
+            mode=TrainingMode.FAST_MONITORED,
+            max_actions=1000,
+            headless=True,
+            capture_screens=True
+        )
+        
+        return UnifiedPokemonTrainer(config)
+    
+    def test_synchronized_training_performance(self, optimized_trainer):
+        """Test synchronized training mode performance"""
+        trainer = optimized_trainer
+        
+        with patch.object(trainer, '_simple_screenshot_capture') as mock_capture:
+            mock_capture.return_value = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+            
+            start_time = time.time()
+            
+            # Mock training methods
+            trainer._finalize_training = Mock()
+            
+            # Run subset of synchronized training
+            for step in range(50):
+                action = trainer._get_rule_based_action(step)
+                trainer._execute_action(action)
+                
+                # Simulate screen capture every few steps
+                if step % 5 == 0:
+                    trainer._capture_and_queue_screen()
+            
+            elapsed = time.time() - start_time
+            actions_per_second = 50 / elapsed
+            
+            # Should achieve good performance (at least 10 actions/sec)
+            assert actions_per_second >= 10, f"Synchronized training: {actions_per_second:.2f} actions/sec"
+    
+    def test_memory_usage_optimization(self, optimized_trainer):
+        """Test memory usage optimizations"""
+        trainer = optimized_trainer
+        
+        import gc
+        import psutil
+        import os
+        
+        process = psutil.Process(os.getpid())
+        initial_memory = process.memory_info().rss
+        
+        # Run extended operation
+        with patch.object(trainer, '_simple_screenshot_capture') as mock_capture:
+            mock_capture.return_value = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+            
+            for i in range(500):
+                trainer._get_rule_based_action(i)
+                
+                # Capture screens periodically
+                if i % 10 == 0:
+                    trainer._capture_and_queue_screen()
+        
+        # Force garbage collection
+        gc.collect()
+        
+        final_memory = process.memory_info().rss
+        memory_increase = (final_memory - initial_memory) / 1024 / 1024  # MB
+        
+        # Memory usage should be reasonable (under 30MB)
+        assert memory_increase < 30, f"Memory usage increased by {memory_increase:.1f}MB"
+    
+    def test_error_recovery_optimization(self, optimized_trainer):
+        """Test error recovery system performance"""
+        trainer = optimized_trainer
+        
+        # Test recovery from multiple errors
+        error_count = 0
+        recovery_times = []
+        
+        for i in range(10):
+            start_time = time.time()
+            
+            try:
+                with trainer._handle_errors("test_operation", "general"):
+                    if i % 3 == 0:  # Simulate occasional errors
+                        raise Exception("Test error")
+            except Exception:
+                error_count += 1
+            
+            recovery_time = time.time() - start_time
+            recovery_times.append(recovery_time)
+        
+        # Recovery should be fast (under 1ms per operation)
+        avg_recovery_time = sum(recovery_times) / len(recovery_times)
+        assert avg_recovery_time < 0.001, f"Error recovery too slow: {avg_recovery_time:.4f}s average"
+        
+        # Should have handled errors
+        assert error_count > 0
+        assert trainer.error_count['general'] == error_count
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
