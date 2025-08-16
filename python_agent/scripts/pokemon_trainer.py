@@ -27,6 +27,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from trainer import TrainingConfig, TrainingMode, LLMBackend, UnifiedPokemonTrainer
 
+# Make PyBoy available at module level for testing
+try:
+    from pyboy import PyBoy
+except ImportError:
+    PyBoy = None
+
 
 def setup_production_environment() -> bool:
     """Setup and validate production environment"""

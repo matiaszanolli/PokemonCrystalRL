@@ -74,8 +74,8 @@ class TestWebServerIntegration:
         )
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     @patch('http.server.HTTPServer')
     def trainer_with_web(self, mock_http_server, mock_pyboy_class, web_config):
         """Create trainer with web server enabled"""
@@ -193,8 +193,8 @@ class TestOCRDisplaySystem:
     """Test OCR text display in web interface"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -299,8 +299,8 @@ class TestRealTimePerformanceCharts:
     """Test real-time performance charting system"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_with_stats(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -340,6 +340,16 @@ class TestRealTimePerformanceCharts:
         trainer.stats['start_time'] = start_time
         trainer.stats['total_actions'] = 25
         trainer.stats['llm_calls'] = 8
+        
+        # Mock LLM manager to preserve the expected stats
+        mock_llm_manager = Mock()
+        mock_llm_manager.stats = {
+            'llm_calls': 8,
+            'llm_total_time': 0.0,
+            'llm_avg_time': 0.0,
+            'llm_success_rate': 0.0
+        }
+        trainer.llm_manager = mock_llm_manager
         
         # Calculate metrics
         elapsed_time = time.time() - start_time
@@ -421,8 +431,8 @@ class TestMemoryEfficientStreaming:
     """Test memory-efficient data streaming for web interface"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def streaming_trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -530,8 +540,8 @@ class TestMultiClientSupport:
     """Test multi-client support for web monitoring"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def multi_client_trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -677,8 +687,8 @@ class TestWebMonitoringEndToEnd:
     """End-to-end web monitoring system tests"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def e2e_trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000

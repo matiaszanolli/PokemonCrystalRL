@@ -797,7 +797,7 @@ class TestIntegrationScenarios:
     
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('trainer.trainer.ollama')
+    @patch('trainer.llm_manager.ollama')
     def test_llm_integration_fallback(self, mock_ollama, mock_pyboy_class, integration_config):
         """Test LLM integration with fallback to rule-based"""
         # Configure for LLM use
@@ -1136,7 +1136,7 @@ class TestLLMBackendSwitching:
         
         trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
         
-        with patch('trainer.trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Mock LLM failure
             mock_ollama.generate.side_effect = Exception("Model not available")
             mock_ollama.show.side_effect = Exception("Connection failed")

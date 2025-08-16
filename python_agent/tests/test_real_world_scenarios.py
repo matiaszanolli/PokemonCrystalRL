@@ -65,7 +65,7 @@ class TestSmolLM2GameplayScenarios:
     
     @pytest.fixture
     @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def gameplay_trainer(self, mock_pyboy_class, gameplay_config):
         """Create trainer for gameplay scenarios"""
         mock_pyboy_instance = Mock()
@@ -105,7 +105,7 @@ class TestSmolLM2GameplayScenarios:
             return screens[screen_type]
         
         with patch.object(trainer, '_simple_screenshot_capture', side_effect=get_next_screen):
-            with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+            with patch('trainer.llm_manager.ollama') as mock_ollama:
                 # Mock LLM to give reasonable responses
                 def mock_generate(*args, **kwargs):
                     prompt = kwargs.get('prompt', '')
@@ -193,7 +193,7 @@ class TestSmolLM2GameplayScenarios:
         
         with patch.object(trainer, '_simple_screenshot_capture', return_value=dialogue_screen):
             with patch.object(trainer, '_detect_game_state', return_value="dialogue"):
-                with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+                with patch('trainer.llm_manager.ollama') as mock_ollama:
                     # Mock LLM to give A button for dialogue
                     mock_ollama.generate.return_value = {'response': '5'}
                     mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
@@ -216,8 +216,8 @@ class TestStateTransitionScenarios:
     """Test gameplay across multiple state transitions"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def state_transition_trainer(self, mock_pyboy_class):
         """Create trainer for state transition testing"""
         mock_pyboy_instance = Mock()
@@ -344,8 +344,8 @@ class TestExtendedPlayScenarios:
     """Test extended gameplay performance and stability"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def extended_trainer(self, mock_pyboy_class):
         """Create trainer for extended play testing"""
         mock_pyboy_instance = Mock()
@@ -397,7 +397,7 @@ class TestExtendedPlayScenarios:
             
             mock_capture.side_effect = get_screen
             
-            with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+            with patch('trainer.llm_manager.ollama') as mock_ollama:
                 # Simulate appropriate LLM responses
                 def generate_action(*args, **kwargs):
                     prompt = kwargs.get('prompt', '')
@@ -483,7 +483,7 @@ class TestExtendedPlayScenarios:
         with patch.object(trainer, '_simple_screenshot_capture') as mock_capture:
             mock_capture.return_value = np.random.randint(50, 150, (144, 160, 3), dtype=np.uint8)
             
-            with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+            with patch('trainer.llm_manager.ollama') as mock_ollama:
                 mock_ollama.generate.return_value = {'response': '5'}
                 mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
                 
@@ -532,8 +532,8 @@ class TestMonitoredPlayScenarios:
     """Test gameplay with active monitoring"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def monitored_trainer(self, mock_pyboy_class):
         """Create trainer with monitoring enabled"""
         mock_pyboy_instance = Mock()

@@ -71,7 +71,12 @@ class UnifiedPokemonTrainer:
             'total_episodes': 0,
             'actions_per_second': 0.0,
             'mode': config.mode.value,
-            'model': config.llm_backend.value if config.llm_backend else "rule-based"
+            'model': config.llm_backend.value if config.llm_backend else "rule-based",
+            # Initialize LLM stats
+            'llm_calls': 0,
+            'llm_total_time': 0.0,
+            'llm_avg_time': 0.0,
+            'llm_success_rate': 0.0
         }
         
         # Screen capture and monitoring
@@ -108,6 +113,14 @@ class UnifiedPokemonTrainer:
         }
         self.last_error_time = None
         self.recovery_attempts = 0
+        
+        # LLM performance tracking
+        self.llm_response_times = []
+        self.adaptive_llm_interval = config.llm_interval
+        self.last_stuck_check = 0
+        self.last_screen_hash = None
+        self.consecutive_same_screens = 0
+        self.stuck_counter = 0
         
         self._initialize_components()
     
@@ -206,6 +219,14 @@ class UnifiedPokemonTrainer:
         # Initialize web server
         if self.config.enable_web:
             self.web_server = TrainingWebServer(self.config, self)
+            # Pre-start web server and create thread (but don't serve yet)
+            try:
+                server = self.web_server.start()
+                self.web_thread = threading.Thread(target=server.serve_forever, daemon=True)
+                self.logger.info(f"🌐 Web server initialized on http://{self.config.web_host}:{self.web_server.port}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Web server initialization failed: {e}")
+                self.web_thread = None
         
         self.logger.info("✅ Trainer initialized successfully!")
     
@@ -235,11 +256,10 @@ class UnifiedPokemonTrainer:
         if self.config.capture_screens:
             self._start_screen_capture()
         
-        # Start web server if enabled
-        if self.config.enable_web and self.web_server:
-            server = self.web_server.start()
-            self.web_thread = threading.Thread(target=server.serve_forever, daemon=True)
-            self.web_thread.start()
+        # Start web server thread if initialized but not running
+        if self.config.enable_web and self.web_server and self.web_thread:
+            if not self.web_thread.is_alive():
+                self.web_thread.start()
         
         # Route to appropriate training method
         try:
@@ -404,7 +424,14 @@ class UnifiedPokemonTrainer:
         self.logger.info(f"🚀 Ultra-fast training completed: {result}")
     
     def _get_rule_based_action(self, step: int, screenshot: Optional[np.ndarray] = None) -> int:
-        """Get rule-based action with state detection"""
+        """Get rule-based action with state detection and stuck detection"""
+        # Capture screenshot if not provided for stuck detection
+        if screenshot is None:
+            screenshot = self._simple_screenshot_capture()
+        
+        # Update stuck detection for this trainer instance
+        self._update_stuck_detection(screenshot, step)
+        
         current_state = self.game_state_detector.get_current_state(screenshot, step)
         
         # Import here to avoid circular import
@@ -412,11 +439,208 @@ class UnifiedPokemonTrainer:
         from .game_state import get_unstuck_action
         
         # Check if stuck
-        if self.game_state_detector.is_stuck():
+        if self.consecutive_same_screens >= 15 or self.game_state_detector.is_stuck():
             stuck_info = self.game_state_detector.get_stuck_info()
             return get_unstuck_action(step, stuck_info['stuck_counter'])
         else:
             return get_rule_based_action(current_state, step)
+    
+    def _update_stuck_detection(self, screenshot: Optional[np.ndarray], step: int):
+        """Update trainer's stuck detection state"""
+        if screenshot is None:
+            return
+        
+        # Get screen hash for stuck detection
+        current_hash = self._get_screen_hash(screenshot)
+        
+        if current_hash == self.last_screen_hash:
+            self.consecutive_same_screens += 1
+        else:
+            self.consecutive_same_screens = 0
+            self.last_screen_hash = current_hash
+        
+        # Update stuck counter if stuck
+        if self.consecutive_same_screens >= 15:
+            self.stuck_counter += 1
+            
+    def _execute_action(self, action: int) -> None:
+        """Execute a given action using PyBoy interface
+        
+        Args:
+            action: Integer representing the action to execute
+                    (0-7: direction pad, buttons)
+        """
+        if not self.pyboy:
+            return
+            
+        try:
+            # Send input to PyBoy
+            self.strategy_manager.execute_action(action)
+            
+            # Update stats
+            self.stats['total_actions'] += 1
+        except Exception as e:
+            if self.config.debug_mode:
+                self.logger.warning(f"Action execution failed: {e}")
+    
+    def _get_llm_action(self) -> int:
+        """Get action from LLM with fallback to rule-based"""
+        if not self.llm_manager:
+            return self._get_rule_based_action(self.stats['total_actions'])
+            
+        try:
+            # Capture current game state
+            screenshot = self._simple_screenshot_capture()
+            
+            # Get LLM action with timing measurement
+            start_time = time.time()
+            action = self.llm_manager.get_llm_action(screenshot)
+            response_time = time.time() - start_time
+            
+            # Track performance
+            self._track_llm_performance(response_time)
+            
+            return action
+        except Exception as e:
+            self.error_count['llm_failures'] += 1
+            if self.config.debug_mode:
+                self.logger.warning(f"LLM action failed, using rule-based fallback: {e}")
+            return self._get_rule_based_action(self.stats['total_actions'])
+    
+    def _detect_game_state(self, screenshot: Optional[np.ndarray]) -> str:
+        """Detect current game state from screenshot"""
+        if screenshot is None:
+            return "unknown"
+            
+        try:
+            # Use game state detector for comprehensive state detection
+            return self.game_state_detector.detect_game_state(screenshot)
+        except Exception as e:
+            if self.config.debug_mode:
+                self.logger.debug(f"State detection failed: {e}")
+            return "unknown"
+    
+    def _get_screen_hash(self, screenshot: Optional[np.ndarray]) -> int:
+        """Generate hash of screenshot for stuck detection"""
+        if screenshot is None:
+            return 0
+            
+        try:
+            # Generate hash of the screen for comparison
+            return hash(screenshot.data.tobytes())
+        except Exception as e:
+            if self.config.debug_mode:
+                self.logger.debug(f"Screen hash generation failed: {e}")
+            return 0
+    
+    def _capture_and_queue_screen(self) -> None:
+        """Capture screen and queue for web monitoring"""
+        try:
+            screenshot = self._simple_screenshot_capture()
+            if screenshot is not None:
+                self._process_and_queue_screenshot(screenshot)
+        except Exception as e:
+            if self.config.debug_mode:
+                self.logger.debug(f"Capture and queue failed: {e}")
+    
+    def _process_vision_ocr(self, screenshot: np.ndarray) -> Dict[str, Any]:
+        """Process screenshot with OCR and return structured data"""
+        if not self.vision_processor:
+            return {
+                'detected_texts': [],
+                'screen_type': 'unknown'
+            }
+        
+        try:
+            visual_context = self.vision_processor.process_screenshot(screenshot)
+            
+            detected_texts = []
+            for text_detection in visual_context.detected_text:
+                detected_texts.append({
+                    'text': text_detection.text,
+                    'confidence': text_detection.confidence,
+                    'location': text_detection.location
+                })
+            
+            return {
+                'detected_texts': detected_texts,
+                'screen_type': visual_context.screen_type or 'unknown'
+            }
+            
+        except Exception as e:
+            if self.config.debug_mode:
+                self.logger.debug(f"OCR processing failed: {e}")
+            return {
+                'detected_texts': [],
+                'screen_type': 'unknown'
+            }
+    
+    def _is_pyboy_alive(self) -> bool:
+        """Check if PyBoy is alive and responsive"""
+        if not self.pyboy:
+            return False
+            
+        try:
+            # Check if we can access frame count (lightweight health check)
+            frame_count = self.pyboy.frame_count
+            return isinstance(frame_count, int) and frame_count >= 0
+        except Exception:
+            return False
+    
+    def _track_llm_performance(self, response_time: float) -> None:
+        """Track LLM performance and adjust adaptive interval"""
+        # Add response time to history
+        self.llm_response_times.append(response_time)
+        
+        # Keep only last 20 response times for window
+        if len(self.llm_response_times) > 20:
+            self.llm_response_times = self.llm_response_times[-20:]
+        
+        # Calculate average response time
+        if len(self.llm_response_times) >= 5:
+            avg_time = sum(self.llm_response_times) / len(self.llm_response_times)
+            
+            # Adjust adaptive interval based on performance
+            if avg_time > 2.0:  # Slow responses (>2s)
+                self.adaptive_llm_interval = min(self.adaptive_llm_interval * 1.2, 50)
+                if self.config.debug_mode:
+                    self.logger.debug(f"LLM slow ({avg_time:.1f}s), increasing interval to {self.adaptive_llm_interval}")
+            elif avg_time < 0.5:  # Fast responses (<0.5s)
+                self.adaptive_llm_interval = max(self.adaptive_llm_interval * 0.9, self.config.llm_interval)
+                if self.config.debug_mode:
+                    self.logger.debug(f"LLM fast ({avg_time:.1f}s), decreasing interval to {self.adaptive_llm_interval}")
+    
+    def _handle_title_screen(self, step: int) -> int:
+        """Handle title screen state"""
+        # Use the same pattern as training strategies
+        pattern = [7, 5, 5, 5, 2, 5, 5, 1, 5, 5]  # START, A spam, DOWN, A, UP, A
+        return pattern[step % len(pattern)]
+    
+    def _handle_dialogue(self, step: int) -> int:
+        """Handle dialogue state"""
+        # Press A button to advance dialogue
+        return 5  # A button
+    
+    def _handle_overworld(self, step: int) -> int:
+        """Handle overworld state"""
+        # Use rule-based logic for overworld navigation
+        import random
+        # Mix of movement and A button presses for exploration
+        movement_actions = [0, 1, 2, 3]  # Up, Down, Left, Right
+        if step % 10 == 0:
+            return 5  # A button occasionally for interactions
+        else:
+            return random.choice(movement_actions)
+    
+    def _get_unstuck_action(self, step: int) -> int:
+        """Get action to escape stuck situation"""
+        # Cycle through different actions to get unstuck
+        unstuck_actions = [1, 2, 3, 4, 8, 5]  # Up, Down, Left, Right, B, A
+        return unstuck_actions[self.stuck_counter % len(unstuck_actions)]
+    
+    def _capture_and_process_screen(self):
+        """Capture and process screen for monitoring (alias for _capture_and_queue_screen)"""
+        self._capture_and_queue_screen()
     
     def _load_save_state(self):
         """Load save state if available"""
@@ -718,7 +942,7 @@ class UnifiedPokemonTrainer:
         elapsed = time.time() - self.stats['start_time']
         self.stats['actions_per_second'] = self.stats['total_actions'] / max(elapsed, 0.001)
         
-        # Merge LLM stats if available
+        # Merge LLM stats if available (but preserve existing stats if no manager)
         if self.llm_manager:
             self.stats.update(self.llm_manager.stats)
     
@@ -820,3 +1044,21 @@ class UnifiedPokemonTrainer:
         self.logger.info(f"📸 Capture: {'ON' if self.config.capture_screens else 'OFF'}")
         self.logger.info(f"🌐 Web UI: {'ON' if self.config.enable_web else 'OFF'}")
         self.logger.info("")
+    
+    def _handle_battle(self, step: int) -> int:
+        """Handle battle state using training strategies"""
+        # Import here to avoid circular import
+        from .training_strategies import handle_battle
+        return handle_battle(step)
+    
+    def _handle_dialogue(self, step: int) -> int:
+        """Handle dialogue state using training strategies"""
+        # Import here to avoid circular import  
+        from .training_strategies import handle_dialogue
+        return handle_dialogue(step)
+    
+    def _handle_overworld(self, step: int) -> int:
+        """Handle overworld state using training strategies"""
+        # Import here to avoid circular import
+        from .training_strategies import handle_overworld
+        return handle_overworld(step)

@@ -50,7 +50,7 @@ class TestActionPerformanceBenchmarks:
     
     @pytest.fixture
     @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_fast_monitored(self, mock_pyboy_class):
         """Create trainer optimized for fast monitored performance"""
         mock_pyboy_instance = Mock()
@@ -75,7 +75,7 @@ class TestActionPerformanceBenchmarks:
     
     @pytest.fixture
     @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_ultra_fast(self, mock_pyboy_class):
         """Create trainer for ultra-fast performance testing"""
         mock_pyboy_instance = Mock()
@@ -214,8 +214,8 @@ class TestLLMInferenceBenchmarks:
         }
     
     @pytest.mark.parametrize("backend", [LLMBackend.SMOLLM2, LLMBackend.LLAMA32_1B, LLMBackend.LLAMA32_3B])
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_inference_timing(self, mock_pyboy_class, backend, performance_expectations):
         """Test LLM inference timing for each backend"""
         mock_pyboy_instance = Mock()
@@ -230,7 +230,7 @@ class TestLLMInferenceBenchmarks:
         trainer = UnifiedPokemonTrainer(config)
         expectations = performance_expectations[backend]
         
-        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Mock response with realistic delay
             def mock_generate(*args, **kwargs):
                 time.sleep(expectations["target_ms"] / 1000)  # Convert to seconds
@@ -263,8 +263,8 @@ class TestLLMInferenceBenchmarks:
                 
                 print(f"✅ {backend.value} Performance: {avg_timing:.1f}ms avg, {max_timing:.1f}ms max")
     
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_fallback_performance(self, mock_pyboy_class):
         """Test performance when LLM fails and falls back to rule-based"""
         mock_pyboy_instance = Mock()
@@ -278,7 +278,7 @@ class TestLLMInferenceBenchmarks:
         
         trainer = UnifiedPokemonTrainer(config)
         
-        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Mock LLM failure
             mock_ollama.generate.side_effect = Exception("LLM unavailable")
             mock_ollama.show.side_effect = Exception("Model not found")
@@ -300,8 +300,8 @@ class TestLLMInferenceBenchmarks:
             
             print(f"✅ LLM Fallback Performance: {elapsed*1000:.2f}ms for {action_count} calls")
     
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_adaptive_llm_interval_performance(self, mock_pyboy_class):
         """Test adaptive LLM interval performance optimization"""
         mock_pyboy_instance = Mock()
@@ -317,7 +317,7 @@ class TestLLMInferenceBenchmarks:
         
         trainer = UnifiedPokemonTrainer(config)
         
-        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Mock slow LLM responses initially
             def slow_generate(*args, **kwargs):
                 time.sleep(0.004)  # 4ms delay (simulated slow)
@@ -361,7 +361,7 @@ class TestLLMInferenceBenchmarks:
             assert trainer.adaptive_llm_interval >= original_interval
     
     @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_performance_tracking_overhead(self, mock_pyboy_class):
         """Test that LLM performance tracking has minimal overhead"""
         mock_pyboy_instance = Mock()
@@ -402,7 +402,7 @@ class TestMemoryPerformanceBenchmarks:
     
     @pytest.fixture
     @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -507,8 +507,8 @@ class TestRealWorldPerformanceBenchmarks:
     """Test performance in real-world usage scenarios"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def training_scenarios(self, mock_pyboy_class):
         """Create trainers for different real-world scenarios"""
         mock_pyboy_instance = Mock()
@@ -552,7 +552,7 @@ class TestRealWorldPerformanceBenchmarks:
         """Test performance for content creation scenario"""
         trainer = training_scenarios["content_creation"]
         
-        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -590,7 +590,7 @@ class TestRealWorldPerformanceBenchmarks:
         """Test performance for research training scenario"""
         trainer = training_scenarios["research_training"]
         
-        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Simulate slower LLM (Llama3.2-3B)
             def slow_generate(*args, **kwargs):
                 time.sleep(0.06)  # 60ms simulated inference

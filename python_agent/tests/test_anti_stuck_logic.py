@@ -24,12 +24,14 @@ sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
 try:
-    from pokemon_trainer import (
+    from trainer.trainer import (
         UnifiedPokemonTrainer,
         TrainingConfig,
         TrainingMode,
         LLMBackend
     )
+    from trainer.game_state import get_unstuck_action
+    from trainer.training_strategies import handle_dialogue
 except ImportError:
     # Fallback import path
     from scripts.pokemon_trainer import (
@@ -46,8 +48,8 @@ class TestScreenHashDetection:
     """Test screen hash-based stuck detection system"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         """Create trainer for anti-stuck testing"""
         mock_pyboy_instance = Mock()
@@ -69,7 +71,7 @@ class TestScreenHashDetection:
         screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         
         # Calculate hash multiple times
-        hashes = [trainer._get_screen_hash(screen) for _ in range(5)]
+        hashes = [trainer.game_state_detector.get_screen_hash(screen) for _ in range(5)]
         
         # All hashes should be identical
         assert all(h == hashes[0] for h in hashes), "Screen hash should be consistent"
@@ -84,7 +86,7 @@ class TestScreenHashDetection:
             screens.append(screen)
         
         # Calculate hashes
-        hashes = [trainer._get_screen_hash(screen) for screen in screens]
+        hashes = [trainer.game_state_detector.get_screen_hash(screen) for screen in screens]
         
         # Most hashes should be unique (allowing for rare collisions)
         unique_hashes = len(set(hashes))
@@ -98,7 +100,7 @@ class TestScreenHashDetection:
         
         # Calculate 100 hashes
         for _ in range(100):
-            trainer._get_screen_hash(screen)
+            trainer.game_state_detector.get_screen_hash(screen)
         
         elapsed = time.time() - start_time
         
@@ -108,39 +110,39 @@ class TestScreenHashDetection:
     def test_stuck_detection_threshold(self, trainer):
         """Test stuck detection threshold behavior"""
         # Initialize trainer state
-        trainer.last_screen_hash = None
-        trainer.consecutive_same_screens = 0
-        trainer.stuck_counter = 0
+        trainer.game_state_detector.last_screen_hash = None
+        trainer.game_state_detector.consecutive_same_screens = 0
+        trainer.game_state_detector.stuck_counter = 0
         
         # Simulate same screen repeatedly
         test_hash = 12345
         
-        with patch.object(trainer, '_get_screen_hash', return_value=test_hash):
+        with patch.object(trainer.game_state_detector, 'get_screen_hash', return_value=test_hash):
             with patch.object(trainer, '_simple_screenshot_capture', return_value=np.zeros((144, 160, 3))):
                 # Call rule-based action multiple times with same hash
                 for i in range(25):
                     trainer._get_rule_based_action(i)
                 
                 # Should detect being stuck
-                assert trainer.consecutive_same_screens >= 20
-                assert trainer.stuck_counter > 0
+                assert trainer.game_state_detector.consecutive_same_screens >= 20
+                assert trainer.game_state_detector.stuck_counter > 0
     
     def test_stuck_counter_reset_on_different_screen(self, trainer):
         """Test that stuck counter resets when screen changes"""
-        trainer.consecutive_same_screens = 15
-        trainer.stuck_counter = 2
-        trainer.last_screen_hash = 12345
+        trainer.game_state_detector.consecutive_same_screens = 15
+        trainer.game_state_detector.stuck_counter = 2
+        trainer.game_state_detector.last_screen_hash = 12345
         
         # Simulate different screen
         new_hash = 67890
         
-        with patch.object(trainer, '_get_screen_hash', return_value=new_hash):
+        with patch.object(trainer.game_state_detector, 'get_screen_hash', return_value=new_hash):
             with patch.object(trainer, '_simple_screenshot_capture', return_value=np.zeros((144, 160, 3))):
                 trainer._get_rule_based_action(100)
         
         # Counters should be reset or reduced
-        assert trainer.consecutive_same_screens < 15
-        assert trainer.last_screen_hash == new_hash
+        assert trainer.game_state_detector.consecutive_same_screens < 15
+        assert trainer.game_state_detector.last_screen_hash == new_hash
     
     def test_hash_handling_with_invalid_screen(self, trainer):
         """Test hash calculation with invalid screen data"""
@@ -152,7 +154,7 @@ class TestScreenHashDetection:
         ]
         
         for screen in invalid_screens:
-            hash_result = trainer._get_screen_hash(screen)
+            hash_result = trainer.game_state_detector.get_screen_hash(screen)
             # Should handle gracefully (return default or previous hash)
             assert hash_result is None or isinstance(hash_result, int)
 
@@ -163,8 +165,8 @@ class TestIntelligentRecoveryActions:
     """Test intelligent recovery action patterns"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -174,11 +176,11 @@ class TestIntelligentRecoveryActions:
     
     def test_unstuck_action_variety(self, trainer):
         """Test that unstuck actions show good variety"""
-        trainer.stuck_counter = 5
+        trainer.game_state_detector.stuck_counter = 5
         
         actions = []
         for step in range(50):
-            action = trainer._get_unstuck_action(step)
+            action = get_unstuck_action(step, trainer.game_state_detector.stuck_counter)
             actions.append(action)
             assert 1 <= action <= 8, f"Invalid action {action} at step {step}"
         
@@ -197,9 +199,9 @@ class TestIntelligentRecoveryActions:
         stuck_levels = [1, 3, 5, 10, 20]
         
         for stuck_level in stuck_levels:
-            trainer.stuck_counter = stuck_level
+            trainer.game_state_detector.stuck_counter = stuck_level
             
-            actions = [trainer._get_unstuck_action(i) for i in range(20)]
+            actions = [get_unstuck_action(i, stuck_level) for i in range(20)]
             
             # Higher stuck levels should use more diverse strategies
             unique_actions = len(set(actions))
@@ -215,11 +217,11 @@ class TestIntelligentRecoveryActions:
         """Test that unstuck strategies are aware of game state"""
         game_states = ["dialogue", "overworld", "menu", "battle", "title_screen"]
         
-        trainer.stuck_counter = 3
+        trainer.game_state_detector.stuck_counter = 3
         
         for state in game_states:
-            with patch.object(trainer, '_detect_game_state', return_value=state):
-                actions = [trainer._get_unstuck_action(i) for i in range(10)]
+            with patch.object(trainer.game_state_detector, 'detect_game_state', return_value=state):
+                actions = [get_unstuck_action(i, 3) for i in range(10)]
             
             # All actions should still be valid
             assert all(1 <= action <= 8 for action in actions)
@@ -237,8 +239,8 @@ class TestIntelligentRecoveryActions:
         escalation_patterns = []
         
         for stuck_level in [1, 3, 5, 10, 15]:
-            trainer.stuck_counter = stuck_level
-            pattern = [trainer._get_unstuck_action(i) for i in range(10)]
+            trainer.game_state_detector.stuck_counter = stuck_level
+            pattern = [get_unstuck_action(i, stuck_level) for i in range(10)]
             escalation_patterns.append(pattern)
         
         # Higher stuck levels should show different behavior
@@ -252,13 +254,13 @@ class TestIntelligentRecoveryActions:
     
     def test_recovery_action_timing(self, trainer):
         """Test timing and frequency of recovery actions"""
-        trainer.stuck_counter = 5
+        trainer.game_state_detector.stuck_counter = 5
         
         start_time = time.time()
         
         # Generate 100 unstuck actions
         for i in range(100):
-            action = trainer._get_unstuck_action(i)
+            action = get_unstuck_action(i, 5)
             assert action is not None
         
         elapsed = time.time() - start_time
@@ -273,8 +275,8 @@ class TestStateAwareAntiStuck:
     """Test state-aware anti-stuck logic"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -289,11 +291,10 @@ class TestStateAwareAntiStuck:
     
     def test_dialogue_stuck_handling(self, trainer):
         """Test anti-stuck behavior in dialogue state"""
-        trainer.stuck_counter = 3
+        trainer.game_state_detector.stuck_counter = 3
         
-        # Mock dialogue state detection
-        with patch.object(trainer, '_detect_game_state', return_value="dialogue"):
-            actions = [trainer._handle_dialogue(i) for i in range(10)]
+        # Mock dialogue state detection - just test the unstuck function
+        actions = [handle_dialogue(i) for i in range(10)]
         
         # Should primarily use A button (5) in dialogue
         a_button_actions = [a for a in actions if a == 5]
@@ -305,15 +306,14 @@ class TestStateAwareAntiStuck:
     
     def test_overworld_stuck_handling(self, trainer):
         """Test anti-stuck behavior in overworld state"""
-        trainer.stuck_counter = 5
+        trainer.game_state_detector.stuck_counter = 5
         
-        # Simulate overworld stuck scenario
-        with patch.object(trainer, '_detect_game_state', return_value="overworld"):
-            actions = []
-            for i in range(20):
-                # Use unstuck action since we're stuck in overworld
-                action = trainer._get_unstuck_action(i)
-                actions.append(action)
+        # Simulate overworld stuck scenario - use unstuck actions
+        actions = []
+        for i in range(20):
+            # Use unstuck action since we're stuck in overworld
+            action = get_unstuck_action(i, 5)
+            actions.append(action)
         
         # Should use movement actions (1, 2, 3, 4)
         movement_actions = {1, 2, 3, 4}
@@ -325,11 +325,10 @@ class TestStateAwareAntiStuck:
     
     def test_menu_stuck_handling(self, trainer):
         """Test anti-stuck behavior in menu state"""
-        trainer.stuck_counter = 2
+        trainer.game_state_detector.stuck_counter = 2
         
         # Mock menu state
-        with patch.object(trainer, '_detect_game_state', return_value="menu"):
-            actions = [trainer._get_unstuck_action(i) for i in range(15)]
+        actions = [get_unstuck_action(i, 2) for i in range(15)]
         
         # Should include navigation actions
         navigation_actions = {1, 2, 3, 4}  # Directional
@@ -343,10 +342,9 @@ class TestStateAwareAntiStuck:
     
     def test_battle_stuck_handling(self, trainer):
         """Test anti-stuck behavior in battle state"""
-        trainer.stuck_counter = 4
+        trainer.game_state_detector.stuck_counter = 4
         
-        with patch.object(trainer, '_detect_game_state', return_value="battle"):
-            actions = [trainer._get_unstuck_action(i) for i in range(12)]
+        actions = [get_unstuck_action(i, 4) for i in range(12)]
         
         # Battle should primarily use A button and directional
         expected_actions = {1, 2, 3, 4, 5}  # Movement + A
@@ -363,8 +361,8 @@ class TestAntiStuckPerformance:
     """Test performance characteristics of anti-stuck system"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -408,8 +406,8 @@ class TestAntiStuckPerformance:
                 
                 # Force stuck scenario occasionally
                 if i % 100 == 0:
-                    trainer.stuck_counter = 5
-                    trainer._get_unstuck_action(i)
+                    trainer.game_state_detector.stuck_counter = 5
+                    get_unstuck_action(i, 5)
         
         # Force garbage collection
         gc.collect()
@@ -429,14 +427,15 @@ class TestAntiStuckPerformance:
         
         for size in history_sizes:
             # Setup trainer with longer history
-            trainer.recent_actions = deque([5] * size, maxlen=size)
-            trainer.consecutive_same_screens = size // 2
+            if not hasattr(trainer, 'recent_actions'):
+                trainer.recent_actions = deque([5] * size, maxlen=size)
+            trainer.game_state_detector.consecutive_same_screens = size // 2
             
             start_time = time.time()
             
             # Test stuck detection performance
             for i in range(100):
-                trainer._get_unstuck_action(i)
+                get_unstuck_action(i, 5)
             
             elapsed = time.time() - start_time
             
@@ -450,8 +449,8 @@ class TestAntiStuckIntegration:
     """Test integration of anti-stuck logic with full system"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -473,7 +472,7 @@ class TestAntiStuckIntegration:
         trainer.config.llm_backend = LLMBackend.SMOLLM2
         trainer.config.llm_interval = 5
         
-        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}  # Always A button
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -481,7 +480,7 @@ class TestAntiStuckIntegration:
             actions = []
             for step in range(20):
                 if step % trainer.config.llm_interval == 0:
-                    action = trainer._get_llm_action()
+                    action = trainer.llm_manager.get_llm_action(np.zeros((144, 160, 3)))
                 else:
                     action = trainer._get_rule_based_action(step)
                 
@@ -508,13 +507,13 @@ class TestAntiStuckIntegration:
                 trainer._get_rule_based_action(step)
                 
                 # Simulate getting unstuck after recovery actions
-                if step >= 30 and trainer.stuck_counter > 0:
+                if step >= 30 and trainer.game_state_detector.stuck_counter > 0:
                     mock_capture.return_value = different_screen
                     recovery_time = step
                     break
             
             # Should detect and attempt recovery
-            assert trainer.stuck_counter > 0, "Should detect stuck condition"
+            assert trainer.game_state_detector.stuck_counter > 0, "Should detect stuck condition"
             assert recovery_time is not None, "Should attempt recovery"
             assert recovery_time < 45, "Should recover within reasonable time"
     
@@ -522,14 +521,13 @@ class TestAntiStuckIntegration:
         """Test anti-stuck behavior during state transitions"""
         states = ["title_screen", "dialogue", "overworld", "menu"]
         
-        trainer.stuck_counter = 2
+        trainer.game_state_detector.stuck_counter = 2
         
         actions_by_state = {}
         
         for state in states:
-            with patch.object(trainer, '_detect_game_state', return_value=state):
-                state_actions = [trainer._get_unstuck_action(i) for i in range(10)]
-                actions_by_state[state] = state_actions
+            state_actions = [get_unstuck_action(i, 2) for i in range(10)]
+            actions_by_state[state] = state_actions
         
         # Each state should produce actions
         for state, actions in actions_by_state.items():
