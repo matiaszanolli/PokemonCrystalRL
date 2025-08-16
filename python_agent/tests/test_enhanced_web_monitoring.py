@@ -76,7 +76,7 @@ class TestWebServerIntegration:
     @pytest.fixture
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('http.server.HTTPServer')
+    @patch('trainer.web_server.HTTPServer')
     def trainer_with_web(self, mock_http_server, mock_pyboy_class, web_config):
         """Create trainer with web server enabled"""
         mock_pyboy_instance = Mock()
@@ -102,6 +102,16 @@ class TestWebServerIntegration:
         assert trainer.web_thread is not None
         assert trainer.screen_queue is not None
         assert trainer.capture_active is False  # Initially inactive
+        
+        # Verify that HTTPServer was called during initialization
+        # The mock should have been called once when the web server started
+        assert hasattr(trainer, 'mock_server'), "Mock server should be attached to trainer"
+        
+        # Alternative verification: check that the web server's server attribute is set
+        assert trainer.web_server.server is not None, "Web server should have server instance"
+        
+        # Verify the mock server is the one we created
+        assert trainer.web_server.server is trainer.mock_server, "Web server should use the mocked HTTPServer"
         
     def test_api_status_endpoint_structure(self, trainer_with_web):
         """Test API status endpoint returns correct data structure"""

@@ -597,9 +597,9 @@ class UnifiedPokemonTrainer:
         if self.stats['llm_calls'] > 0:
             self.stats['llm_avg_time'] = self.stats['llm_total_time'] / self.stats['llm_calls']
         
-        # Keep only last 10 response times for window - smaller window for faster adaptation
-        if len(self.llm_response_times) > 10:
-            self.llm_response_times = self.llm_response_times[-10:]
+        # Keep only last 20 response times for window - consistent with LLMManager
+        if len(self.llm_response_times) > 20:
+            self.llm_response_times.pop(0)
         
         # Calculate average response time
         if len(self.llm_response_times) >= 3:
