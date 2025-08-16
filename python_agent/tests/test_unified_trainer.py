@@ -1006,6 +1006,117 @@ class TestLLMBackendSwitching:
     
     @patch('scripts.pokemon_trainer.PyBoy')
     @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_llm_performance_tracking_initialization(self, mock_pyboy_class, model_configs):
+        """Test LLM performance tracking initialization"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        
+        # Check performance tracking attributes are initialized
+        assert hasattr(trainer, 'llm_response_times')
+        assert hasattr(trainer, 'adaptive_llm_interval')
+        assert trainer.llm_response_times == []
+        assert trainer.adaptive_llm_interval == trainer.config.llm_interval
+        assert 'llm_total_time' in trainer.stats
+        assert 'llm_avg_time' in trainer.stats
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_llm_performance_tracking_functionality(self, mock_pyboy_class, model_configs):
+        """Test LLM performance tracking functionality"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        
+        # Test tracking individual response times
+        trainer.stats['llm_calls'] = 1
+        trainer._track_llm_performance(2.5)  # 2.5 second response
+        
+        assert len(trainer.llm_response_times) == 1
+        assert trainer.llm_response_times[0] == 2.5
+        assert trainer.stats['llm_total_time'] == 2.5
+        assert trainer.stats['llm_avg_time'] == 2.5
+        
+        # Test multiple calls
+        trainer.stats['llm_calls'] = 2
+        trainer._track_llm_performance(1.5)  # Faster call
+        
+        assert len(trainer.llm_response_times) == 2
+        assert trainer.stats['llm_total_time'] == 4.0
+        assert trainer.stats['llm_avg_time'] == 2.0
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_adaptive_interval_slow_llm_increase(self, mock_pyboy_class, model_configs):
+        """Test adaptive interval increases for slow LLM calls"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer.config.debug_mode = True  # Enable debug output
+        
+        original_interval = trainer.adaptive_llm_interval
+        
+        # Add 10 slow response times (>3 seconds each)
+        for i in range(10):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(4.0)  # 4 second responses
+        
+        # Interval should have increased
+        assert trainer.adaptive_llm_interval > original_interval
+        assert trainer.adaptive_llm_interval <= 50  # Should not exceed max
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_adaptive_interval_fast_llm_decrease(self, mock_pyboy_class, model_configs):
+        """Test adaptive interval decreases for fast LLM calls"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer.config.debug_mode = True  # Enable debug output
+        
+        # First increase the interval
+        for i in range(10):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(4.0)  # Slow calls first
+        
+        increased_interval = trainer.adaptive_llm_interval
+        assert increased_interval > trainer.config.llm_interval
+        
+        # Now add fast response times
+        for i in range(10, 20):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(0.5)  # Fast calls
+        
+        # Interval should decrease (but not below original)
+        assert trainer.adaptive_llm_interval < increased_interval
+        assert trainer.adaptive_llm_interval >= trainer.config.llm_interval
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_llm_response_times_window_management(self, mock_pyboy_class, model_configs):
+        """Test that response times window is properly managed"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        
+        # Add more than 20 response times
+        for i in range(25):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(1.0 + i * 0.1)
+        
+        # Should only keep last 20
+        assert len(trainer.llm_response_times) == 20
+        # Should have the most recent values
+        assert trainer.llm_response_times[0] == 1.5  # 5th response time
+        assert trainer.llm_response_times[-1] == 3.4  # 25th response time
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
     def test_smollm2_backend_configuration(self, mock_pyboy_class, model_configs):
         """Test SmolLM2 backend configuration"""
         mock_pyboy_instance = Mock()

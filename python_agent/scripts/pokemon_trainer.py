@@ -150,10 +150,16 @@ class UnifiedPokemonTrainer:
             'total_actions': 0,
             'total_episodes': 0,
             'llm_calls': 0,
+            'llm_total_time': 0.0,
+            'llm_avg_time': 0.0,
             'actions_per_second': 0.0,
             'mode': config.mode.value,
             'model': config.llm_backend.value if config.llm_backend else "rule-based"
         }
+        
+        # Dynamic LLM performance tracking
+        self.llm_response_times = []
+        self.adaptive_llm_interval = config.llm_interval
         
         # Add llm_model attribute for test compatibility
         self.llm_model = config.llm_backend.value if config.llm_backend else None
@@ -719,30 +725,39 @@ class UnifiedPokemonTrainer:
             self._finalize_training()
     
     def _get_llm_action(self, stage: str = "BASIC_CONTROLS") -> int:
-        """Get action from LLM with state-aware temperature configuration"""
+        """Get action from LLM with state-aware temperature configuration and performance monitoring"""
         if not self.config.llm_backend:
             return 5  # Default A button
         
-        # Detect current game state for temperature settings
-        screenshot = self._simple_screenshot_capture()
-        # Always try to detect game state, even with None screenshot (for testing)
-        current_state = self._detect_game_state(screenshot)
+        # Start timing
+        llm_start_time = time.time()
         
-        # State-specific temperature settings
-        temperature_map = {
-            "dialogue": 0.8,
-            "menu": 0.6,
-            "battle": 0.8,
-            "overworld": 0.7,
-            "title_screen": 0.5,
-            "intro_sequence": 0.4,
-            "unknown": 0.6
-        }
-        temperature = temperature_map.get(current_state, 0.6)
-        
-        # Build state-aware prompt
-        state_guidance = self._get_state_guidance(current_state)
-        prompt = f"""Pokemon Crystal Game Bot
+        try:
+            # Time screenshot capture
+            screenshot_start = time.time()
+            screenshot = self._simple_screenshot_capture()
+            screenshot_time = time.time() - screenshot_start
+            
+            # Time state detection  
+            state_start = time.time()
+            current_state = self._detect_game_state(screenshot)
+            state_time = time.time() - state_start
+            
+            # State-specific temperature settings
+            temperature_map = {
+                "dialogue": 0.8,
+                "menu": 0.6,
+                "battle": 0.8,
+                "overworld": 0.7,
+                "title_screen": 0.5,
+                "intro_sequence": 0.4,
+                "unknown": 0.6
+            }
+            temperature = temperature_map.get(current_state, 0.6)
+            
+            # Build state-aware prompt
+            state_guidance = self._get_state_guidance(current_state)
+            prompt = f"""Pokemon Crystal Game Bot
 
 State: {current_state}
 Stage: {stage}
@@ -752,17 +767,41 @@ Controls:
 1=UP, 2=DOWN, 3=LEFT, 4=RIGHT, 5=A, 6=B, 7=START, 8=SELECT
 
 Choose action number (1-8):"""
-        
-        try:
+            
+            # Time LLM generation
+            generation_start = time.time()
             response = ollama.generate(
                 model=self.config.llm_backend.value,
                 prompt=prompt,
                 options={
                     'num_predict': 3,
                     'temperature': temperature,
-                    'top_k': 8
+                    'top_k': 8,
+                    'timeout': 8  # Add timeout to prevent hanging
                 }
             )
+            generation_time = time.time() - generation_start
+            
+            # Total timing
+            total_time = time.time() - llm_start_time
+            
+            # Track response times for adaptive performance
+            self._track_llm_performance(total_time)
+            
+            # Log performance periodically
+            if self.config.debug_mode or self.stats['llm_calls'] % 10 == 0:
+                print(f"⚡ LLM Performance: Total={total_time:.2f}s (Screenshot={screenshot_time:.3f}s, "
+                      f"State={state_time:.3f}s, Generation={generation_time:.2f}s) State={current_state}")
+            
+            # Track slow calls
+            if total_time > 5.0:
+                print(f"🐌 SLOW LLM CALL: {total_time:.2f}s - investigating...")
+                if generation_time > 4.0:
+                    print(f"  ⚠️ Generation bottleneck: {generation_time:.2f}s")
+                if screenshot_time > 1.0:
+                    print(f"  ⚠️ Screenshot bottleneck: {screenshot_time:.2f}s")
+                if state_time > 0.5:
+                    print(f"  ⚠️ State detection bottleneck: {state_time:.2f}s")
             
             # Parse action
             text = response['response'].strip()
@@ -773,7 +812,8 @@ Choose action number (1-8):"""
             return 5  # Default
         
         except Exception as e:
-            print(f"⚠️ LLM error: {e}")
+            total_time = time.time() - llm_start_time
+            print(f"⚠️ LLM error after {total_time:.2f}s: {str(e)[:100]}")
             return 5
     
     def _get_stage_action(self, stage: int) -> int:
@@ -836,24 +876,31 @@ Choose action number (1-8):"""
             return None
     
     def _get_llm_action_with_vision(self, screenshot: Optional[np.ndarray]) -> int:
-        """Get LLM action using visual input with enhanced context"""
+        """Get LLM action using visual input with enhanced context and performance monitoring"""
         if not self.config.llm_backend:
             return self._get_rule_based_action(self.stats['total_actions'])
         
-        # Detect current game state for better context
-        current_state = self._detect_game_state(screenshot) if screenshot is not None else "unknown"
-        visual_context = f"State: {current_state}" if screenshot is not None else "No screen data"
+        # Start timing
+        llm_start_time = time.time()
         
-        # Check if we're stuck and need anti-stuck behavior
-        if self.consecutive_same_screens > 8:
-            if self.config.debug_mode:
-                print(f"🤖 LLM: Anti-stuck mode activated (stuck for {self.consecutive_same_screens} frames)")
-            return self._get_unstuck_action(self.stats['total_actions'])
-        
-        # Create state-specific prompts for better decision making
-        state_specific_guidance = self._get_state_guidance(current_state)
-        
-        prompt = f"""Pokemon Crystal Game Bot
+        try:
+            # Time state detection
+            state_start = time.time()
+            current_state = self._detect_game_state(screenshot) if screenshot is not None else "unknown"
+            state_time = time.time() - state_start
+            
+            visual_context = f"State: {current_state}" if screenshot is not None else "No screen data"
+            
+            # Check if we're stuck and need anti-stuck behavior
+            if self.consecutive_same_screens > 8:
+                if self.config.debug_mode:
+                    print(f"🤖 LLM: Anti-stuck mode activated (stuck for {self.consecutive_same_screens} frames)")
+                return self._get_unstuck_action(self.stats['total_actions'])
+            
+            # Create state-specific prompts for better decision making
+            state_specific_guidance = self._get_state_guidance(current_state)
+            
+            prompt = f"""Pokemon Crystal Game Bot
 
 State: {current_state}
 Goal: {state_specific_guidance}
@@ -863,20 +910,21 @@ Actions: 1=UP 2=DOWN 3=LEFT 4=RIGHT 5=A 6=B 7=START 8=SELECT
 
 Respond with only one digit (1-8):
 """
-        
-        # State-specific temperature settings
-        temperature_map = {
-            "dialogue": 0.8,
-            "menu": 0.6,
-            "battle": 0.8,
-            "overworld": 0.7,
-            "title_screen": 0.5,
-            "intro_sequence": 0.4,
-            "unknown": 0.6
-        }
-        temperature = temperature_map.get(current_state, 0.6)
-        
-        try:
+            
+            # State-specific temperature settings
+            temperature_map = {
+                "dialogue": 0.8,
+                "menu": 0.6,
+                "battle": 0.8,
+                "overworld": 0.7,
+                "title_screen": 0.5,
+                "intro_sequence": 0.4,
+                "unknown": 0.6
+            }
+            temperature = temperature_map.get(current_state, 0.6)
+            
+            # Time LLM generation
+            generation_start = time.time()
             response = ollama.generate(
                 model=self.config.llm_backend.value,
                 prompt=prompt,
@@ -884,9 +932,26 @@ Respond with only one digit (1-8):
                     'num_predict': 3,
                     'temperature': temperature,
                     'top_k': 8,
-                    'timeout': 5  # Reduced timeout to prevent hanging
+                    'timeout': 8  # Increased timeout consistent with other method
                 }
             )
+            generation_time = time.time() - generation_start
+            
+            # Total timing
+            total_time = time.time() - llm_start_time
+            
+            # Log performance periodically
+            if self.config.debug_mode or self.stats['llm_calls'] % 10 == 0:
+                print(f"⚡ LLM Vision Performance: Total={total_time:.2f}s "
+                      f"(State={state_time:.3f}s, Generation={generation_time:.2f}s) State={current_state}")
+            
+            # Track slow calls
+            if total_time > 5.0:
+                print(f"🐌 SLOW LLM VISION CALL: {total_time:.2f}s - investigating...")
+                if generation_time > 4.0:
+                    print(f"  ⚠️ Generation bottleneck: {generation_time:.2f}s")
+                if state_time > 0.5:
+                    print(f"  ⚠️ State detection bottleneck: {state_time:.2f}s")
             
             # Parse action from response
             text = response['response'].strip().lower()
@@ -905,8 +970,8 @@ Respond with only one digit (1-8):
             return self._get_rule_based_action(self.stats['total_actions'])
             
         except Exception as e:
-            if self.config.debug_mode:
-                print(f"⚠️ LLM call failed: {str(e)[:50]}..., using rule-based")
+            total_time = time.time() - llm_start_time
+            print(f"⚠️ LLM vision call error after {total_time:.2f}s: {str(e)[:100]}, using rule-based")
             return self._get_rule_based_action(self.stats['total_actions'])
     
     def _get_rule_based_action(self, step: int) -> int:
@@ -1829,6 +1894,36 @@ Context: You are playing Pokemon Crystal. Your goal is to progress through the g
         except Exception as e:
             if self.config.debug_mode:
                 self.logger.warning(f"Text recognition failed: {e}")
+    
+    def _track_llm_performance(self, response_time: float):
+        """Track LLM performance and adapt interval if needed"""
+        # Add to response times (keep last 20 calls)
+        self.llm_response_times.append(response_time)
+        if len(self.llm_response_times) > 20:
+            self.llm_response_times.pop(0)
+        
+        # Update stats
+        self.stats['llm_total_time'] += response_time
+        if self.stats['llm_calls'] > 0:
+            self.stats['llm_avg_time'] = self.stats['llm_total_time'] / self.stats['llm_calls']
+        
+        # Adaptive interval adjustment every 10 calls
+        if len(self.llm_response_times) >= 10 and len(self.llm_response_times) % 10 == 0:
+            avg_time = sum(self.llm_response_times[-10:]) / 10
+            
+            # If LLM is consistently slow (>3s), increase interval
+            if avg_time > 3.0 and self.adaptive_llm_interval < 50:
+                old_interval = self.adaptive_llm_interval
+                self.adaptive_llm_interval = min(50, int(self.adaptive_llm_interval * 1.5))
+                if self.config.debug_mode:
+                    print(f"📈 LLM slow ({avg_time:.1f}s avg), increasing interval: {old_interval} → {self.adaptive_llm_interval}")
+            
+            # If LLM is consistently fast (<1s), decrease interval
+            elif avg_time < 1.0 and self.adaptive_llm_interval > self.config.llm_interval:
+                old_interval = self.adaptive_llm_interval
+                self.adaptive_llm_interval = max(self.config.llm_interval, int(self.adaptive_llm_interval * 0.8))
+                if self.config.debug_mode:
+                    print(f"📉 LLM fast ({avg_time:.1f}s avg), decreasing interval: {old_interval} → {self.adaptive_llm_interval}")
     
     def _update_stats(self):
         """Update performance statistics"""

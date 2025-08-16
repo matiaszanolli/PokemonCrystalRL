@@ -16,6 +16,7 @@ except ImportError:
 
 import numpy as np
 import os
+import collections
 from typing import Dict, Any, Tuple, Optional
 from pyboy import PyBoy
 
@@ -103,6 +104,12 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.current_state = None
         self.episode_number = 0
         
+        # Enhanced state tracking for rewards
+        self.consecutive_same_screens = 0
+        self.last_screen_hash = None
+        self.recent_actions = collections.deque(maxlen=10)  # Track last 10 actions
+        self.game_state_history = collections.deque(maxlen=5)  # Track recent game states
+        
         # Action mapping for monitoring
         self.action_map = {
             0: "NONE", 1: "UP", 2: "DOWN", 3: "LEFT", 4: "RIGHT",
@@ -160,6 +167,12 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         self.previous_state = None
         self.episode_number += 1
         
+        # Reset enhanced state tracking
+        self.consecutive_same_screens = 0
+        self.last_screen_hash = None
+        self.recent_actions.clear()
+        self.game_state_history.clear()
+        
         # Update monitoring if enabled
         if self.monitor:
             self.monitor.current_episode = self.episode_number
@@ -175,12 +188,25 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         """Execute one step in the environment"""
         self.step_count += 1
         
+        # Track action for enhanced rewards
+        self.recent_actions.append(action)
+        
         # Execute action
         self._execute_action(action)
         
         # Run emulator for a few frames to process the action
         for _ in range(8):  # Process action over multiple frames
             self.pyboy.tick()
+        
+        # Update screen hash tracking for stuck detection
+        screenshot = self._get_screen_array()
+        current_screen_hash = self._get_screen_hash(screenshot)
+        
+        if current_screen_hash == self.last_screen_hash:
+            self.consecutive_same_screens += 1
+        else:
+            self.consecutive_same_screens = 0
+            self.last_screen_hash = current_screen_hash
         
         # Get observation and reward
         obs = self._get_observation()
@@ -264,6 +290,10 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         
         self.previous_state = self.current_state
         
+        # Basic game state detection for enhanced rewards
+        screenshot = self._get_screen_array()
+        game_state = self._detect_basic_game_state(screenshot)
+        
         # Read game state from memory
         state = {
             'player': {
@@ -277,7 +307,14 @@ class PyBoyPokemonCrystalEnv(gym.Env):
             'party': self._read_party_data(),
             'frame_count': self.step_count,
             'game_time': self.pyboy.frame_count,
+            # Enhanced reward tracking
+            'consecutive_same_screens': self.consecutive_same_screens,
+            'recent_actions': list(self.recent_actions),
+            'game_state': game_state,
         }
+        
+        # Add to game state history
+        self.game_state_history.append(game_state)
         
         self.current_state = state
     
@@ -537,6 +574,63 @@ class PyBoyPokemonCrystalEnv(gym.Env):
     def is_monitoring_available(self) -> bool:
         """Check if monitoring is available"""
         return self.monitor is not None and self.monitor.is_server_available()
+    
+    def _get_screen_hash(self, screenshot: np.ndarray) -> int:
+        """Get a hash of the screen for stuck detection"""
+        if screenshot is None or screenshot.size == 0:
+            return 0
+        
+        try:
+            # Use aggressive sampling for performance
+            sampled = screenshot[::8, ::8]  # Sample every 8th pixel
+            if sampled.size == 0:
+                return 0
+            
+            # Simple hash using mean and std
+            mean_val = int(np.mean(sampled))
+            std_val = int(np.std(sampled)) if sampled.size > 1 else 0
+            
+            # Add spatial features for better discrimination
+            h, w = sampled.shape[:2]
+            if h > 1 and w > 1:
+                tl = int(np.mean(sampled[:h//2, :w//2]))  # Top-left
+                br = int(np.mean(sampled[h//2:, w//2:]))  # Bottom-right
+            else:
+                tl, br = mean_val, mean_val
+            
+            return hash((mean_val, std_val, tl, br))
+        except Exception:
+            return 0
+    
+    def _detect_basic_game_state(self, screenshot: np.ndarray) -> str:
+        """Basic game state detection for enhanced rewards"""
+        if screenshot is None or screenshot.size == 0:
+            return "unknown"
+        
+        try:
+            # Simple brightness-based detection
+            mean_brightness = np.mean(screenshot)
+            color_variance = np.var(screenshot)
+            
+            # Basic state detection logic
+            if mean_brightness < 10:
+                return "loading"
+            elif mean_brightness > 240:
+                return "intro_sequence"
+            elif mean_brightness >= 200 and color_variance < 100:
+                return "title_screen"
+            elif color_variance > 2000:
+                return "title_screen"  # High contrast (logos, flashes)
+            elif 95 <= mean_brightness <= 105:
+                return "battle"
+            elif 120 <= mean_brightness <= 180:
+                return "menu"
+            elif color_variance > 800:
+                return "overworld"
+            else:
+                return "dialogue"  # Default assumption for medium brightness
+        except Exception:
+            return "unknown"
 
 
 # Register the environment

@@ -216,8 +216,71 @@ def calculate_reward(current_state: Dict[str, Any],
         if curr_map != prev_map:
             reward += 10.0
     
-    # Time-based penalty (very small, to encourage efficiency)
-    reward -= 0.001
+    # === ENHANCED REWARD FEATURES ===
+    
+    # Stuck detection penalty (escalating penalty for being stuck)
+    consecutive_same_screens = current_state.get('consecutive_same_screens', 0)
+    if consecutive_same_screens > 10:
+        stuck_penalty = -0.1 * (consecutive_same_screens - 10)
+        reward += stuck_penalty  # Escalating penalty
+        
+        # Additional severe penalty for being very stuck
+        if consecutive_same_screens > 25:
+            reward -= 2.0  # Heavy penalty for being really stuck
+    
+    # Menu and state transition rewards
+    curr_game_state = current_state.get('game_state', 'unknown')
+    prev_game_state = previous_state.get('game_state', 'unknown')
+    
+    # Menu navigation rewards
+    if curr_game_state == 'menu' and prev_game_state != 'menu':
+        reward += 1.0  # Reward for entering menu successfully
+    elif curr_game_state != 'menu' and prev_game_state == 'menu':
+        reward += 2.0  # Reward for successfully exiting menu (implies progress)
+    
+    # State transition bonuses for meaningful progress
+    state_transitions = {
+        ('title_screen', 'new_game_menu'): 5.0,
+        ('title_screen', 'intro_sequence'): 3.0,
+        ('intro_sequence', 'new_game_menu'): 3.0,
+        ('new_game_menu', 'overworld'): 10.0,
+        ('dialogue', 'overworld'): 1.0,
+        ('menu', 'overworld'): 1.5,
+        ('overworld', 'battle'): 2.0,
+        ('battle', 'overworld'): 3.0,  # Battle completed
+        ('loading', 'overworld'): 1.0,
+        ('unknown', 'overworld'): 2.0,  # Recovered from unknown state
+    }
+    
+    transition = (prev_game_state, curr_game_state)
+    if transition in state_transitions:
+        reward += state_transitions[transition]
+    
+    # Action diversity reward (encourage varied behavior)
+    recent_actions = current_state.get('recent_actions', [])
+    if len(recent_actions) >= 5:
+        unique_actions = len(set(recent_actions[-5:]))  # Check last 5 actions
+        if unique_actions >= 3:
+            reward += 0.05  # Small diversity bonus for using at least 3 different actions
+        elif unique_actions == 1:
+            reward -= 0.02  # Small penalty for repeating the same action
+    
+    # Progress momentum reward (reward consistent forward progress)
+    progress_indicators = [
+        curr_level > prev_level,
+        curr_exp > prev_exp,
+        curr_money > prev_money,
+        curr_map != prev_map,
+        distance_moved > 0,
+        curr_party > prev_party
+    ]
+    
+    progress_count = sum(progress_indicators)
+    if progress_count >= 2:  # Multiple types of progress in single step
+        reward += 0.1 * progress_count  # Bonus for compound progress
+    
+    # Enhanced time penalty (more significant for discouraging idle behavior)
+    reward -= 0.002  # Slightly increased from 0.001 to encourage efficiency
     
     return reward
 

@@ -299,6 +299,100 @@ class TestLLMInferenceBenchmarks:
             assert elapsed < 0.01, f"LLM fallback too slow: {elapsed:.4f}s for {action_count} calls"
             
             print(f"✅ LLM Fallback Performance: {elapsed*1000:.2f}ms for {action_count} calls")
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_adaptive_llm_interval_performance(self, mock_pyboy_class):
+        """Test adaptive LLM interval performance optimization"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        config = TrainingConfig(
+            rom_path="test.gbc",
+            llm_backend=LLMBackend.SMOLLM2,
+            llm_interval=10,  # Start with default interval
+            debug_mode=True,
+            headless=True
+        )
+        
+        trainer = UnifiedPokemonTrainer(config)
+        
+        with patch('scripts.pokemon_trainer.ollama') as mock_ollama:
+            # Mock slow LLM responses initially
+            def slow_generate(*args, **kwargs):
+                time.sleep(0.004)  # 4ms delay (simulated slow)
+                return {'response': '5'}
+            
+            mock_ollama.generate.side_effect = slow_generate
+            mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
+            
+            original_interval = trainer.adaptive_llm_interval
+            
+            # Trigger 10 slow LLM calls to activate adaptive interval
+            for i in range(10):
+                trainer.stats['llm_calls'] = i + 1
+                trainer._track_llm_performance(4.5)  # Report slow response times
+            
+            # Interval should have increased
+            assert trainer.adaptive_llm_interval > original_interval
+            increased_interval = trainer.adaptive_llm_interval
+            
+            print(f"✅ Adaptive Interval Increased: {original_interval} → {increased_interval}")
+            
+            # Now mock fast responses
+            def fast_generate(*args, **kwargs):
+                time.sleep(0.001)  # 1ms delay (simulated fast)
+                return {'response': '5'}
+            
+            mock_ollama.generate.side_effect = fast_generate
+            
+            # Trigger 10 fast LLM calls
+            for i in range(10, 20):
+                trainer.stats['llm_calls'] = i + 1
+                trainer._track_llm_performance(0.8)  # Report fast response times
+            
+            # Interval should have decreased
+            assert trainer.adaptive_llm_interval < increased_interval
+            final_interval = trainer.adaptive_llm_interval
+            
+            print(f"✅ Adaptive Interval Decreased: {increased_interval} → {final_interval}")
+            
+            # But should not go below original
+            assert trainer.adaptive_llm_interval >= original_interval
+    
+    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('scripts.pokemon_trainer.PYBOY_AVAILABLE', True)
+    def test_llm_performance_tracking_overhead(self, mock_pyboy_class):
+        """Test that LLM performance tracking has minimal overhead"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        config = TrainingConfig(
+            rom_path="test.gbc",
+            llm_backend=LLMBackend.SMOLLM2,
+            headless=True
+        )
+        
+        trainer = UnifiedPokemonTrainer(config)
+        
+        # Test performance tracking overhead
+        start_time = time.perf_counter()
+        
+        for i in range(1000):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(1.0 + (i % 10) * 0.1)  # Vary response times
+        
+        elapsed = time.perf_counter() - start_time
+        
+        # Tracking 1000 calls should be very fast (<5ms)
+        assert elapsed < 0.005, f"Performance tracking too slow: {elapsed:.4f}s for 1000 calls"
+        
+        # Verify data integrity
+        assert len(trainer.llm_response_times) == 20  # Should keep last 20
+        assert trainer.stats['llm_total_time'] > 0
+        assert trainer.stats['llm_avg_time'] > 0
+        
+        print(f"✅ Performance Tracking Overhead: {elapsed*1000:.2f}ms for 1000 calls")
 
 
 @pytest.mark.benchmarking
