@@ -1,0 +1,9 @@
+{
+  "start_time": 1755359069.697598,
+  "total_actions": 174,
+  "total_episodes": 0,
+  "actions_per_second": 2.471267450489329,
+  "mode": "fast_monitored",
+  "model": null,
+  "end_time": 1755359140.1072536
+}

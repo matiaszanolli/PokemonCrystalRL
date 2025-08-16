@@ -463,16 +463,27 @@ class UnifiedPokemonTrainer:
             return None
     
     def _simple_screenshot_capture(self) -> Optional[np.ndarray]:
-        """Simple screenshot capture without crash detection"""
+        """Simple screenshot capture with improved safety"""
         try:
             if not self.pyboy:
                 return None
             
-            screen_array = self.pyboy.screen.ndarray
+            # Add thread safety check
+            try:
+                screen_array = self.pyboy.screen.ndarray
+            except (RuntimeError, AttributeError) as e:
+                # PyBoy might be in an invalid state
+                return None
+            
             if screen_array is None:
                 return None
             
-            return self._convert_screen_format(screen_array)
+            # Make a safe copy immediately
+            try:
+                screen_copy = screen_array.copy()
+                return self._convert_screen_format(screen_copy)
+            except Exception:
+                return None
             
         except Exception:
             return None
@@ -554,79 +565,112 @@ class UnifiedPokemonTrainer:
         self.logger.info("📸 Screen capture started")
     
     def _capture_loop(self):
-        """Screen capture loop for web monitoring"""
+        """Screen capture loop for web monitoring with improved safety"""
         consecutive_errors = 0
         max_consecutive_errors = 10
         
         self.logger.info("🔍 Starting screen capture loop...")
         
-        while self.capture_active:
-            try:
-                screenshot = self._simple_screenshot_capture()
-                if screenshot is not None:
-                    self._process_and_queue_screenshot(screenshot)
-                    consecutive_errors = 0
-                else:
+        try:
+            while self.capture_active:
+                try:
+                    # Add safety check
+                    if not self.pyboy:
+                        self.logger.warning("PyBoy not available, stopping capture")
+                        break
+                    
+                    screenshot = self._simple_screenshot_capture()
+                    if screenshot is not None:
+                        self._process_and_queue_screenshot(screenshot)
+                        consecutive_errors = 0
+                    else:
+                        consecutive_errors += 1
+                    
+                    # Frame rate limiting with error backoff
+                    if consecutive_errors > 0:
+                        time.sleep(0.5)  # Slower capture when having issues
+                    else:
+                        base_delay = 1.0 / self.config.capture_fps
+                        time.sleep(base_delay)
+                
+                except Exception as e:
                     consecutive_errors += 1
-                
-                # Frame rate limiting with error backoff
-                if consecutive_errors > 0:
-                    time.sleep(0.5)  # Slower capture when having issues
-                else:
-                    base_delay = 1.0 / self.config.capture_fps
-                    time.sleep(base_delay)
-            
-            except Exception as e:
-                consecutive_errors += 1
-                if consecutive_errors <= 3:
-                    self.logger.warning(f"⚠️ Screen capture loop error: {e}")
-                
-                if consecutive_errors >= max_consecutive_errors:
-                    self.logger.error(f"❌ Too many screen capture errors ({consecutive_errors}), stopping capture")
-                    self.capture_active = False
-                    break
-                
-                time.sleep(0.5)
+                    if consecutive_errors <= 3:
+                        self.logger.warning(f"⚠️ Screen capture loop error: {e}")
+                    
+                    if consecutive_errors >= max_consecutive_errors:
+                        self.logger.error(f"❌ Too many screen capture errors ({consecutive_errors}), stopping capture")
+                        self.capture_active = False
+                        break
+                    
+                    time.sleep(0.5)
         
-        self.logger.info("🔍 Screen capture loop ended")
+        except Exception as e:
+            self.logger.error(f"❌ Critical capture loop error: {e}")
+        
+        finally:
+            self.logger.info("🔍 Screen capture loop ended")
     
     def _process_and_queue_screenshot(self, screenshot: np.ndarray):
-        """Process screenshot for web display and queue it"""
+        """Process screenshot for web display and queue it with improved safety"""
         try:
+            # Validate input
+            if screenshot is None or screenshot.size == 0:
+                return
+            
             # Resize for web display
             h, w = screenshot.shape[:2]
             target_h, target_w = self.config.screen_resize[1], self.config.screen_resize[0]
             
-            # Simple resize
-            screen_pil = Image.fromarray(screenshot.astype(np.uint8))
-            screen_resized = screen_pil.resize((target_w, target_h), Image.NEAREST)
-            
-            # Convert to base64
-            buffer = io.BytesIO()
-            screen_resized.save(buffer, format='PNG', optimize=True, compress_level=6)
-            screen_b64 = base64.b64encode(buffer.getvalue()).decode()
-            
-            # Update latest screen
-            screen_data = {
-                'image_b64': screen_b64,
-                'timestamp': time.time(),
-                'size': screen_resized.size,
-                'frame_id': int(time.time() * 1000),
-                'data_length': len(screen_b64)
-            }
-            
-            self.latest_screen = screen_data
-            
-            # Add to queue
+            # Create PIL image with explicit copy and cleanup
             try:
-                if self.screen_queue.full():
-                    try:
-                        self.screen_queue.get_nowait()  # Remove oldest
-                    except queue.Empty:
-                        pass
-                self.screen_queue.put_nowait(screen_data)
-            except (queue.Full, queue.Empty):
-                pass  # Non-critical
+                # Ensure proper data type and memory layout
+                screenshot_safe = np.ascontiguousarray(screenshot.astype(np.uint8))
+                
+                # Convert RGBA to RGB if needed for JPEG
+                if len(screenshot_safe.shape) == 3 and screenshot_safe.shape[2] == 4:
+                    screenshot_safe = screenshot_safe[:, :, :3]  # Drop alpha channel
+                
+                screen_pil = Image.fromarray(screenshot_safe)
+                screen_resized = screen_pil.resize((target_w, target_h), Image.NEAREST)
+                
+                # Convert to base64 with JPEG compression for speed
+                buffer = io.BytesIO()
+                screen_resized.save(buffer, format='JPEG', quality=85, optimize=False)
+                screen_b64 = base64.b64encode(buffer.getvalue()).decode()
+                
+                # Explicit cleanup
+                buffer.close()
+                screen_pil.close()
+                screen_resized.close()
+                del screenshot_safe, screen_pil, screen_resized, buffer
+                
+                # Update latest screen
+                screen_data = {
+                    'image_b64': screen_b64,
+                    'timestamp': time.time(),
+                    'size': (target_w, target_h),
+                    'frame_id': int(time.time() * 1000),
+                    'data_length': len(screen_b64)
+                }
+                
+                self.latest_screen = screen_data
+                
+                # Add to queue with better error handling
+                try:
+                    if self.screen_queue.full():
+                        try:
+                            self.screen_queue.get_nowait()  # Remove oldest
+                        except queue.Empty:
+                            pass
+                    self.screen_queue.put_nowait(screen_data)
+                except (queue.Full, queue.Empty):
+                    pass  # Non-critical
+                    
+            except Exception as process_error:
+                if self.config.debug_mode:
+                    self.logger.debug(f"Screenshot processing error: {process_error}")
+                return
                 
         except Exception as e:
             if self.config.debug_mode:
@@ -684,53 +728,89 @@ class UnifiedPokemonTrainer:
         return self.stats.copy()
     
     def _finalize_training(self):
-        """Cleanup and final statistics"""
-        # Clear training active flag
-        self._training_active = False
-        
-        # Stop capture
-        if self.capture_active:
-            self.capture_active = False
-            if self.capture_thread:
-                self.capture_thread.join(timeout=1)
-        
-        # Stop optimized video streaming
-        if self.video_streamer:
+        """Cleanup and final statistics with improved safety"""
+        try:
+            # Clear training active flag
+            self._training_active = False
+            
+            # Stop capture with timeout
+            if hasattr(self, 'capture_active') and self.capture_active:
+                self.capture_active = False
+                if hasattr(self, 'capture_thread') and self.capture_thread:
+                    try:
+                        self.capture_thread.join(timeout=2.0)  # Longer timeout
+                        if self.capture_thread.is_alive():
+                            self.logger.warning("⚠️ Capture thread did not stop cleanly")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Error stopping capture thread: {e}")
+            
+            # Stop optimized video streaming
+            if hasattr(self, 'video_streamer') and self.video_streamer:
+                try:
+                    self.video_streamer.stop_streaming()
+                    self.video_streamer = None
+                except Exception as e:
+                    self.logger.debug(f"Video streamer cleanup error: {e}")
+            
+            # Update final stats
             try:
-                self.video_streamer.stop_streaming()
-                self.video_streamer = None
+                self._update_stats()
             except Exception:
                 pass
-        
-        # Update final stats
-        self._update_stats()
-        
-        # Print summary
-        elapsed = time.time() - self.stats['start_time']
-        self.logger.info("📊 TRAINING SUMMARY")
-        self.logger.info("=" * 40)
-        self.logger.info(f"⏱️ Duration: {elapsed:.1f} seconds")
-        self.logger.info(f"🎯 Total actions: {self.stats['total_actions']}")
-        self.logger.info(f"📈 Episodes: {self.stats['total_episodes']}")
-        self.logger.info(f"🚀 Speed: {self.stats['actions_per_second']:.1f} actions/sec")
-        if self.llm_manager:
-            self.logger.info(f"🧠 LLM calls: {self.llm_manager.stats['llm_calls']}")
-        
-        # Save stats if enabled
-        if self.config.save_stats:
-            self.stats['end_time'] = time.time()
-            with open(self.config.stats_file, 'w') as f:
-                json.dump(self.stats, f, indent=2)
-            self.logger.info(f"💾 Stats saved to {self.config.stats_file}")
-        
-        # Cleanup
-        if self.pyboy:
-            self.pyboy.stop()
-        
-        if self.web_server:
-            self.web_server.stop()
-        
-        self.logger.info("🛑 Training completed and cleaned up")
+            
+            # Print summary
+            elapsed = time.time() - self.stats['start_time']
+            self.logger.info("📊 TRAINING SUMMARY")
+            self.logger.info("=" * 40)
+            self.logger.info(f"⏱️ Duration: {elapsed:.1f} seconds")
+            self.logger.info(f"🎯 Total actions: {self.stats['total_actions']}")
+            self.logger.info(f"📈 Episodes: {self.stats['total_episodes']}")
+            self.logger.info(f"🚀 Speed: {self.stats['actions_per_second']:.1f} actions/sec")
+            if self.llm_manager:
+                try:
+                    self.logger.info(f"🧠 LLM calls: {self.llm_manager.stats['llm_calls']}")
+                except Exception:
+                    pass
+            
+            # Save stats if enabled
+            if hasattr(self.config, 'save_stats') and self.config.save_stats:
+                try:
+                    self.stats['end_time'] = time.time()
+                    with open(self.config.stats_file, 'w') as f:
+                        json.dump(self.stats, f, indent=2)
+                    self.logger.info(f"💾 Stats saved to {self.config.stats_file}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Could not save stats: {e}")
+            
+            # Cleanup PyBoy first (most critical)
+            if hasattr(self, 'pyboy') and self.pyboy:
+                try:
+                    self.pyboy.stop()
+                    # Add small delay to ensure cleanup
+                    time.sleep(0.1)
+                except Exception as e:
+                    self.logger.warning(f"⚠️ PyBoy cleanup error: {e}")
+                finally:
+                    self.pyboy = None
+            
+            # Cleanup web server
+            if hasattr(self, 'web_server') and self.web_server:
+                try:
+                    self.web_server.stop()
+                except Exception as e:
+                    self.logger.debug(f"Web server cleanup error: {e}")
+            
+            self.logger.info("🛑 Training completed and cleaned up")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error during cleanup: {e}")
+            # Force cleanup
+            try:
+                if hasattr(self, 'pyboy') and self.pyboy:
+                    self.pyboy.stop()
+                    self.pyboy = None
+            except Exception:
+                pass
     
     def _print_config_summary(self):
         """Print training configuration summary"""
