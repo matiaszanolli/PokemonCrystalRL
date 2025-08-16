@@ -149,19 +149,20 @@ class PokemonTrainingLauncher:
         if args.no_llm:
             llm_backend = LLMBackend.NONE
         elif args.model:
-            # Map common model names
+            # Map common model names to enum values
             model_map = {
-                'smollm2': 'huggingface/microsoft/SmolLM2-1.7B-Instruct',
-                'llama3.2-1b': 'ollama/llama3.2:1b',
-                'llama3.2-3b': 'ollama/llama3.2:3b',
+                'smollm2': LLMBackend.SMOLLM2,
+                'llama3.2-1b': LLMBackend.LLAMA32_1B,
+                'llama3.2-3b': LLMBackend.LLAMA32_3B,
+                'qwen2.5-3b': LLMBackend.QWEN25_3B,
             }
-            llm_backend = LLMBackend(model_map.get(args.model, args.model))
+            llm_backend = model_map.get(args.model, LLMBackend.SMOLLM2)
         else:
             # Smart default based on mode
             if mode == TrainingMode.ULTRA_FAST:
                 llm_backend = LLMBackend.NONE
             else:
-                llm_backend = LLMBackend.HUGGINGFACE  # SmolLM2 default
+                llm_backend = LLMBackend.SMOLLM2  # SmolLM2 default
         
         return TrainingConfig(
             rom_path=rom_path,
