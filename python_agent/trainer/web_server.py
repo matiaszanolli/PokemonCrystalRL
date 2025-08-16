@@ -18,6 +18,14 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
 
+# Optimized video streaming support
+try:
+    from ..core.video_streaming import create_video_streamer
+    VIDEO_STREAMING_AVAILABLE = True
+except ImportError:
+    VIDEO_STREAMING_AVAILABLE = False
+    create_video_streamer = None
+
 from .config import ACTION_NAMES
 
 
@@ -98,6 +106,10 @@ class TrainingHandler(BaseHTTPRequestHandler):
             self._serve_api_text()
         elif self.path == '/api/llm_decisions':
             self._serve_api_llm_decisions()
+        elif self.path == '/api/streaming/stats':
+            self._serve_streaming_stats()
+        elif self.path.startswith('/api/streaming/quality/'):
+            self._handle_quality_control()
         elif self.path.startswith('/socket.io/'):
             self._handle_socketio_fallback()
         else:
@@ -183,6 +195,26 @@ class TrainingHandler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode())
     
     def _serve_screen(self):
+        """Serve game screen with optimized streaming if available"""
+        
+        # Try optimized streaming first
+        if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+            try:
+                screen_bytes = self.trainer.video_streamer.get_frame_as_bytes()
+                if screen_bytes:
+                    self.send_response(200)
+                    self.send_header('Content-type', 'image/jpeg')
+                    self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                    self.send_header('Pragma', 'no-cache')
+                    self.send_header('Expires', '0')
+                    self.end_headers()
+                    self.wfile.write(screen_bytes)
+                    return
+            except Exception as e:
+                # Continue to fallback method
+                pass
+        
+        # Fallback to legacy method
         if hasattr(self.trainer, 'latest_screen') and self.trainer.latest_screen:
             img_data = base64.b64decode(self.trainer.latest_screen['image_b64'])
             self.send_response(200)
@@ -401,6 +433,68 @@ class TrainingHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(json.dumps(llm_data).encode())
+    
+    def _serve_streaming_stats(self):
+        """API endpoint for video streaming performance statistics"""
+        if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+            try:
+                stats = self.trainer.video_streamer.get_performance_stats()
+            except Exception as e:
+                stats = {'method': 'optimized_streaming', 'error': str(e), 'available': False}
+        else:
+            stats = {'method': 'legacy_fallback', 'available': False, 'message': 'Optimized streaming not initialized'}
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps(stats).encode())
+    
+    def _handle_quality_control(self):
+        """Handle video streaming quality control"""
+        try:
+            # Extract quality parameter from path
+            path_parts = self.path.split('/')
+            if len(path_parts) >= 4:
+                quality = path_parts[4]  # /api/streaming/quality/{quality}
+                
+                if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+                    try:
+                        self.trainer.video_streamer.change_quality(quality)
+                        response = {
+                            'success': True,
+                            'quality': quality,
+                            'message': f'Streaming quality changed to {quality}',
+                            'available_qualities': ['low', 'medium', 'high', 'ultra']
+                        }
+                    except Exception as e:
+                        response = {
+                            'success': False,
+                            'error': str(e),
+                            'available_qualities': ['low', 'medium', 'high', 'ultra']
+                        }
+                else:
+                    response = {
+                        'success': False,
+                        'error': 'Optimized streaming not available',
+                        'available_qualities': ['low', 'medium', 'high', 'ultra']
+                    }
+            else:
+                response = {
+                    'success': False,
+                    'error': 'Quality parameter missing',
+                    'usage': '/api/streaming/quality/{low|medium|high|ultra}',
+                    'available_qualities': ['low', 'medium', 'high', 'ultra']
+                }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode())
+            
+        except Exception as e:
+            self._send_error_response(str(e))
     
     def _send_error_response(self, error_msg):
         response = {'success': False, 'error': error_msg}

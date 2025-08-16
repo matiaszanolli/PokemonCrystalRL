@@ -22,6 +22,14 @@ try:
 except ImportError:
     PYBOY_AVAILABLE = False
 
+# Optimized video streaming support
+try:
+    from ..core.video_streaming import create_video_streamer
+    VIDEO_STREAMING_AVAILABLE = True
+except ImportError:
+    VIDEO_STREAMING_AVAILABLE = False
+    create_video_streamer = None
+
 # Vision processing
 try:
     from ..vision.vision_processor import PokemonVisionProcessor, VisualContext
@@ -71,6 +79,9 @@ class UnifiedPokemonTrainer:
         self.latest_screen = None
         self.capture_thread = None
         self.capture_active = False
+        
+        # Optimized video streaming (will be initialized after PyBoy)
+        self.video_streamer = None
         
         # Initialize vision processor for OCR
         if VISION_AVAILABLE:
@@ -514,6 +525,17 @@ class UnifiedPokemonTrainer:
     
     def _start_screen_capture(self):
         """Start screen capture thread"""
+        # Try to initialize optimized video streaming first
+        if VIDEO_STREAMING_AVAILABLE and create_video_streamer and self.pyboy:
+            try:
+                self.video_streamer = create_video_streamer(self.pyboy, quality="medium")
+                self.video_streamer.start_streaming()
+                self.logger.info("🎬 Optimized video streaming initialized (medium quality)")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Failed to initialize optimized streaming: {e}")
+                self.video_streamer = None
+        
+        # Start legacy capture thread as fallback or additional capture
         self.capture_active = True
         self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.capture_thread.start()
@@ -659,6 +681,14 @@ class UnifiedPokemonTrainer:
             self.capture_active = False
             if self.capture_thread:
                 self.capture_thread.join(timeout=1)
+        
+        # Stop optimized video streaming
+        if self.video_streamer:
+            try:
+                self.video_streamer.stop_streaming()
+                self.video_streamer = None
+            except Exception:
+                pass
         
         # Update final stats
         self._update_stats()
