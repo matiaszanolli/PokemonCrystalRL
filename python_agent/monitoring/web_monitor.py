@@ -56,8 +56,13 @@ class PokemonRLWebMonitor:
     
     def __init__(self, training_session: Optional[VisionEnhancedTrainingSession] = None):
         self.training_session = training_session
+        
+        # Set absolute path for templates
+        import os
+        template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
+        
         self.app = Flask(__name__, 
-                        template_folder='templates',
+                        template_folder=template_dir,
                         static_folder='static')
         self.app.config['SECRET_KEY'] = 'pokemon_rl_monitor_key'
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")

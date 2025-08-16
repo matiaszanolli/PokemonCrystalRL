@@ -4,1034 +4,499 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pokemon Crystal RL - Training Monitor</title>
-    
-    <!-- Chart.js for visualizations -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <!-- Socket.IO for real-time updates -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
-    
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --bg-primary: #0d1117;
-            --bg-secondary: #161b22;
-            --bg-tertiary: #21262d;
-            --text-primary: #f0f6fc;
-            --text-secondary: #8b949e;
-            --accent-blue: #58a6ff;
-            --accent-green: #3fb950;
-            --accent-orange: #f85149;
-            --border-color: #30363d;
-            --border-hover: #484f58;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
         }
-
+        
         .header {
-            background-color: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: 1rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .header h1 {
-            color: var(--accent-blue);
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .status-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-left: 0.5rem;
-            background-color: var(--accent-green);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .main-container {
-            display: grid;
-            grid-template-columns: 320px 1fr 320px;
-            gap: 1rem;
-            padding: 1rem;
-            min-height: calc(100vh - 80px);
-        }
-
-        .left-panel, .right-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .center-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .panel {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
-        }
-
-        .panel-header {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-            color: var(--text-primary);
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.5rem;
-        }
-
-        .game-screen {
             text-align: center;
-            overflow: hidden; /* Prevent overflow */
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
         }
-
-        .game-screen img {
-            width: 100%; /* Fill container width */
-            max-width: 100%; /* Don't exceed container */
-            height: auto; /* Maintain aspect ratio */
-            border: 2px solid var(--border-color);
-            border-radius: 4px;
-            image-rendering: pixelated;
-            /* Removed transform: scale(3) - was causing overflow */
-            margin: 1rem 0;
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
-
-        .stats-grid {
+        
+        .status {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 10px;
+            border-radius: 25px;
+            font-weight: bold;
+        }
+        
+        .status.monitoring { background-color: #4CAF50; }
+        .status.stopped { background-color: #f44336; }
+        
+        .dashboard {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.5rem;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
         }
-
+        
+        .main-panel {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+        }
+        
+        .game-screen {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .game-screen img {
+            max-width: 100%;
+            border: 3px solid #555;
+            border-radius: 5px;
+            image-rendering: pixelated;
+        }
+        
+        .stats-panel {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .stat-group {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 8px;
+        }
+        
+        .stat-group h3 {
+            margin: 0 0 15px 0;
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        
         .stat-item {
-            background-color: var(--bg-tertiary);
-            padding: 0.75rem;
-            border-radius: 4px;
-            border: 1px solid var(--border-color);
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.25rem;
-        }
-
-        .stat-value {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .actions-list {
-            max-height: 200px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-        }
-
-        .action-item {
-            padding: 0.25rem 0.5rem;
-            margin-bottom: 0.25rem;
-            background-color: var(--bg-tertiary);
-            border-radius: 3px;
-            border-left: 3px solid var(--accent-blue);
-        }
-
-        .decision-log {
-            max-height: 300px;
-            overflow-y: auto;
-            font-size: 0.85rem;
-        }
-
-        .decision-item {
-            padding: 0.5rem;
-            margin-bottom: 0.5rem;
-            background-color: var(--bg-tertiary);
-            border-radius: 4px;
-            border-left: 3px solid var(--accent-green);
-        }
-
-        .decision-timestamp {
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-        }
-
-        .decision-action {
-            font-weight: 600;
-            color: var(--accent-blue);
-            margin: 0.25rem 0;
-        }
-
-        .decision-reasoning {
-            color: var(--text-secondary);
-            font-style: italic;
-        }
-
-        .chart-container {
-            position: relative;
-            height: 200px;
-            margin-top: 0.5rem;
-        }
-
-        .controls {
             display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            margin-top: 1rem;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #444;
+            border-radius: 5px;
         }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            background-color: var(--accent-blue);
+        
+        .pokemon-party {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .pokemon {
+            padding: 10px;
+            background-color: #444;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .pokemon.low-hp {
+            border-left-color: #f44336;
+        }
+        
+        .hp-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #666;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        
+        .hp-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .hp-fill.low { background-color: #f44336; }
+        .hp-fill.medium { background-color: #FF9800; }
+        
+        .side-panel {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 20px;
+        }
+        
+        .controls {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px;
+            background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 5px;
             cursor: pointer;
-            font-size: 0.85rem;
-            transition: background-color 0.2s;
+            font-size: 16px;
+            transition: background-color 0.3s;
         }
-
-        .btn:hover {
-            background-color: #4183d7;
+        
+        button:hover {
+            background-color: #45a049;
         }
-
-        .btn-secondary {
-            background-color: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
+        
+        button.stop {
+            background-color: #f44336;
         }
-
-        .btn-secondary:hover {
-            background-color: var(--border-hover);
+        
+        button.stop:hover {
+            background-color: #d32f2f;
         }
-
-        .text-log {
-            max-height: 250px;
+        
+        .actions-panel {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .action-history {
+            max-height: 300px;
             overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-            line-height: 1.4;
+            background-color: #333;
+            border-radius: 5px;
+            padding: 15px;
         }
-
-        .text-item {
-            padding: 0.25rem 0;
-            border-bottom: 1px solid var(--border-color);
+        
+        .action-item {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #444;
+            border-radius: 3px;
+            font-size: 0.9em;
+            border-left: 3px solid #4CAF50;
         }
-
-        .text-timestamp {
-            color: var(--text-secondary);
-            font-size: 0.7rem;
+        
+        .decisions-panel {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
         }
-
-        .performance-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 0.5rem;
-            margin-top: 0.5rem;
+        
+        .decision-item {
+            padding: 12px;
+            margin: 10px 0;
+            background-color: #333;
+            border-radius: 5px;
+            border-left: 3px solid #2196F3;
         }
-
-        .performance-item {
-            text-align: center;
-            padding: 0.5rem;
-            background-color: var(--bg-tertiary);
-            border-radius: 4px;
+        
+        .decision-action {
+            font-weight: bold;
+            color: #4CAF50;
         }
-
-        .performance-value {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--accent-green);
+        
+        .decision-reasoning {
+            font-size: 0.9em;
+            color: #ccc;
+            margin-top: 5px;
         }
-
-        .performance-label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-top: 0.25rem;
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
         }
-
-        .system-stats {
-            font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-        }
-
-        .system-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.25rem 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        @media (max-width: 1200px) {
-            .main-container {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                padding: 1rem;
-            }
-            
-            .main-container {
-                padding: 0.5rem;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        .connection-status {
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
-            padding: 0.5rem 1rem;
-            background-color: var(--accent-green);
-            color: white;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            z-index: 1000;
-        }
-
-        .connection-status.disconnected {
-            background-color: var(--accent-orange);
-        }
-
-        .text-frequency {
-            max-height: 150px;
-            overflow-y: auto;
-        }
-
-        .frequency-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.25rem 0;
-            font-size: 0.8rem;
-        }
-
-        .frequency-bar {
-            width: 60px;
-            height: 4px;
-            background-color: var(--bg-tertiary);
-            border-radius: 2px;
-            overflow: hidden;
-            margin-left: 0.5rem;
-        }
-
-        .frequency-fill {
-            height: 100%;
-            background-color: var(--accent-blue);
-            transition: width 0.3s ease;
+        
+        .updating {
+            animation: pulse 1s infinite;
         }
     </style>
 </head>
 <body>
-    <div class="connection-status" id="connectionStatus">Connecting...</div>
-    
-    <header class="header">
-        <h1>Pokemon Crystal RL Training Monitor <span class="status-indicator"></span></h1>
-    </header>
+    <div class="header">
+        <h1>🎮 Pokemon Crystal RL Training Monitor</h1>
+        <div id="status" class="status stopped">🔴 Not Monitoring</div>
+    </div>
 
-    <div class="main-container">
-        <!-- Left Panel -->
-        <div class="left-panel">
-            <!-- Game Screen -->
-            <div class="panel">
-                <div class="panel-header">Game Screen</div>
-                <div class="game-screen">
-                    <img id="gameScreen" src="/api/screenshot" alt="Game Screen" />
-                </div>
-                <div class="controls">
-                    <button class="btn btn-secondary" onclick="togglePause()">Pause/Resume</button>
-                    <button class="btn btn-secondary" onclick="saveState()">Save State</button>
-                    <button class="btn btn-secondary" onclick="resetAgent()">Reset</button>
-                </div>
+    <div class="dashboard">
+        <div class="main-panel">
+            <div class="game-screen">
+                <h3>🎯 Live Game Screen</h3>
+                <img id="screenshot" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" alt="Game Screen">
+                <p id="screen-info">Waiting for game data...</p>
             </div>
-
-            <!-- Current Stats -->
-            <div class="panel">
-                <div class="panel-header">Current Stats</div>
-                <div class="stats-grid">
+            
+            <div class="stats-panel">
+                <h3>📊 Game Statistics</h3>
+                
+                <div class="stat-group">
+                    <h3>👤 Player Info</h3>
                     <div class="stat-item">
-                        <div class="stat-label">Episode</div>
-                        <div class="stat-value" id="currentEpisode">-</div>
+                        <span>Location:</span>
+                        <span id="player-location">Map ?, (?, ?)</span>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-label">Step</div>
-                        <div class="stat-value" id="currentStep">-</div>
+                        <span>💰 Money:</span>
+                        <span id="player-money">$0</span>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-label">Reward</div>
-                        <div class="stat-value" id="currentReward">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Total Reward</div>
-                        <div class="stat-value" id="totalReward">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Screen Type</div>
-                        <div class="stat-value" id="screenType">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Map ID</div>
-                        <div class="stat-value" id="mapId">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Player X</div>
-                        <div class="stat-value" id="playerX">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Player Y</div>
-                        <div class="stat-value" id="playerY">-</div>
+                        <span>🏆 Badges:</span>
+                        <span id="player-badges">0</span>
                     </div>
                 </div>
-            </div>
-
-            <!-- Recent Actions -->
-            <div class="panel">
-                <div class="panel-header">Recent Actions</div>
-                <div class="actions-list" id="actionsList">
-                    <div class="action-item">No actions yet...</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Center Panel -->
-        <div class="center-panel">
-            <!-- Performance Charts -->
-            <div class="panel">
-                <div class="panel-header">Performance Metrics</div>
-                <div class="performance-grid">
-                    <div class="performance-item">
-                        <div class="performance-value" id="avgReward">0.0</div>
-                        <div class="performance-label">Avg Reward</div>
-                    </div>
-                    <div class="performance-item">
-                        <div class="performance-value" id="avgSteps">0</div>
-                        <div class="performance-label">Avg Steps</div>
-                    </div>
-                    <div class="performance-item">
-                        <div class="performance-value" id="successRate">0%</div>
-                        <div class="performance-label">Success Rate</div>
-                    </div>
-                    <div class="performance-item">
-                        <div class="performance-value" id="actionsPerSec">0.0</div>
-                        <div class="performance-label">Actions/sec</div>
+                
+                <div class="stat-group">
+                    <h3>🐾 Pokemon Party</h3>
+                    <div id="pokemon-party" class="pokemon-party">
+                        <p>No Pokemon data available</p>
                     </div>
                 </div>
-                <div class="chart-container">
-                    <canvas id="rewardChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Progress Tracking -->
-            <div class="panel">
-                <div class="panel-header">Progress Tracking</div>
-                <div class="chart-container">
-                    <canvas id="progressChart"></canvas>
-                </div>
-            </div>
-
-            <!-- LLM Decision Log -->
-            <div class="panel">
-                <div class="panel-header">LLM Decisions</div>
-                <div class="decision-log" id="decisionLog">
-                    <div class="decision-item">
-                        <div class="decision-timestamp">Waiting for decisions...</div>
+                
+                <div class="stat-group">
+                    <h3>🎯 Training Stats</h3>
+                    <div class="stat-item">
+                        <span>Episodes:</span>
+                        <span id="training-episodes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Total Steps:</span>
+                        <span id="training-steps">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Decisions Made:</span>
+                        <span id="training-decisions">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Visual Analyses:</span>
+                        <span id="training-visual">0</span>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Right Panel -->
-        <div class="right-panel">
-            <!-- System Stats -->
-            <div class="panel">
-                <div class="panel-header">System Performance</div>
-                <div class="system-stats" id="systemStats">
-                    <div class="system-item">
-                        <span>CPU:</span>
-                        <span id="cpuUsage">--%</span>
-                    </div>
-                    <div class="system-item">
-                        <span>Memory:</span>
-                        <span id="memoryUsage">--%</span>
-                    </div>
-                    <div class="system-item">
-                        <span>FPS:</span>
-                        <span id="fps">--</span>
-                    </div>
-                    <div class="system-item">
-                        <span>Uptime:</span>
-                        <span id="uptime">--:--:--</span>
-                    </div>
+        
+        <div class="side-panel">
+            <div class="controls">
+                <h3>🎛️ Controls</h3>
+                <div class="control-buttons">
+                    <button onclick="startMonitoring()">▶️ Start Monitor</button>
+                    <button onclick="stopMonitoring()" class="stop">⏹️ Stop Monitor</button>
                 </div>
             </div>
-
-            <!-- Text Frequency Analysis -->
-            <div class="panel">
-                <div class="panel-header">Text Frequency</div>
-                <div class="text-frequency" id="textFrequency">
-                    <div class="frequency-item">
-                        <span>No text data yet...</span>
-                    </div>
+            
+            <div class="actions-panel">
+                <h3>🎮 Recent Actions</h3>
+                <div id="action-history" class="action-history">
+                    <p>No actions yet...</p>
                 </div>
             </div>
-
-            <!-- Recent Text Log -->
-            <div class="panel">
-                <div class="panel-header">Recent Dialogue</div>
-                <div class="text-log" id="textLog">
-                    <div class="text-item">
-                        <div class="text-timestamp">Waiting for text...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Session History -->
-            <div class="panel">
-                <div class="panel-header">Session History</div>
-                <div class="chart-container">
-                    <canvas id="sessionChart"></canvas>
+            
+            <div class="decisions-panel">
+                <h3>🧠 Agent Decisions</h3>
+                <div id="decision-history" style="max-height: 400px; overflow-y: auto;">
+                    <p>No decisions yet...</p>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Initialize Socket.IO connection
-        const socket = io({autoConnect: false});
+        // WebSocket connection
+        const socket = io();
         
-        // Chart instances
-        let rewardChart, progressChart, sessionChart;
-        
-        // Data storage
-        let rewardData = [];
-        let progressData = [];
-        let sessionData = [];
-        let recentActions = [];
-        let recentDecisions = [];
-        let textFrequency = {};
-        let recentText = [];
-        
-        // Connection status
-        const connectionStatus = document.getElementById('connectionStatus');
-        
+        // Connection events
         socket.on('connect', function() {
-            connectionStatus.textContent = 'Connected';
-            connectionStatus.classList.remove('disconnected');
             console.log('Connected to server');
-            
-            // Stop HTTP polling if we got Socket.IO connection
-            if (useHttpPolling) {
-                stopHttpPolling();
-            }
         });
         
-        socket.on('disconnect', function() {
-            connectionStatus.textContent = 'Disconnected';
-            connectionStatus.classList.add('disconnected');
-            console.log('Disconnected from server');
-            
-            // Start HTTP polling fallback on disconnect
-            if (!useHttpPolling) {
-                setTimeout(() => {
-                    if (!socket.connected) {
-                        startHttpPolling();
-                    }
-                }, 1000); // Wait 1 second before starting polling
-            }
+        socket.on('status', function(data) {
+            updateStatus(data);
         });
         
-        // Initialize charts
-        function initCharts() {
-            // Reward Chart
-            const rewardCtx = document.getElementById('rewardChart').getContext('2d');
-            rewardChart = new Chart(rewardCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Episode Reward',
-                        data: [],
-                        borderColor: '#58a6ff',
-                        backgroundColor: 'rgba(88, 166, 255, 0.1)',
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { display: false },
-                        y: { 
-                            grid: { color: '#30363d' },
-                            ticks: { color: '#8b949e' }
-                        }
-                    }
-                }
-            });
-            
-            // Progress Chart
-            const progressCtx = document.getElementById('progressChart').getContext('2d');
-            progressChart = new Chart(progressCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Steps per Episode',
-                        data: [],
-                        borderColor: '#3fb950',
-                        backgroundColor: 'rgba(63, 185, 80, 0.1)',
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { display: false },
-                        y: { 
-                            grid: { color: '#30363d' },
-                            ticks: { color: '#8b949e' }
-                        }
-                    }
-                }
-            });
-            
-            // Session Chart
-            const sessionCtx = document.getElementById('sessionChart').getContext('2d');
-            sessionChart = new Chart(sessionCtx, {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Session Performance',
-                        data: [],
-                        backgroundColor: '#58a6ff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { 
-                            grid: { color: '#30363d' },
-                            ticks: { color: '#8b949e' }
-                        },
-                        y: { 
-                            grid: { color: '#30363d' },
-                            ticks: { color: '#8b949e' }
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Update game screen
-        socket.on('screenshot_update', function(data) {
-            document.getElementById('gameScreen').src = 'data:image/png;base64,' + data.image;
+        socket.on('screenshot', function(data) {
+            updateScreenshot(data);
         });
         
-        // Update stats
         socket.on('stats_update', function(data) {
-            document.getElementById('currentEpisode').textContent = data.episode || '-';
-            document.getElementById('currentStep').textContent = data.step || '-';
-            document.getElementById('currentReward').textContent = (data.reward || 0).toFixed(2);
-            document.getElementById('totalReward').textContent = (data.total_reward || 0).toFixed(2);
-            document.getElementById('screenType').textContent = data.screen_type || '-';
-            document.getElementById('mapId').textContent = data.map_id || '-';
-            document.getElementById('playerX').textContent = data.player_x || '-';
-            document.getElementById('playerY').textContent = data.player_y || '-';
+            updateStats(data);
         });
         
-        // Update performance metrics
-        socket.on('performance_update', function(data) {
-            document.getElementById('avgReward').textContent = (data.avg_reward || 0).toFixed(1);
-            document.getElementById('avgSteps').textContent = data.avg_steps || 0;
-            document.getElementById('successRate').textContent = (data.success_rate || 0).toFixed(1) + '%';
-            document.getElementById('actionsPerSec').textContent = (data.actions_per_sec || 0).toFixed(1);
-            
-            // Update reward chart
-            if (data.episode_rewards && rewardChart) {
-                rewardChart.data.labels = data.episode_rewards.map((_, i) => i + 1);
-                rewardChart.data.datasets[0].data = data.episode_rewards;
-                rewardChart.update();
-            }
-            
-            // Update progress chart
-            if (data.episode_steps && progressChart) {
-                progressChart.data.labels = data.episode_steps.map((_, i) => i + 1);
-                progressChart.data.datasets[0].data = data.episode_steps;
-                progressChart.update();
-            }
+        socket.on('new_action', function(data) {
+            addAction(data);
         });
         
-        // Update system stats
-        socket.on('system_update', function(data) {
-            document.getElementById('cpuUsage').textContent = (data.cpu_percent || 0).toFixed(1) + '%';
-            document.getElementById('memoryUsage').textContent = (data.memory_percent || 0).toFixed(1) + '%';
-            document.getElementById('fps').textContent = data.fps || '--';
-            document.getElementById('uptime').textContent = data.uptime || '--:--:--';
-        });
-        
-        // Update actions
-        socket.on('action_update', function(data) {
-            const actionsList = document.getElementById('actionsList');
-            const actionItem = document.createElement('div');
-            actionItem.className = 'action-item';
-            actionItem.textContent = `${new Date().toLocaleTimeString()}: ${data.action}`;
-            
-            actionsList.insertBefore(actionItem, actionsList.firstChild);
-            
-            // Keep only last 20 actions
-            while (actionsList.children.length > 20) {
-                actionsList.removeChild(actionsList.lastChild);
-            }
-        });
-        
-        // Update LLM decisions
-        socket.on('decision_update', function(data) {
-            const decisionLog = document.getElementById('decisionLog');
-            const decisionItem = document.createElement('div');
-            decisionItem.className = 'decision-item';
-            decisionItem.innerHTML = `
-                <div class="decision-timestamp">${new Date().toLocaleTimeString()}</div>
-                <div class="decision-action">Action: ${data.action}</div>
-                <div class="decision-reasoning">${data.reasoning || 'No reasoning provided'}</div>
-            `;
-            
-            decisionLog.insertBefore(decisionItem, decisionLog.firstChild);
-            
-            // Keep only last 10 decisions
-            while (decisionLog.children.length > 10) {
-                decisionLog.removeChild(decisionLog.lastChild);
-            }
-        });
-        
-        // Update text frequency
-        socket.on('text_update', function(data) {
-            // Update text log
-            const textLog = document.getElementById('textLog');
-            const textItem = document.createElement('div');
-            textItem.className = 'text-item';
-            textItem.innerHTML = `
-                <div class="text-timestamp">${new Date().toLocaleTimeString()}</div>
-                <div>${data.text}</div>
-            `;
-            
-            textLog.insertBefore(textItem, textLog.firstChild);
-            
-            // Keep only last 20 text items
-            while (textLog.children.length > 20) {
-                textLog.removeChild(textLog.lastChild);
-            }
-            
-            // Update frequency analysis
-            if (data.frequency) {
-                const frequencyDiv = document.getElementById('textFrequency');
-                frequencyDiv.innerHTML = '';
-                
-                const maxCount = Math.max(...Object.values(data.frequency));
-                
-                Object.entries(data.frequency)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10)
-                    .forEach(([text, count]) => {
-                        const item = document.createElement('div');
-                        item.className = 'frequency-item';
-                        
-                        const width = maxCount > 0 ? (count / maxCount) * 100 : 0;
-                        
-                        item.innerHTML = `
-                            <span>${text} (${count})</span>
-                            <div class="frequency-bar">
-                                <div class="frequency-fill" style="width: ${width}%"></div>
-                            </div>
-                        `;
-                        
-                        frequencyDiv.appendChild(item);
-                    });
-            }
+        socket.on('new_decision', function(data) {
+            addDecision(data);
         });
         
         // Control functions
-        function togglePause() {
-            fetch('/api/control/pause', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => console.log('Pause toggled:', data));
+        function startMonitoring() {
+            socket.emit('start_monitoring');
         }
         
-        function saveState() {
-            fetch('/api/control/save_state', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => console.log('State saved:', data));
+        function stopMonitoring() {
+            socket.emit('stop_monitoring');
         }
         
-        function resetAgent() {
-            fetch('/api/control/reset', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => console.log('Agent reset:', data));
+        // Update functions
+        function updateStatus(data) {
+            const statusElement = document.getElementById('status');
+            if (data.monitoring) {
+                statusElement.textContent = '🟢 Monitoring Active';
+                statusElement.className = 'status monitoring';
+            } else {
+                statusElement.textContent = '🔴 Not Monitoring';
+                statusElement.className = 'status stopped';
+            }
         }
         
-        // HTTP polling fallback for unified trainer (no Socket.IO)
-        let useHttpPolling = false;
-        let pollingIntervals = [];
-        let previousScreenshotUrl = null;
-        
-        function startHttpPolling() {
-            if (useHttpPolling) return; // Prevent multiple polling instances
+        function updateScreenshot(data) {
+            const imgElement = document.getElementById('screenshot');
+            const infoElement = document.getElementById('screen-info');
             
-            useHttpPolling = true;
-            console.log('Starting HTTP polling fallback...');
-            connectionStatus.textContent = 'HTTP Polling';
-            connectionStatus.classList.remove('disconnected');
-            
-            // Show status in UI elements initially
-            document.getElementById('currentEpisode').textContent = 'Loading...';
-            document.getElementById('currentStep').textContent = '0';
-            document.getElementById('actionsPerSec').textContent = '0.0';
-            
-            // Poll for stats updates
-            const statsInterval = setInterval(() => {
-                if (!useHttpPolling) return;
-                
-                // Update stats from /api/status endpoint
-                fetch('/api/status')
-                    .then(response => response.json())
-                    .then(data => {
-                        // Map unified trainer data to dashboard format
-                        document.getElementById('currentStep').textContent = data.total_actions || '-';
-                        document.getElementById('actionsPerSec').textContent = (data.actions_per_second || 0).toFixed(1);
-                        
-                        // Map additional fields - use actual data when available or sensible defaults
-                        document.getElementById('currentReward').textContent = (data.current_reward || 0).toFixed(2);
-                        document.getElementById('totalReward').textContent = (data.total_reward || data.total_actions * 0.1 || 0).toFixed(2);  // Estimate if not available
-                        document.getElementById('screenType').textContent = data.game_state || data.mode || 'Game';
-                        document.getElementById('mapId').textContent = data.map_id || data.current_run_id || '-';
-                        document.getElementById('playerX').textContent = data.player_x || Math.floor(Math.random() * 100) || '-';  // Mock if not available
-                        document.getElementById('playerY').textContent = data.player_y || Math.floor(Math.random() * 100) || '-';  // Mock if not available
-                        
-                        // Calculate uptime
-                        if (data.start_time) {
-                            const uptime = Math.floor((Date.now() / 1000) - data.start_time);
-                            const hours = Math.floor(uptime / 3600);
-                            const minutes = Math.floor((uptime % 3600) / 60);
-                            const seconds = uptime % 60;
-                            document.getElementById('uptime').textContent = 
-                                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                        } else {
-                            // Show a default uptime or calculate from page load time
-                            const pageLoadTime = window.pageLoadTime || Date.now();
-                            const uptime = Math.floor((Date.now() - pageLoadTime) / 1000);
-                            const hours = Math.floor(uptime / 3600);
-                            const minutes = Math.floor((uptime % 3600) / 60);
-                            const seconds = uptime % 60;
-                            document.getElementById('uptime').textContent = 
-                                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                        }
-                        
-                        // Show training status and episode info
-                        const statusText = data.is_training ? 'Training Active' : (data.total_actions > 0 ? 'Completed' : 'Ready');
-                        document.getElementById('currentEpisode').textContent = data.current_episode || statusText;
-                        
-                        // Update performance metrics with available data
-                        document.getElementById('avgReward').textContent = (data.avg_reward || (data.total_actions * 0.05) || 0).toFixed(1);
-                        document.getElementById('avgSteps').textContent = data.total_actions || '0';
-                        document.getElementById('successRate').textContent = data.success_rate ? (data.success_rate * 100).toFixed(1) + '%' : '0%';
-                        
-                        // Set FPS to actions per second (approximation)
-                        document.getElementById('fps').textContent = (data.actions_per_second || 0).toFixed(1);
-                    })
-                    .catch(err => {
-                        console.log('Stats update failed:', err);
-                        // Show connection error in UI, but only if not already in error state
-                        if (connectionStatus.textContent !== 'Connection Error') {
-                            connectionStatus.textContent = 'Connection Error';
-                            connectionStatus.classList.add('disconnected');
-                        }
-                        
-                        // Attempt to recover after 5 seconds
-                        if (!window.errorRecoveryTimeout) {
-                            window.errorRecoveryTimeout = setTimeout(() => {
-                                window.errorRecoveryTimeout = null;
-                                console.log('Attempting connection recovery...');
-                            }, 5000);
-                        }
-                    });
-                
-                // Update system stats
-                fetch('/api/system')
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('cpuUsage').textContent = (data.cpu_percent || 0).toFixed(1) + '%';
-                        document.getElementById('memoryUsage').textContent = (data.memory_percent || 0).toFixed(1) + '%';
-                        
-                        // Reset connection status if it was in error state
-                        if (connectionStatus.textContent === 'Connection Error') {
-                            connectionStatus.textContent = 'HTTP Polling';
-                            connectionStatus.classList.remove('disconnected');
-                        }
-                    })
-                    .catch(err => {
-                        console.log('System stats update failed:', err);
-                        // Show fallback system stats
-                        document.getElementById('cpuUsage').textContent = '0.0%';
-                        document.getElementById('memoryUsage').textContent = '0.0%';
-                    });
-                
-                // Update text data (OCR)
-                fetch('/api/text')
-                    .then(response => response.json())
-                    .then(data => {
-                        // Update text log
-                        if (data.recent_text && data.recent_text.length > 0) {
-                            const textLog = document.getElementById('textLog');
-                            textLog.innerHTML = '';
-                            
-                            data.recent_text.forEach(textEntry => {
-                                const textItem = document.createElement('div');
-                                textItem.className = 'text-item';
-                                textItem.innerHTML = `
-                                    <div class="text-timestamp">${new Date(textEntry.timestamp).toLocaleTimeString()}</div>
-                                    <div>[${textEntry.location}] ${textEntry.text} (${(textEntry.confidence * 100).toFixed(0)}%)</div>
-                                `;
-                                textLog.appendChild(textItem);
-                            });
-                        }
-                        
-                        // Update frequency analysis
-                        if (data.text_frequency && Object.keys(data.text_frequency).length > 0) {
-                            const frequencyDiv = document.getElementById('textFrequency');
-                            frequencyDiv.innerHTML = '';
-                            
-                            const maxCount = Math.max(...Object.values(data.text_frequency));
-                            
-                            Object.entries(data.text_frequency)
-                                .slice(0, 10)
-                                .forEach(([text, count]) => {
-                                    const item = document.createElement('div');
-                                    item.className = 'frequency-item';
-                                    
-                                    const width = maxCount > 0 ? (count / maxCount) * 100 : 0;
-                                    
-                                    item.innerHTML = `
-                                        <span>${text} (${count})</span>
-                                        <div class="frequency-bar">
-                                            <div class="frequency-fill" style="width: ${width}%"></div>
-                                        </div>
-                                    `;
-                                    
-                                    frequencyDiv.appendChild(item);
-                                });
-                        }
-                    })
-                    .catch(err => console.log('Text data update failed:', err));
-                    
-            }, 1000);
-            
-            // Update screenshot
-            const screenshotInterval = setInterval(() => {
-                if (!useHttpPolling) return;
-                
-                fetch('/api/screenshot')
-                    .then(response => response.blob())
-                    .then(blob => {
-                        // Clean up previous URL to prevent memory leak
-                        if (previousScreenshotUrl) {
-                            URL.revokeObjectURL(previousScreenshotUrl);
-                        }
-                        
-                        const url = URL.createObjectURL(blob);
-                        document.getElementById('gameScreen').src = url;
-                        previousScreenshotUrl = url;
-                    })
-                    .catch(err => console.log('Screenshot refresh failed:', err));
-            }, 2000); // Update screenshots every 2 seconds (less frequent)
-            
-            // Store interval IDs for cleanup
-            pollingIntervals.push(statsInterval, screenshotInterval);
+            imgElement.src = data.image;
+            infoElement.textContent = `Updated: ${new Date(data.timestamp).toLocaleTimeString()}`;
+            imgElement.classList.add('updating');
+            setTimeout(() => imgElement.classList.remove('updating'), 200);
         }
         
-        function stopHttpPolling() {
-            useHttpPolling = false;
-            
-            // Clear all polling intervals
-            pollingIntervals.forEach(interval => clearInterval(interval));
-            pollingIntervals = [];
-            
-            // Clean up screenshot URL
-            if (previousScreenshotUrl) {
-                URL.revokeObjectURL(previousScreenshotUrl);
-                previousScreenshotUrl = null;
+        function updateStats(data) {
+            if (data.player) {
+                document.getElementById('player-location').textContent = 
+                    `Map ${data.player.map}, (${data.player.x}, ${data.player.y})`;
+                document.getElementById('player-money').textContent = 
+                    `$${data.player.money.toLocaleString()}`;
+                document.getElementById('player-badges').textContent = 
+                    data.player.badges;
             }
             
-            console.log('HTTP polling stopped');
+            if (data.party) {
+                updatePokemonParty(data.party);
+            }
+            
+            if (data.training) {
+                document.getElementById('training-episodes').textContent = 
+                    data.training.episodes;
+                document.getElementById('training-steps').textContent = 
+                    data.training.total_steps.toLocaleString();
+                document.getElementById('training-decisions').textContent = 
+                    data.training.decisions_made.toLocaleString();
+                document.getElementById('training-visual').textContent = 
+                    data.training.visual_analyses.toLocaleString();
+            }
         }
         
-        // Initialize everything when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            // Store page load time for uptime calculation
-            window.pageLoadTime = Date.now();
+        function updatePokemonParty(party) {
+            const partyElement = document.getElementById('pokemon-party');
             
-            initCharts();
+            if (party.length === 0) {
+                partyElement.innerHTML = '<p>No Pokemon in party</p>';
+                return;
+            }
             
-            // Try to connect with Socket.IO
-            socket.connect();
-
-            // Fallback to HTTP polling if Socket.IO fails
-            socket.on('connect_error', () => {
-                console.log('Socket.IO connection failed, falling back to HTTP polling');
-                socket.disconnect();
-                startHttpPolling();
+            partyElement.innerHTML = '';
+            party.forEach((pokemon, index) => {
+                const hpPercent = (pokemon.hp / pokemon.max_hp) * 100;
+                const hpClass = hpPercent < 25 ? 'low' : hpPercent < 50 ? 'medium' : '';
+                
+                const pokemonDiv = document.createElement('div');
+                pokemonDiv.className = `pokemon ${hpPercent < 25 ? 'low-hp' : ''}`;
+                pokemonDiv.innerHTML = `
+                    <div><strong>Pokemon #${pokemon.species}</strong> - Level ${pokemon.level}</div>
+                    <div>HP: ${pokemon.hp}/${pokemon.max_hp}</div>
+                    <div class="hp-bar">
+                        <div class="hp-fill ${hpClass}" style="width: ${hpPercent}%"></div>
+                    </div>
+                `;
+                partyElement.appendChild(pokemonDiv);
             });
-
-            // Timeout fallback if Socket.IO doesn't connect within 3 seconds
-            setTimeout(() => {
-                if (!socket.connected && !useHttpPolling) {
-                    console.log('Socket.IO connection timeout, falling back to HTTP polling');
-                    socket.disconnect();
-                    startHttpPolling();
-                }
-            }, 3000);
-        });
+        }
+        
+        function addAction(data) {
+            const historyElement = document.getElementById('action-history');
+            
+            // Clear placeholder text
+            if (historyElement.textContent.includes('No actions yet')) {
+                historyElement.innerHTML = '';
+            }
+            
+            const actionDiv = document.createElement('div');
+            actionDiv.className = 'action-item';
+            actionDiv.innerHTML = `
+                <strong>${data.action}</strong>
+                <div style="font-size: 0.8em; color: #aaa;">
+                    ${new Date(data.timestamp).toLocaleTimeString()}
+                </div>
+                ${data.reasoning ? `<div style="font-size: 0.8em; margin-top: 5px;">${data.reasoning}</div>` : ''}
+            `;
+            
+            historyElement.insertBefore(actionDiv, historyElement.firstChild);
+            
+            // Keep only recent actions (max 20)
+            while (historyElement.children.length > 20) {
+                historyElement.removeChild(historyElement.lastChild);
+            }
+        }
+        
+        function addDecision(data) {
+            const historyElement = document.getElementById('decision-history');
+            
+            // Clear placeholder text
+            if (historyElement.textContent.includes('No decisions yet')) {
+                historyElement.innerHTML = '';
+            }
+            
+            const decisionDiv = document.createElement('div');
+            decisionDiv.className = 'decision-item';
+            decisionDiv.innerHTML = `
+                <div class="decision-action">${data.decision}</div>
+                <div class="decision-reasoning">${data.reasoning}</div>
+                <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
+                    ${new Date(data.timestamp).toLocaleTimeString()}
+                    ${data.confidence ? ` | Confidence: ${(data.confidence * 100).toFixed(1)}%` : ''}
+                </div>
+            `;
+            
+            historyElement.insertBefore(decisionDiv, historyElement.firstChild);
+            
+            // Keep only recent decisions (max 15)
+            while (historyElement.children.length > 15) {
+                historyElement.removeChild(historyElement.lastChild);
+            }
+        }
+        
+        // Request screenshot on load
+        socket.emit('request_screenshot');
+        
+        // Auto-refresh stats
+        setInterval(() => {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current_stats && Object.keys(data.current_stats).length > 0) {
+                        updateStats(data.current_stats);
+                    }
+                })
+                .catch(console.error);
+        }, 2000);
     </script>
 </body>
 </html>
