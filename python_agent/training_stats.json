@@ -1,10 +1,12 @@
 {
-  "start_time": 1755318954.1175792,
-  "total_actions": 100,
+  "start_time": 1755319184.5496762,
+  "total_actions": 119,
   "total_episodes": 0,
-  "actions_per_second": 464.4356032629939,
-  "mode": "ultra_fast",
-  "model": "rule-based",
-  "elapsed_time": 0.13903188705444336,
-  "end_time": 1755318954.333645
+  "actions_per_second": 2.4253953923441887,
+  "mode": "fast_monitored",
+  "model": "smollm2:1.7b",
+  "llm_calls": 11,
+  "llm_total_time": 0.2992730140686035,
+  "llm_avg_time": 0.02720663764260032,
+  "end_time": 1755319233.614414
 }

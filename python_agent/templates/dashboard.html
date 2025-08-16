@@ -106,15 +106,18 @@
 
         .game-screen {
             text-align: center;
+            overflow: hidden; /* Prevent overflow */
         }
 
         .game-screen img {
-            max-width: 100%;
+            width: 100%; /* Fill container width */
+            max-width: 100%; /* Don't exceed container */
+            height: auto; /* Maintain aspect ratio */
             border: 2px solid var(--border-color);
             border-radius: 4px;
             image-rendering: pixelated;
-            transform: scale(3);
-            margin: 2rem 0;
+            /* Removed transform: scale(3) - was causing overflow */
+            margin: 1rem 0;
         }
 
         .stats-grid {
