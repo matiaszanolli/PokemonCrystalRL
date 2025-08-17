@@ -1,0 +1,30 @@
+{
+  "step": 4,
+  "timestamp": "2025-08-14T01:23:22.975775",
+  "game_state": {
+    "player": {
+      "x": 0,
+      "y": 0,
+      "map": 0,
+      "direction": 0,
+      "money": 0,
+      "badges": 0
+    },
+    "party": [],
+    "frame_count": 3,
+    "game_time": 54
+  },
+  "action_taken": "NONE",
+  "reward": -50.001,
+  "visual_analysis": {
+    "screen_type": "menu",
+    "detected_text": [
+      {
+        "text": "PyBoy",
+        "confidence": 0.8502981327841805
+      }
+    ],
+    "visual_summary": "Screen: menu | Text: PyBoy | UI: menu"
+  },
+  "episode_done": false
+}

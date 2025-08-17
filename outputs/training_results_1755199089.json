@@ -1,0 +1,148 @@
+{
+  "training_session": {
+    "final_step": 8267,
+    "total_time": 896.0414483547211,
+    "completion_time": "2025-08-14T16:18:09.361931",
+    "training_stats": {
+      "episodes": 0,
+      "total_steps": 8266,
+      "llm_calls": 8267,
+      "visual_analyses": 1654,
+      "font_recognitions": 1032,
+      "actions_per_second": 9.226092664080031,
+      "start_time": 1755198193.32048,
+      "completion_target": 7200,
+      "estimated_completion": null
+    },
+    "performance_history": [
+      {
+        "timestamp": 1755198251.3408117,
+        "step": 548,
+        "progress_score": 0.0,
+        "actions_per_second": 9.444964975002826,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198311.4323945,
+        "step": 1120,
+        "progress_score": 0.0,
+        "actions_per_second": 9.482531933588048,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198371.4723964,
+        "step": 1624,
+        "progress_score": 0.0,
+        "actions_per_second": 9.115815501977893,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198431.8785434,
+        "step": 2230,
+        "progress_score": 0.0,
+        "actions_per_second": 9.347829075425542,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198491.9954715,
+        "step": 2796,
+        "progress_score": 0.0,
+        "actions_per_second": 9.361346215101575,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198552.0038466,
+        "step": 3326,
+        "progress_score": 0.0,
+        "actions_per_second": 9.272802450001633,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198612.217507,
+        "step": 3905,
+        "progress_score": 0.0,
+        "actions_per_second": 9.322100063690199,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198672.2709904,
+        "step": 4422,
+        "progress_score": 0.0,
+        "actions_per_second": 9.232686687331668,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198732.451498,
+        "step": 4971,
+        "progress_score": 0.0,
+        "actions_per_second": 9.220393252733784,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198792.5166955,
+        "step": 5528,
+        "progress_score": 0.0,
+        "actions_per_second": 9.225692449327783,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198852.556883,
+        "step": 6080,
+        "progress_score": 0.0,
+        "actions_per_second": 9.222791660834107,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198912.5583785,
+        "step": 6638,
+        "progress_score": 0.0,
+        "actions_per_second": 9.229213331542176,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755198972.6861465,
+        "step": 7196,
+        "progress_score": 0.0,
+        "actions_per_second": 9.233149868323823,
+        "phase": "pre_starter"
+      },
+      {
+        "timestamp": 1755199032.8958325,
+        "step": 7746,
+        "progress_score": 0.0,
+        "actions_per_second": 9.226092664080031,
+        "phase": "pre_starter"
+      }
+    ],
+    "milestones_achieved": {
+      "started_game": false,
+      "got_starter": false,
+      "first_battle": false,
+      "first_catch": false,
+      "first_gym": false,
+      "second_gym": false,
+      "elite_four": false,
+      "champion": false
+    }
+  },
+  "final_game_state": {
+    "player": {
+      "x": 6,
+      "y": 0,
+      "map": 24,
+      "direction": 7,
+      "money": 1218,
+      "badges": 0
+    },
+    "party": [],
+    "frame_count": 8267,
+    "game_time": 66166
+  },
+  "system_info": {
+    "rom_path": "/mnt/data/src/pokemon_crystal_rl/roms/pokemon_crystal.gbc",
+    "model_name": "llama3.2:3b",
+    "font_decoder_chars": 8,
+    "vision_enabled": true,
+    "web_monitor_enabled": true
+  }
+}

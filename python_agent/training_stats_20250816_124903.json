@@ -1,9 +1,0 @@
-{
-  "start_time": 1755359343.5991147,
-  "total_actions": 225,
-  "total_episodes": 0,
-  "actions_per_second": 2.4663262218454634,
-  "mode": "fast_monitored",
-  "model": "rule-based",
-  "end_time": 1755359434.8283947
-}

@@ -1,0 +1,105 @@
+{
+  "screen_type": "dialogue",
+  "game_phase": "dialogue_interaction",
+  "visual_summary": "Screen: dialogue | UI: menu, dialogue_box, healthbar | Colors: bright, red",
+  "detected_text": [],
+  "ui_elements": [
+    {
+      "type": "dialogue_box",
+      "confidence": 0.8
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "menu",
+      "confidence": 0.6
+    },
+    {
+      "type": "menu",
+      "confidence": 0.6
+    }
+  ],
+  "dominant_colors": [
+    [
+      247,
+      247,
+      246
+    ],
+    [
+      186,
+      161,
+      96
+    ],
+    [
+      51,
+      51,
+      50
+    ]
+  ]
+}

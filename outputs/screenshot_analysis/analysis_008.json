@@ -1,0 +1,59 @@
+{
+  "screen_type": "dialogue",
+  "game_phase": "dialogue_interaction",
+  "visual_summary": "Screen: dialogue | Text: NAME/A, IDNo 41503, MONEY | UI: menu, dialogue_box | Colors: dark, bright",
+  "detected_text": [
+    {
+      "text": "NAME/A",
+      "location": "world",
+      "confidence": 0.570427071042615
+    },
+    {
+      "text": "IDNo 41503",
+      "location": "world",
+      "confidence": 0.8445419143877769
+    },
+    {
+      "text": "MONEY",
+      "location": "world",
+      "confidence": 0.9890016063178471
+    },
+    {
+      "text": "STATUS",
+      "location": "world",
+      "confidence": 0.9462073741020051
+    },
+    {
+      "text": "PLAY TIME",
+      "location": "world",
+      "confidence": 0.9435803912091465
+    }
+  ],
+  "ui_elements": [
+    {
+      "type": "dialogue_box",
+      "confidence": 0.8
+    },
+    {
+      "type": "menu",
+      "confidence": 0.6
+    }
+  ],
+  "dominant_colors": [
+    [
+      24,
+      10,
+      5
+    ],
+    [
+      244,
+      237,
+      234
+    ],
+    [
+      56,
+      40,
+      248
+    ]
+  ]
+}

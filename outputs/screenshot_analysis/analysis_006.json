@@ -1,0 +1,126 @@
+{
+  "screen_type": "dialogue",
+  "game_phase": "dialogue_interaction",
+  "visual_summary": "Screen: dialogue | Text: PACK, SAVE, OPTION | UI: menu, dialogue_box, healthbar | Colors: bright, dark",
+  "detected_text": [
+    {
+      "text": "PACK",
+      "location": "ui",
+      "confidence": 0.9901148676872253
+    },
+    {
+      "text": "SAVE",
+      "location": "world",
+      "confidence": 0.8243611454963684
+    },
+    {
+      "text": "OPTION",
+      "location": "menu",
+      "confidence": 0.9905523942447627
+    },
+    {
+      "text": "EXIT",
+      "location": "world",
+      "confidence": 0.9707449078559875
+    }
+  ],
+  "ui_elements": [
+    {
+      "type": "dialogue_box",
+      "confidence": 0.8
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "menu",
+      "confidence": 0.6
+    },
+    {
+      "type": "menu",
+      "confidence": 0.6
+    }
+  ],
+  "dominant_colors": [
+    [
+      247,
+      247,
+      246
+    ],
+    [
+      49,
+      49,
+      48
+    ],
+    [
+      186,
+      161,
+      96
+    ]
+  ]
+}

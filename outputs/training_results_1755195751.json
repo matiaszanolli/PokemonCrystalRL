@@ -1,0 +1,57 @@
+{
+  "training_session": {
+    "final_step": 932,
+    "total_time": 94.64093828201294,
+    "completion_time": "2025-08-14T15:22:31.713148",
+    "training_stats": {
+      "episodes": 0,
+      "total_steps": 931,
+      "llm_calls": 932,
+      "visual_analyses": 188,
+      "font_recognitions": 73,
+      "actions_per_second": 10.167181826225987,
+      "start_time": 1755195657.0722067,
+      "completion_target": 7200,
+      "estimated_completion": null
+    },
+    "performance_history": [
+      {
+        "timestamp": 1755195715.1020532,
+        "step": 590,
+        "progress_score": 0.0,
+        "actions_per_second": 10.167181826225987,
+        "phase": "pre_starter"
+      }
+    ],
+    "milestones_achieved": {
+      "started_game": false,
+      "got_starter": false,
+      "first_battle": false,
+      "first_catch": false,
+      "first_gym": false,
+      "second_gym": false,
+      "elite_four": false,
+      "champion": false
+    }
+  },
+  "final_game_state": {
+    "player": {
+      "x": 6,
+      "y": 0,
+      "map": 24,
+      "direction": 7,
+      "money": 1218,
+      "badges": 0
+    },
+    "party": [],
+    "frame_count": 932,
+    "game_time": 7486
+  },
+  "system_info": {
+    "rom_path": "/mnt/data/src/pokemon_crystal_rl/roms/pokemon_crystal.gbc",
+    "model_name": "llama3.2:3b",
+    "font_decoder_chars": 8,
+    "vision_enabled": true,
+    "web_monitor_enabled": true
+  }
+}

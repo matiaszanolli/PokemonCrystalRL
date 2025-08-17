@@ -1,0 +1,129 @@
+{
+  "screen_type": "battle",
+  "game_phase": "battle",
+  "visual_summary": "Screen: battle | UI: menu, healthbar | Colors: red",
+  "detected_text": [],
+  "ui_elements": [
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "healthbar",
+      "confidence": 0.7
+    },
+    {
+      "type": "menu",
+      "confidence": 0.6
+    }
+  ],
+  "dominant_colors": [
+    [
+      168,
+      134,
+      54
+    ],
+    [
+      56,
+      56,
+      56
+    ],
+    [
+      205,
+      190,
+      143
+    ]
+  ]
+}

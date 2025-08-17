@@ -1,0 +1,29 @@
+{
+  "screen_type": "dialogue",
+  "game_phase": "dialogue_interaction",
+  "visual_summary": "Screen: dialogue | UI: dialogue_box | Colors: bright, bright",
+  "detected_text": [],
+  "ui_elements": [
+    {
+      "type": "dialogue_box",
+      "confidence": 0.8
+    }
+  ],
+  "dominant_colors": [
+    [
+      254,
+      254,
+      254
+    ],
+    [
+      255,
+      255,
+      255
+    ],
+    [
+      255,
+      255,
+      255
+    ]
+  ]
+}

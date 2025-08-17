@@ -1,0 +1,53 @@
+{
+  "session_info": {
+    "duration": 14.418850660324097,
+    "episodes": 0,
+    "total_steps": 48,
+    "model_used": "llama3.2:3b"
+  },
+  "episode_summaries": [],
+  "training_stats": {
+    "episodes": 0,
+    "total_steps": 48,
+    "decisions_made": 48,
+    "visual_analyses": 0,
+    "last_progress": {
+      "badges": 0,
+      "money": 0,
+      "party_size": 0,
+      "location": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "memory_summary": {
+    "decisions_stored": 1780,
+    "states_recorded": 1780,
+    "pokemon_encounters": 0,
+    "visual_analyses": 132,
+    "screen_type_breakdown": {
+      "battle": 16,
+      "dialogue": 76,
+      "menu": 40
+    },
+    "latest_progress": {
+      "badges": 0,
+      "money": 0,
+      "party_size": 0,
+      "last_visual_summary": "No visual data",
+      "last_screen_type": "Unknown"
+    }
+  },
+  "final_progress": {
+    "badges": 0,
+    "money": 0,
+    "party_size": 0,
+    "location": [
+      0,
+      0,
+      0
+    ]
+  }
+}
