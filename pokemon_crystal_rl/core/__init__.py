@@ -7,8 +7,13 @@ Contains core game environments, memory mapping, base classes, and video streami
 # Import memory_map first as it has no external dependencies
 from .memory_map import MEMORY_ADDRESSES
 
-# Import PyBoy environment (dependencies are now properly handled)
-from .pyboy_env import PyBoyPokemonCrystalEnv
+# Import PyBoy environment and video streaming as optional dependencies
+try:
+    from .pyboy_env import PyBoyPokemonCrystalEnv
+    PYBOY_AVAILABLE = True
+except ImportError:
+    PYBOY_AVAILABLE = False
+    PyBoyPokemonCrystalEnv = None
 
 # Import video streaming (optional, requires PIL)
 try:
