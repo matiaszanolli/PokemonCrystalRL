@@ -1,3 +1,108 @@
+# 📚 Pokemon Crystal RL Documentation
+
+Welcome to the Pokemon Crystal RL documentation! This documentation will help you understand, use, and contribute to the project.
+
+## 📖 Contents
+
+### 🚀 Getting Started
+- [Installation Guide](guides/INSTALLATION.md)
+- [Quick Start Guide](guides/QUICKSTART.md)
+- [Training Overview](guides/TRAINING_OVERVIEW.md)
+
+### 📘 User Guides
+- [Vision System Guide](guides/VISION_SYSTEM.md)
+- [Web Monitoring Guide](guides/WEB_MONITORING.md)
+- [Training Configuration](guides/TRAINING_SESSION_SUMMARY.md)
+- [Unified Trainer Guide](guides/UNIFIED_TRAINER_SUMMARY.md)
+
+### 🔧 Development
+- [Contributing Guide](guides/CONTRIBUTING.md)
+- [Development Guide](guides/DEVELOPMENT.md)
+- [Testing Guide](guides/TESTING.md)
+
+### 🏗️ Architecture
+- [UI Architecture](architecture/NEW_UI_ARCHITECTURE.md)
+- [Video Streaming Architecture](architecture/VIDEO_STREAMING_INTEGRATION.md)
+
+### 📝 API Reference
+- [Trainer API](api/trainer.md)
+- [Vision API](api/vision.md)
+- [Web Monitor API](api/monitor.md)
+- [Utils API](api/utils.md)
+
+### 💡 Examples
+- [Basic Training](examples/basic_training.md)
+- [LLM Integration](examples/llm_integration.md)
+- [Custom Agents](examples/custom_agents.md)
+- [Web Monitoring](examples/web_monitoring.md)
+
+## 🔍 Topics
+
+### Training
+- [Training Modes](guides/TRAINING_OVERVIEW.md#modes)
+- [Configuration](guides/TRAINING_OVERVIEW.md#configuration)
+- [Reward System](guides/TRAINING_OVERVIEW.md#rewards)
+- [State Management](guides/TRAINING_OVERVIEW.md#states)
+
+### Vision System
+- [Font Recognition](guides/VISION_SYSTEM.md#font-recognition)
+- [UI Detection](guides/VISION_SYSTEM.md#ui-detection)
+- [Game State Analysis](guides/VISION_SYSTEM.md#game-state)
+- [Performance Tuning](guides/VISION_SYSTEM.md#performance)
+
+### Web Monitoring
+- [Dashboard Setup](guides/WEB_MONITORING.md#setup)
+- [Real-time Updates](guides/WEB_MONITORING.md#updates)
+- [API Endpoints](guides/WEB_MONITORING.md#api)
+- [Custom Integration](guides/WEB_MONITORING.md#integration)
+
+### Development
+- [Code Style](guides/DEVELOPMENT.md#style)
+- [Testing](guides/DEVELOPMENT.md#testing)
+- [Documentation](guides/DEVELOPMENT.md#documentation)
+- [Contributing](guides/CONTRIBUTING.md)
+
+## 🎯 Project Goals
+
+1. **Training Efficiency**
+   - Fast, efficient training
+   - Multiple training modes
+   - Curriculum learning
+
+2. **Vision Processing**
+   - Accurate text recognition
+   - Reliable state detection
+   - Performance optimization
+
+3. **Monitoring**
+   - Real-time visualization
+   - Performance tracking
+   - API integration
+
+4. **Development**
+   - Clean code structure
+   - Comprehensive tests
+   - Clear documentation
+
+## 🚀 Next Steps
+
+1. **Get Started**
+   - [Installation Guide](guides/INSTALLATION.md)
+   - [Quick Start Guide](guides/QUICKSTART.md)
+
+2. **Learn More**
+   - [Training Overview](guides/TRAINING_OVERVIEW.md)
+   - [Vision System](guides/VISION_SYSTEM.md)
+   - [Web Monitoring](guides/WEB_MONITORING.md)
+
+3. **Contribute**
+   - [Contributing Guide](guides/CONTRIBUTING.md)
+   - [Development Guide](guides/DEVELOPMENT.md)
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
 # 🎮 Pokemon Crystal RL - Unified Training System
 
 **An advanced Pokemon Crystal AI training platform with multiple training modes, optimized streaming, and intelligent LLM integration.**
