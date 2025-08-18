@@ -6,6 +6,60 @@ from enum import Enum
 class PyBoyGameState(Enum):
     """Game states for Pokemon Crystal."""
     UNKNOWN = "unknown"
+    
+    @classmethod
+    def from_str(cls, state_str: str) -> "PyBoyGameState":
+        """Convert string to enum value."""
+        try:
+            return cls(state_str)
+        except ValueError:
+            return cls.UNKNOWN
+            
+    @property
+    def allows_input(self) -> bool:
+        """Whether the state allows user input."""
+        non_input_states = {
+            PyBoyGameState.LOADING,
+            PyBoyGameState.INTRO_SEQUENCE,
+            PyBoyGameState.CUTSCENE,
+            PyBoyGameState.EVOLUTION
+        }
+        return self not in non_input_states
+        
+    @property
+    def requires_action(self) -> bool:
+        """Whether the state requires an action to progress."""
+        action_required_states = {
+            PyBoyGameState.TITLE_SCREEN,
+            PyBoyGameState.NEW_GAME,
+            PyBoyGameState.CONTINUE,
+            PyBoyGameState.DIALOGUE,
+            PyBoyGameState.MENU
+        }
+        return self in action_required_states
+        
+    @property
+    def is_interactive(self) -> bool:
+        """Whether the state is part of normal gameplay interaction."""
+        interactive_states = {
+            PyBoyGameState.OVERWORLD,
+            PyBoyGameState.BATTLE,
+            PyBoyGameState.MENU,
+            PyBoyGameState.PC_BOX,
+            PyBoyGameState.PAUSE
+        }
+        return self in interactive_states
+        
+    @property
+    def is_transitional(self) -> bool:
+        """Whether the state is transitional."""
+        transitional_states = {
+            PyBoyGameState.LOADING,
+            PyBoyGameState.INTRO_SEQUENCE,
+            PyBoyGameState.CUTSCENE,
+            PyBoyGameState.EVOLUTION
+        }
+        return self in transitional_states
     LOADING = "loading"
     INTRO_SEQUENCE = "intro_sequence"
     TITLE_SCREEN = "title_screen"
@@ -27,6 +81,11 @@ class PyBoyGameState(Enum):
     POKEMON_LIST = "pokemon_list"
     POKEMON_STATS = "pokemon_stats"
     POKEMON_MOVES = "pokemon_moves"
+    EVOLUTION = "evolution"
+    NEW_GAME = "new_game"
+    PC_BOX = "pc_box"
+    CONTINUE = "continue"
+    PAUSE = "pause"
 
 
 class GameStateTransition:

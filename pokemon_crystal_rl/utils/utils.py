@@ -1,20 +1,66 @@
 """Utility functions for Pokemon Crystal RL trainer."""
 
 from typing import Dict, Optional
-from pokemon_crystal_rl.core.game_states import PyBoyGameState, STATE_TRANSITION_REWARDS
+from ..core.game_states import PyBoyGameState, STATE_TRANSITION_REWARDS
 
 
-def calculate_reward(current_state: Dict, previous_state: Dict) -> float:
+def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None) -> float:
     """Calculate reward based on state transitions and progress."""
+    if previous_state is None:
+        return 0.0
+    
     reward = 0.0
     
-    # Base survival reward
-    reward += 0.1
+    # Movement rewards
+    if ('player_x' in current_state and 'player_x' in previous_state and
+        'player_y' in current_state and 'player_y' in previous_state):
+        
+        if (current_state['player_x'] != previous_state['player_x'] or
+            current_state['player_y'] != previous_state['player_y']):
+            reward += 0.1  # Movement reward
     
-    # Time penalty (small penalty to encourage efficiency)
-    reward -= 0.002
+    # Map change reward
+    if ('player_map' in current_state and 'player_map' in previous_state and
+        current_state['player_map'] != previous_state['player_map']):
+        reward += 1.0
     
-    # Add stuck penalty if applicable
+    # Money rewards
+    if 'money' in current_state and 'money' in previous_state:
+        money_diff = current_state['money'] - previous_state['money']
+        if money_diff > 0:
+            reward += 0.5  # Gaining money
+        elif money_diff < 0:
+            reward -= 0.2  # Losing money
+    
+    # Battle rewards
+    if 'in_battle' in current_state and 'in_battle' in previous_state:
+        if current_state['in_battle'] and not previous_state['in_battle']:
+            reward += 0.5  # Battle start
+        elif not current_state['in_battle'] and previous_state['in_battle']:
+            reward += 1.0  # Battle end
+        elif ('enemy_hp' in current_state and 'enemy_hp' in previous_state and
+              current_state['enemy_hp'] < previous_state['enemy_hp']):
+            reward += 0.3  # Dealing damage
+    
+    # Pokemon level up rewards
+    if 'party' in current_state and 'party' in previous_state:
+        for curr_poke, prev_poke in zip(current_state['party'], previous_state['party']):
+            if ('level' in curr_poke and 'level' in prev_poke and
+                curr_poke['level'] > prev_poke['level']):
+                reward += 2.0  # Level up reward
+    
+    # Badge rewards
+    if 'badges' in current_state and 'badges' in previous_state:
+        badges_gained = current_state['badges'] - previous_state['badges']
+        if badges_gained > 0:
+            reward += 10.0 * badges_gained
+    
+    # Dialog progression reward
+    if ('text_box_active' in current_state and 'text_box_active' in previous_state and
+        not current_state['text_box_active'] and previous_state['text_box_active']):
+        reward += 0.2
+    
+    # Stuck penalty
     if 'consecutive_same_screens' in current_state:
         stuck_count = current_state['consecutive_same_screens']
         

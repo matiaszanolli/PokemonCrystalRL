@@ -17,9 +17,9 @@ except ImportError:
     from memory_map import MEMORY_ADDRESSES
 
 try:
-    from pokemon_crystal_rl.utils.utils import calculate_reward, preprocess_state
+    from pokemon_crystal_rl.utils import calculate_reward, preprocess_state
 except ImportError:
-    from utils.utils import calculate_reward, preprocess_state
+    from pokemon_crystal_rl.utils import calculate_reward, preprocess_state
 
 try:
     from pokemon_crystal_rl.monitoring.monitoring_client import MonitoringClient
@@ -317,9 +317,9 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         # Read 3 bytes of BCD money data
         for i in range(3):
             byte_val = self.pyboy.memory[money_addr + i]
-            tens = (byte_val >> 4) & 0xF
-            ones = byte_val & 0xF
-            money = money * 100 + tens * 10 + ones
+            high = (byte_val >> 4) & 0xF
+            low = byte_val & 0xF
+            money = money * 100 + high * 10 + low
         
         return money
     
@@ -627,7 +627,7 @@ class PyBoyPokemonCrystalEnv(gym.Env):
 # Register the environment
 gym.register(
     id='PyBoyPokemonCrystal-v0',
-    entry_point='core.pyboy_env:PyBoyPokemonCrystalEnv',
+    entry_point='pokemon_crystal_rl.core.pyboy_env:PyBoyPokemonCrystalEnv',
     max_episode_steps=10000,
     reward_threshold=1000.0,  # Target score for considering the environment solved
 )
