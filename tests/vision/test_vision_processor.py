@@ -12,10 +12,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from vision.vision_processor import (
-    PokemonVisionProcessor, VisualContext, DetectedText, GameUIElement,
-    test_vision_processor
-)
+from pokemon_crystal_rl.vision.vision_processor import UnifiedVisionProcessor, VisualContext, DetectedText, GameUIElement
 
 
 class TestDataClasses(unittest.TestCase):

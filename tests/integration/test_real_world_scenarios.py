@@ -28,21 +28,12 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-try:
-    from pokemon_trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
-except ImportError:
-    # Fallback import path
-    from scripts.pokemon_trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
+from pokemon_crystal_rl.trainer import (
+    UnifiedPokemonTrainer,
+    TrainingConfig,
+    TrainingMode,
+    LLMBackend
+)
 
 
 @pytest.mark.integration
@@ -64,8 +55,8 @@ class TestSmolLM2GameplayScenarios:
         )
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def gameplay_trainer(self, mock_pyboy_class, gameplay_config):
         """Create trainer for gameplay scenarios"""
         mock_pyboy_instance = Mock()
@@ -105,7 +96,7 @@ class TestSmolLM2GameplayScenarios:
             return screens[screen_type]
         
         with patch.object(trainer, '_simple_screenshot_capture', side_effect=get_next_screen):
-            with patch('trainer.llm_manager.ollama') as mock_ollama:
+            with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
                 # Mock LLM to give reasonable responses
                 def mock_generate(*args, **kwargs):
                     prompt = kwargs.get('prompt', '')
@@ -216,8 +207,8 @@ class TestStateTransitionScenarios:
     """Test gameplay across multiple state transitions"""
     
     @pytest.fixture
-    @patch('trainer.llm_manager.ollama')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.llm_manager.ollama')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def state_transition_trainer(self, mock_pyboy_class):
         """Create trainer for state transition testing"""
         mock_pyboy_instance = Mock()
@@ -344,8 +335,8 @@ class TestExtendedPlayScenarios:
     """Test extended gameplay performance and stability"""
     
     @pytest.fixture
-    @patch('trainer.llm_manager.ollama')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.llm_manager.ollama')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def extended_trainer(self, mock_pyboy_class):
         """Create trainer for extended play testing"""
         mock_pyboy_instance = Mock()
@@ -532,8 +523,8 @@ class TestMonitoredPlayScenarios:
     """Test gameplay with active monitoring"""
     
     @pytest.fixture
-    @patch('trainer.llm_manager.ollama')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.llm_manager.ollama')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def monitored_trainer(self, mock_pyboy_class):
         """Create trainer with monitoring enabled"""
         mock_pyboy_instance = Mock()

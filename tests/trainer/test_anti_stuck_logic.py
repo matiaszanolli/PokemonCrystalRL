@@ -23,23 +23,14 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-try:
-    from trainer.trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
-    from trainer.game_state import get_unstuck_action
-    from trainer.training_strategies import handle_dialogue
-except ImportError:
-    # Fallback import path
-    from scripts.pokemon_trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
+from pokemon_crystal_rl.trainer import (
+    UnifiedPokemonTrainer,
+    TrainingConfig,
+    TrainingMode,
+    LLMBackend
+)
+from pokemon_crystal_rl.trainer.game_state_detection import get_unstuck_action
+from pokemon_crystal_rl.trainer.training_strategies import handle_dialogue
 
 
 @pytest.mark.anti_stuck

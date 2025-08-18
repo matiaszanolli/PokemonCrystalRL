@@ -13,7 +13,7 @@ import cv2
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
+from pokemon_crystal_rl.vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
 
 
 class TestGBCPalette(unittest.TestCase):

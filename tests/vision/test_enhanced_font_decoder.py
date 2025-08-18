@@ -11,10 +11,10 @@ from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, List, Tuple, Optional
 import cv2
 
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from pokemon_crystal_rl.vision.enhanced_font_decoder import ROMFontDecoder, test_rom_font_decoder
 
-from vision.enhanced_font_decoder import ROMFontDecoder, test_rom_font_decoder
+# Create mock templates for fixture setup
+mock_templates = {'A': np.ones((8, 8), dtype=np.uint8) * 255}
 
 
 class TestROMFontDecoder(unittest.TestCase):
@@ -52,15 +52,14 @@ class TestROMFontDecoder(unittest.TestCase):
         mock_templates = {'A': np.ones((8, 8), dtype=np.uint8) * 255}
         np.savez_compressed(template_path, **mock_templates)
         
-        with patch('vision.enhanced_font_decoder.PokemonCrystalFontExtractor') as mock_extractor:
+    with patch('pokemon_crystal_rl.vision.enhanced_font_decoder.PokemonCrystalFontExtractor') as mock_extractor:
             mock_instance = MagicMock()
             mock_instance.load_font_templates.return_value = mock_templates
             mock_extractor.return_value = mock_instance
             
             decoder = ROMFontDecoder(template_path=template_path)
             
-        self.assertEqual(decoder.template_path, template_path)
-        
+    self.assertEqual(decoder.template_path, template_path)
     def test_initialization_with_rom_path(self):
         """Test initialization with ROM path"""
         rom_path = "/test/rom.gbc"
@@ -812,7 +811,7 @@ class TestROMFontDecoderIntegration(unittest.TestCase):
         """Test the standalone test function"""
         # Should not raise exception
         try:
-            with patch('vision.enhanced_font_decoder.ROMFontDecoder') as mock_decoder_class:
+            with patch('pokemon_crystal_rl.vision.enhanced_font_decoder.ROMFontDecoder') as mock_decoder_class:
                 mock_decoder = MagicMock()
                 mock_decoder.font_templates = {'A': np.eye(8), 'O': np.ones((8, 8)), ' ': np.zeros((8, 8)), '!': np.eye(8)}
                 mock_decoder.recognize_character.return_value = ('A', 0.95)

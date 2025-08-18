@@ -11,10 +11,9 @@ import time
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from trainer.trainer import UnifiedPokemonTrainer
-from trainer.config import TrainingConfig, TrainingMode
-from monitoring.trainer_monitor_bridge_patched import TrainerWebMonitorBridge, create_integrated_monitoring_system
-from monitoring.web_monitor import PokemonRLWebMonitor
+from pokemon_crystal_rl.trainer import UnifiedPokemonTrainer, TrainingConfig, TrainingMode
+from pokemon_crystal_rl.monitoring.trainer_monitor_bridge import TrainerWebMonitorBridge, create_integrated_monitoring_system
+from pokemon_crystal_rl.monitoring.web_monitor import PokemonRLWebMonitor
 
 
 def create_fixed_trainer():

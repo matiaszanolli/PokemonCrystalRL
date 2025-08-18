@@ -13,7 +13,7 @@ from typing import Dict, List, Tuple, Optional
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from vision.rom_font_extractor import PokemonCrystalFontExtractor, FontTile, extract_pokemon_crystal_fonts
+from pokemon_crystal_rl.vision.rom_font_extractor import PokemonCrystalFontExtractor, FontTile, extract_pokemon_crystal_fonts
 
 
 class TestFontTile(unittest.TestCase):

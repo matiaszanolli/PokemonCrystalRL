@@ -25,21 +25,12 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-try:
-    from trainer.trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
-except ImportError:
-    # Fallback import path
-    from scripts.pokemon_trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
+from pokemon_crystal_rl.trainer.trainer import (
+    UnifiedPokemonTrainer,
+    TrainingConfig,
+    TrainingMode,
+    LLMBackend
+)
 
 
 @pytest.mark.enhanced_prompting
@@ -60,8 +51,8 @@ class TestEnhancedLLMPrompting:
         )
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class, mock_config):
         """Create trainer with mocked PyBoy for LLM testing"""
         mock_pyboy_instance = Mock()
@@ -76,7 +67,7 @@ class TestEnhancedLLMPrompting:
         screenshot = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         
         # Mock ollama to capture the prompt used
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -103,7 +94,7 @@ class TestEnhancedLLMPrompting:
         
         test_states = ["dialogue", "overworld", "menu", "battle", "title_screen"]
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -124,7 +115,7 @@ class TestEnhancedLLMPrompting:
     
     def test_temperature_configuration_by_state(self, trainer):
         """Test temperature settings vary by game state"""
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -150,7 +141,7 @@ class TestEnhancedLLMPrompting:
     @pytest.mark.temperature
     def test_temperature_based_action_variety(self, trainer):
         """Test that higher temperatures produce more varied actions"""
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             # Mock responses for different temperatures
             low_temp_responses = ['5', '5', '5', '5', '5']  # Always A button
             high_temp_responses = ['5', '1', '3', '2', '7']  # Varied actions
@@ -198,7 +189,7 @@ class TestEnhancedLLMPrompting:
             "5 because it's A",     # With justification
         ]
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
             for response in test_responses:
@@ -222,7 +213,7 @@ class TestEnhancedLLMPrompting:
             "action",              # Word only
         ]
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
             for response in invalid_responses:
@@ -244,7 +235,7 @@ class TestEnhancedLLMPrompting:
         # When stuck, should use fallback action
         with patch.object(trainer.game_state_detector, 'is_stuck', return_value=True):
             with patch.object(trainer.game_state_detector, 'detect_game_state', return_value="dialogue"):
-                with patch('trainer.llm_manager.ollama') as mock_ollama:
+                with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
                     mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
                     action = trainer.llm_manager.get_llm_action_with_vision(screenshot, 100)
         
@@ -254,7 +245,7 @@ class TestEnhancedLLMPrompting:
     def test_prompt_effectiveness_tracking(self, trainer):
         """Test tracking of prompt effectiveness"""
         # This would test the system's ability to learn which prompts work better
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -298,8 +289,8 @@ class TestMultiModelLLMSupport:
             )
         }
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def test_model_specific_configurations(self, mock_pyboy_class, trainer_configs):
         """Test that different models get appropriate configurations"""
         mock_pyboy_instance = Mock()
@@ -323,8 +314,8 @@ class TestMultiModelLLMSupport:
                 assert hasattr(trainer.llm_manager, 'model') or hasattr(trainer, 'llm_manager')
                 # Would test specific model configurations
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_fallback_mechanism(self, mock_pyboy_class):
         """Test fallback to rule-based when LLM fails"""
         mock_pyboy_instance = Mock()
@@ -339,7 +330,7 @@ class TestMultiModelLLMSupport:
         trainer = UnifiedPokemonTrainer(config)
         
         # Mock LLM failure
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.side_effect = Exception("LLM unavailable")
             
             # Should fallback to rule-based
@@ -368,8 +359,8 @@ class TestPromptPerformanceOptimizations:
     """Test performance optimizations in prompting system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -388,7 +379,7 @@ class TestPromptPerformanceOptimizations:
         screenshot = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         state = "dialogue"
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -408,7 +399,7 @@ class TestPromptPerformanceOptimizations:
         """Test that LLM calls respect the configured interval"""
         trainer.config.llm_interval = 3  # Every 3 actions
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
@@ -431,7 +422,7 @@ class TestPromptPerformanceOptimizations:
         
         states = ["dialogue", "overworld", "menu", "battle", "title_screen"]
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
