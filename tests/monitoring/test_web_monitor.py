@@ -8,7 +8,7 @@ to verify everything is working correctly.
 import time
 import threading
 import numpy as np
-from web_monitor import PokemonRLWebMonitor, create_dashboard_templates
+from pokemon_crystal_rl.monitoring.web_monitor import PokemonRLWebMonitor, create_dashboard_templates
 
 
 def generate_mock_screenshot():
