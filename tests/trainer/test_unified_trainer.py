@@ -108,14 +108,24 @@ class TestUnifiedPokemonTrainerInit:
         assert trainer.pyboy is not None
     
 @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', False)
-def test_initialization_no_pyboy(self, mock_config):
+def test_initialization_no_pyboy(mock_config):
     """Test initialization when PyBoy is not available"""
     with pytest.raises(RuntimeError, match="PyBoy not available"):
         UnifiedPokemonTrainer(mock_config)
-    
+
 @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-def test_logging_setup(self, mock_pyboy_class, mock_config):
+@patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+def test_logging_setup(mock_pyboy_class, mock_config):
+    """Test logging system initialization"""
+    mock_pyboy_instance = Mock()
+    mock_pyboy_class.return_value = mock_pyboy_instance
+
+    trainer = UnifiedPokemonTrainer(mock_config)
+
+    assert hasattr(trainer, 'logger')
+    assert trainer.logger.name == 'pokemon_trainer'
+    assert trainer.logger.level == logging.DEBUG
+    assert len(trainer.logger.handlers) >= 1  # At least console handler
         """Test logging system initialization"""
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -580,7 +590,7 @@ class TestTrainingModes:
     @pytest.fixture
     @patch('trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', False)
-    def test_initialization_no_pyboy(self, mock_config):
+    def test_initialization_no_pyboy(self, mock_pyboy_class, mock_config):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
@@ -892,10 +902,10 @@ class TestWebMonitoringEnhancements:
             debug_mode=True
         )
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('http.server.HTTPServer')
-    def test_enhanced_web_initialization(self, mock_http_server, mock_pyboy_class, web_trainer_config):
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.web_server.HTTPServer')
+    def test_web_server_initialization(self, mock_http_server, mock_pyboy_class, web_trainer_config):
         """Test enhanced web server initialization"""
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -1160,9 +1170,9 @@ class TestUnifiedTrainerOptimizations:
     """Test performance optimizations in unified trainer"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    def optimized_trainer(self, mock_pyboy_class):
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    def test_initialization_no_pyboy(self, mock_config):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
         mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)

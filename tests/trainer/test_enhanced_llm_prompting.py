@@ -289,7 +289,7 @@ class TestMultiModelLLMSupport:
             )
         }
     
-@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def test_model_specific_configurations(self, mock_pyboy_class, trainer_configs):
         """Test that different models get appropriate configurations"""
@@ -314,7 +314,7 @@ class TestMultiModelLLMSupport:
                 assert hasattr(trainer.llm_manager, 'model') or hasattr(trainer, 'llm_manager')
                 # Would test specific model configurations
     
-@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_fallback_mechanism(self, mock_pyboy_class):
         """Test fallback to rule-based when LLM fails"""
@@ -359,7 +359,7 @@ class TestPromptPerformanceOptimizations:
     """Test performance optimizations in prompting system"""
     
     @pytest.fixture
-@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()

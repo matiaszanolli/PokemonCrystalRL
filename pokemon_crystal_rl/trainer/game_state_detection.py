@@ -158,3 +158,32 @@ class GameStateDetector:
         # Check right side for menu
         right_side = screen[:, -50:, :]
         return (np.mean(right_side) < 100) or (np.mean(right_side) > 200)
+
+
+def get_unstuck_action(step: int, stuck_level: int) -> int:
+    """Get appropriate action to escape stuck states.
+    
+    Args:
+        step: Current step number
+        stuck_level: Current stuck counter level
+        
+    Returns:
+        Action ID from 1-8
+    """
+    # Basic movement pattern for low stuck levels
+    if stuck_level <= 2:
+        pattern = [1, 2, 5, 4, 3]  # UP, DOWN, A, LEFT, RIGHT
+        return pattern[step % len(pattern)]
+    
+    # More varied pattern for moderate stuck levels
+    if stuck_level <= 5:
+        pattern = [1, 5, 2, 5, 3, 5, 4, 5, 6]  # Movement + A button + B
+        return pattern[step % len(pattern)]
+    
+    # Aggressive pattern for high stuck levels
+    if stuck_level <= 10:
+        pattern = [1, 5, 2, 6, 3, 5, 4, 6, 7, 8]  # All actions
+        return pattern[step % len(pattern)]
+    
+    # Very stuck - use pseudo-random pattern
+    return (step % 8) + 1  # 1-8

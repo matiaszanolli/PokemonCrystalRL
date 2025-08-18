@@ -30,7 +30,7 @@ from pokemon_crystal_rl.trainer import (
     LLMBackend
 )
 from pokemon_crystal_rl.trainer.game_state_detection import get_unstuck_action
-from pokemon_crystal_rl.trainer.training_strategies import handle_dialogue
+from pokemon_crystal_rl.trainer.training_strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
 
 
 @pytest.mark.anti_stuck

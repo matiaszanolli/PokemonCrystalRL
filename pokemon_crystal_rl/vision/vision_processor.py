@@ -398,4 +398,53 @@ class ROMFontDecoder:
         # Initialize as before, implementation from enhanced_font_decoder.py
         pass
 
-    # Rest of the ROMFontDecoder implementation...
+# Rest of the ROMFontDecoder implementation...
+
+
+def test_vision_processor():
+    """Test vision processor functionality."""
+    print("\n👁️ Testing Vision Processor Features...")
+    
+    # Create test processor
+    print("📊 Initializing vision processor:")
+    start_time = time.time()
+    processor = UnifiedVisionProcessor()
+    print(f"   Initialization: {(time.time() - start_time)*1000:.1f}ms")
+    
+    # Create test screen with text
+    test_screen = np.ones((144, 160, 3), dtype=np.uint8) * 240  # White background
+    
+    # Add test text region
+    text_region = test_screen[108:144, 8:152]  # Bottom dialogue area
+    text_region[:] = [240, 240, 255]  # Light blue
+    
+    # Add test UI elements
+    health_bar = test_screen[16:24, 100:140]  # Health bar area
+    health_bar[:] = [96, 200, 96]  # Green
+    
+    menu = test_screen[40:100, 120:152]  # Menu area
+    menu[:] = [200, 200, 240]  # Light blue
+    
+    # Process test screen
+    start_time = time.time()
+    context = processor.process_screenshot(test_screen)
+    print(f"   Processing time: {(time.time() - start_time)*1000:.1f}ms")
+    
+    # Check results
+    print("   Screen analysis:")
+    print(f"     Type: {context.screen_type}")
+    print(f"     Game phase: {context.game_phase}")
+    print(f"     UI elements: {len(context.ui_elements)}")
+    print(f"     Text regions: {len(context.detected_text)}")
+    print(f"     Summary: {context.visual_summary}")
+    
+    # Test cache functionality
+    start_time = time.time()
+    cached_context = processor.process_screenshot(test_screen)
+    print(f"   Cached processing: {(time.time() - start_time)*1000:.1f}ms")
+    
+    # Get stats
+    stats = processor.get_stats()
+    print("   Performance stats:")
+    print(f"     Cache hit rate: {stats['cache_hits']/(stats['cache_hits'] + stats['cache_misses']):.1%}")
+    print(f"     Total attempts: {stats['total_attempts']}")
