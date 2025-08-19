@@ -42,12 +42,12 @@ def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None)
         reward += min(0.001 * money_diff, 0.5)  # Cap at 0.5
     elif money_diff < 0:
         reward -= 0.2  # Small penalty for losing money
-    
+
     # HP loss/gain penalties/rewards
     prev_hp = previous_state.get('player_hp', 0)
-    if curr_hp < prev_hp:
-        reward -= 0.5 * (prev_hp - curr_hp)  # HP loss penalty
-    elif curr_hp <= 0:
+    if player_hp < prev_hp:
+        reward -= 0.5 * (prev_hp - player_hp)  # HP loss penalty
+    elif player_hp <= 0:
         reward -= 50.0  # Major penalty for fainting
     
     # Movement and exploration rewards
@@ -58,21 +58,22 @@ def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None)
     prev_x = previous_state.get('player_x', 0)
     prev_y = previous_state.get('player_y', 0)
     
+    # Calculate distance moved
+    distance_moved = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+    
+    # Apply movement rewards
     if curr_map != prev_map:
         reward += 5.0  # Major reward for discovering new areas
-    else:
-        # Position change bonus (encourage movement within maps)
-        distance_moved = abs(curr_x - prev_x) + abs(curr_y - prev_y)
-        if distance_moved > 0:
-            reward += 0.1  # Small reward for movement
+    elif distance_moved > 0:
+        reward += 0.1  # Small reward for movement
     
     # Battle rewards
-    curr_battle = current_state.get('in_battle', 0)
-    prev_battle = previous_state.get('in_battle', 0)
+    curr_battle = current_state.get('in_battle', 0) or current_state.get('game_state') == 'battle'
+    prev_battle = previous_state.get('in_battle', 0) or previous_state.get('game_state') == 'battle'
     if curr_battle and not prev_battle:
         reward += 2.0  # Reward for entering battle
     elif not curr_battle and prev_battle:
-        if curr_hp > 0:
+        if player_hp > 0:
             reward += 5.0  # Major reward for winning battle
     elif curr_battle and ('enemy_hp' in current_state and 'enemy_hp' in previous_state and
           current_state['enemy_hp'] < previous_state['enemy_hp']):
@@ -104,7 +105,7 @@ def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None)
         ('intro_sequence', 'new_game_menu'): 3.0,
         ('new_game_menu', 'overworld'): 10.0,
         ('dialogue', 'overworld'): 1.0,
-        ('menu', 'overworld'): 2.0,
+        ('menu', 'overworld'): 2.0,  # Apply both this and menu exit bonus
         ('overworld', 'battle'): 2.0,
         ('battle', 'overworld'): 3.0,
         ('loading', 'overworld'): 1.0,
@@ -133,12 +134,14 @@ def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None)
     
     # Progress momentum rewards
     progress_indicators = [
-        curr_level > prev_level,
-        curr_exp > prev_exp,
-        curr_money > prev_money,
-        curr_map != prev_map,
-        distance_moved > 0,
-        curr_party_count > prev_party_count
+        curr_level > prev_level,  # Level up
+        curr_exp > prev_exp,      # Exp gain
+        curr_money > prev_money,   # Money gain
+        curr_map != prev_map,      # Map change
+        distance_moved > 0,        # Movement
+        curr_party_count > prev_party_count,  # Party growth
+        curr_battle and not prev_battle,  # Battle entry
+        not curr_battle and prev_battle and player_hp > 0  # Battle victory
     ]
     
     progress_count = sum(progress_indicators)

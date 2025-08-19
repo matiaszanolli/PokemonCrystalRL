@@ -24,7 +24,7 @@ from pokemon_crystal_rl.core.pyboy_env import PyBoyPokemonCrystalEnv
 class TestStuckDetectionPenalties:
     """Test stuck detection penalty system"""
     
-def test_no_penalty_for_normal_gameplay(self):
+    def test_no_penalty_for_normal_gameplay(self):
         """Test that normal gameplay doesn't trigger stuck penalties"""
         current_state = {
             'player_hp': 100,
@@ -73,7 +73,7 @@ def test_no_penalty_for_normal_gameplay(self):
         assert rewards[1] > rewards[2]  # Light penalty vs medium penalty
         assert rewards[3] > rewards[4]  # Medium vs severe penalty (>25 stuck)
     
-def test_severe_stuck_penalty(self):
+    def test_severe_stuck_penalty(self):
         """Test severe penalty for being very stuck"""
         current_state = {
             'player_hp': 100,
@@ -106,7 +106,7 @@ def test_severe_stuck_penalty(self):
 class TestMenuProgressRewards:
     """Test menu navigation and progress rewards"""
     
-def test_menu_entry_reward(self):
+    def test_menu_entry_reward(self):
         """Test reward for entering menu successfully"""
         current_state = {
             'player_hp': 100,
@@ -131,7 +131,7 @@ def test_menu_entry_reward(self):
         expected_reward = 0.1 + 1.0 - 0.002
         assert 1.095 <= reward <= 1.1
     
-def test_menu_exit_reward(self):
+    def test_menu_exit_reward(self):
         """Test reward for successfully exiting menu"""
         current_state = {
             'player_hp': 100,
@@ -157,6 +157,7 @@ def test_menu_exit_reward(self):
         # Time penalty: -0.002
         expected_reward = 0.1 + 2.0 + 2.0 + 0.05 - 0.002
         assert 4.145 <= reward <= 4.15
+    
 
 
 @pytest.mark.enhanced_rewards
@@ -206,7 +207,7 @@ class TestStateTransitionBonuses:
         # Should get base reward + large state transition bonus (10.0)
         assert reward > 10.0
     
-def test_battle_completion_reward(self):
+    def test_battle_completion_reward(self):
         """Test reward for successfully completing battle"""
         current_state = {
             'player_hp': 80,  # Lost some HP but survived
@@ -311,7 +312,7 @@ class TestActionDiversityRewards:
 class TestProgressMomentumRewards:
     """Test progress momentum and compound progress rewards"""
     
-def test_compound_progress_bonus(self):
+    def test_compound_progress_bonus(self):
         """Test bonus for multiple types of progress in one step"""
         current_state = {
             'player_hp': 100,
@@ -354,7 +355,7 @@ def test_compound_progress_bonus(self):
         expected_reward = 0.1 + 10.0 + 5.0 + 0.5 + 5.0 + 0.1 + 0.05 + 0.5 - 0.002
         assert 21.2 <= reward <= 21.3
     
-def test_no_compound_bonus_for_single_progress(self):
+    def test_no_compound_bonus_for_single_progress(self):
         """Test no compound bonus for just one type of progress"""
         current_state = {
             'player_hp': 100,
@@ -389,7 +390,7 @@ def test_no_compound_bonus_for_single_progress(self):
 class TestEnhancedRewardIntegration:
     """Test enhanced reward system integration with environment"""
     
-    @patch('core.pyboy_env.PyBoy')
+    @patch('pokemon_crystal_rl.core.pyboy_env.PyBoy')
     def test_environment_tracks_enhanced_state(self, mock_pyboy_class):
         """Test that environment properly tracks enhanced reward state"""
         # Mock PyBoy instance
@@ -450,7 +451,7 @@ class TestEnhancedRewardIntegration:
     def test_stuck_detection_integration(self):
         """Test stuck detection in environment step"""
         # Create a simple mock environment that will trigger stuck detection
-        with patch('core.pyboy_env.PyBoy') as mock_pyboy_class:
+with patch('pokemon_crystal_rl.core.pyboy_env.PyBoy') as mock_pyboy_class:
             mock_pyboy = Mock()
             # Create comprehensive mock memory for second test too
             mock_memory = {}
