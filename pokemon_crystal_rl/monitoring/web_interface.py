@@ -40,6 +40,12 @@ except ImportError:
     from game_streamer import GameStreamComponent
 
 
+__all__ = ['TrainingWebServer', 'WebInterface']
+
+
+TrainingWebServer = WebInterface  # Alias for compatibility
+
+
 class WebInterface:
     """
     Modern web interface with real-time updates

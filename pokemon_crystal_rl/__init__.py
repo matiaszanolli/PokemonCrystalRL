@@ -8,6 +8,7 @@ Also includes LLM-based agents when their dependencies are available.
 """
 
 # Core components
+# Import core components that should always be available
 from pokemon_crystal_rl.core.pyboy_env import PyBoyPokemonCrystalEnv
 from pokemon_crystal_rl.vision.vision_enhanced_training import VisionEnhancedTrainingSession
 from pokemon_crystal_rl.monitoring.monitoring_client import MonitoringClient

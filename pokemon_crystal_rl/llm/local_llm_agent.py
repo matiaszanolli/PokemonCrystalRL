@@ -14,10 +14,10 @@ import ollama
 import numpy as np
 
 try:
-    from ..core.pyboy_env import PyBoyPokemonCrystalEnv
+    from ...core.pyboy_env import PyBoyPokemonCrystalEnv
 except ImportError:
     try:
-        from core.pyboy_env import PyBoyPokemonCrystalEnv
+        from ..core.pyboy_env import PyBoyPokemonCrystalEnv
     except ImportError:
         # Create a stub if PyBoyPokemonCrystalEnv is not available
         class PyBoyPokemonCrystalEnv:
@@ -412,6 +412,28 @@ def test_local_llm_agent():
     print("💭 Memory summary:", json.dumps(memory, indent=2))
     
     print("\n✅ Local LLM agent test completed!")
+
+
+class LLMManager:
+    """Manager class for interfacing with local LLM"""
+    
+    def __init__(self, model: str = None, interval: int = 10):
+        """Initialize the LLM manager.
+        
+        Args:
+            model: Name of the local LLM model to use
+            interval: How often to query the LLM
+        """
+        self.model = model
+        self.interval = interval
+        self.agent = LocalLLMPokemonAgent(model_name=model)
+        self.response_times = []
+        self.window_size = 10
+    
+    def get_action(self) -> int:
+        """Get the next action from the LLM."""
+        # Mock action for now - this will be implemented later
+        return 5  # Default to A button
 
 
 if __name__ == "__main__":

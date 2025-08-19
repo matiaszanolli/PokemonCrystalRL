@@ -11,130 +11,141 @@ def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None)
     
     reward = 0.0
     
-    # Movement rewards
-    if ('player_x' in current_state and 'player_x' in previous_state and
-        'player_y' in current_state and 'player_y' in previous_state):
-        
-        if (current_state['player_x'] != previous_state['player_x'] or
-            current_state['player_y'] != previous_state['player_y']):
-            reward += 0.1  # Movement reward
+    # Base survival reward (small positive reward for staying alive)
+    player_hp = current_state.get('player_hp', 0)
+    if player_hp > 0:
+        reward += 0.1
     
-    # Map change reward
-    if ('player_map' in current_state and 'player_map' in previous_state and
-        current_state['player_map'] != previous_state['player_map']):
-        reward += 1.0
+    # Level progression reward
+    curr_level = current_state.get('player_level', 1)
+    prev_level = previous_state.get('player_level', 1)
+    if curr_level > prev_level:
+        reward += 10.0 * (curr_level - prev_level)
     
-    # Money rewards
-    if 'money' in current_state and 'money' in previous_state:
-        money_diff = current_state['money'] - previous_state['money']
-        if money_diff > 0:
-            reward += 0.5  # Gaining money
-        elif money_diff < 0:
-            reward -= 0.2  # Losing money
-    
-    # Battle rewards
-    if 'in_battle' in current_state and 'in_battle' in previous_state:
-        if current_state['in_battle'] and not previous_state['in_battle']:
-            reward += 0.5  # Battle start
-        elif not current_state['in_battle'] and previous_state['in_battle']:
-            reward += 1.0  # Battle end
-        elif ('enemy_hp' in current_state and 'enemy_hp' in previous_state and
-              current_state['enemy_hp'] < previous_state['enemy_hp']):
-            reward += 0.3  # Dealing damage
-    
-    # Pokemon level up rewards
-    if 'party' in current_state and 'party' in previous_state:
-        for curr_poke, prev_poke in zip(current_state['party'], previous_state['party']):
-            if ('level' in curr_poke and 'level' in prev_poke and
-                curr_poke['level'] > prev_poke['level']):
-                reward += 2.0  # Level up reward
+    # Experience gain reward
+    curr_exp = current_state.get('player_exp', 0)
+    prev_exp = previous_state.get('player_exp', 0)
+    if curr_exp > prev_exp:
+        reward += min(0.01 * (curr_exp - prev_exp), 5.0)  # Cap at 5.0
     
     # Badge rewards
     if 'badges' in current_state and 'badges' in previous_state:
         badges_gained = current_state['badges'] - previous_state['badges']
         if badges_gained > 0:
-            reward += 10.0 * badges_gained
+            reward += 100.0 * badges_gained  # Major reward for badge acquisition
     
-    # Dialog progression reward
-    if ('text_box_active' in current_state and 'text_box_active' in previous_state and
-        not current_state['text_box_active'] and previous_state['text_box_active']):
-        reward += 0.2
+    # Money rewards
+    curr_money = current_state.get('money', 0)
+    prev_money = previous_state.get('money', 0)
+    money_diff = curr_money - prev_money
+    if money_diff > 0:
+        reward += min(0.001 * money_diff, 0.5)  # Cap at 0.5
+    elif money_diff < 0:
+        reward -= 0.2  # Small penalty for losing money
     
-    # Stuck penalty
-    if 'consecutive_same_screens' in current_state:
-        stuck_count = current_state['consecutive_same_screens']
+    # HP loss/gain penalties/rewards
+    prev_hp = previous_state.get('player_hp', 0)
+    if curr_hp < prev_hp:
+        reward -= 0.5 * (prev_hp - curr_hp)  # HP loss penalty
+    elif curr_hp <= 0:
+        reward -= 50.0  # Major penalty for fainting
+    
+    # Movement and exploration rewards
+    curr_map = current_state.get('player_map', 0)
+    prev_map = previous_state.get('player_map', 0)
+    curr_x = current_state.get('player_x', 0)
+    curr_y = current_state.get('player_y', 0)
+    prev_x = previous_state.get('player_x', 0)
+    prev_y = previous_state.get('player_y', 0)
+    
+    if curr_map != prev_map:
+        reward += 5.0  # Major reward for discovering new areas
+    else:
+        # Position change bonus (encourage movement within maps)
+        distance_moved = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+        if distance_moved > 0:
+            reward += 0.1  # Small reward for movement
+    
+    # Battle rewards
+    curr_battle = current_state.get('in_battle', 0)
+    prev_battle = previous_state.get('in_battle', 0)
+    if curr_battle and not prev_battle:
+        reward += 2.0  # Reward for entering battle
+    elif not curr_battle and prev_battle:
+        if curr_hp > 0:
+            reward += 5.0  # Major reward for winning battle
+    elif curr_battle and ('enemy_hp' in current_state and 'enemy_hp' in previous_state and
+          current_state['enemy_hp'] < previous_state['enemy_hp']):
+        reward += 0.3  # Reward for dealing damage
+    
+    # Party growth rewards
+    curr_party_count = current_state.get('party_count', 0)
+    prev_party_count = previous_state.get('party_count', 0)
+    if curr_party_count > prev_party_count:
+        reward += 20.0 * (curr_party_count - prev_party_count)  # Major reward for catching Pokemon
+    
+    # Stuck detection penalties (escalating)
+    consecutive_same_screens = current_state.get('consecutive_same_screens', 0)
+    if consecutive_same_screens > 10:
+        stuck_penalty = -0.1 * (consecutive_same_screens - 10)
+        reward += stuck_penalty
         
-        if stuck_count >= 25:
-            reward -= 2.0  # Severe stuck penalty
-        elif stuck_count >= 15:
-            reward -= 1.0  # Moderate stuck penalty
-        elif stuck_count >= 10:
-            reward -= 0.5  # Light stuck penalty
-        
-        # Additional escalating penalty
-        if stuck_count >= 20:
-            reward -= stuck_count * 0.1  # Scales with stuck duration
+        if consecutive_same_screens >= 25:
+            reward -= 2.0  # Severe penalty for being very stuck
     
-    # Add state transition rewards if applicable
-    if 'game_state' in current_state and 'game_state' in previous_state:
-        try:
-            from_state = PyBoyGameState(previous_state['game_state'])
-            to_state = PyBoyGameState(current_state['game_state'])
-            
-            # Check if this transition has a defined reward
-            transition = (from_state, to_state)
-            if transition in STATE_TRANSITION_REWARDS:
-                reward += STATE_TRANSITION_REWARDS[transition]
-        except ValueError:
-            # Invalid state name, ignore transition reward
-            pass
+    # Menu and state transition rewards
+    curr_game_state = current_state.get('game_state', 'unknown')
+    prev_game_state = previous_state.get('game_state', 'unknown')
     
-    # Add rewards for progress indicators
-    if 'player_level' in current_state and 'player_level' in previous_state:
-        if current_state['player_level'] > previous_state['player_level']:
-            reward += 10.0  # Level up bonus
-            
-    if 'player_exp' in current_state and 'player_exp' in previous_state:
-        exp_gain = current_state['player_exp'] - previous_state['player_exp']
-        if exp_gain > 0:
-            reward += min(exp_gain * 0.01, 5.0)  # Cap at 5.0
-            
-    if 'money' in current_state and 'money' in previous_state:
-        money_gain = current_state['money'] - previous_state['money']
-        if money_gain > 0:
-            reward += min(money_gain * 0.001, 0.5)  # Cap at 0.5
-            
-    if all(key in current_state and key in previous_state 
-           for key in ['player_map', 'player_x', 'player_y']):
-        # Map change bonus
-        if current_state['player_map'] != previous_state['player_map']:
-            reward += 5.0
-        # Position change within same map
-        elif (current_state['player_x'] != previous_state['player_x'] or
-              current_state['player_y'] != previous_state['player_y']):
-            reward += 0.1
+    # Define state transition rewards
+    state_transitions = {
+        ('title_screen', 'new_game_menu'): 5.0,
+        ('title_screen', 'intro_sequence'): 3.0,
+        ('intro_sequence', 'new_game_menu'): 3.0,
+        ('new_game_menu', 'overworld'): 10.0,
+        ('dialogue', 'overworld'): 1.0,
+        ('menu', 'overworld'): 2.0,
+        ('overworld', 'battle'): 2.0,
+        ('battle', 'overworld'): 3.0,
+        ('loading', 'overworld'): 1.0,
+        ('unknown', 'overworld'): 2.0
+    }
     
-    # Compound progress bonus - if multiple progress indicators changed
-    progress_changes = sum([
-        1 if 'player_level' in current_state and 'player_level' in previous_state and
-        current_state['player_level'] > previous_state['player_level'] else 0,
-        1 if 'player_exp' in current_state and 'player_exp' in previous_state and
-        current_state['player_exp'] > previous_state['player_exp'] else 0,
-        1 if 'money' in current_state and 'money' in previous_state and
-        current_state['money'] > previous_state['money'] else 0,
-        1 if 'player_map' in current_state and 'player_map' in previous_state and
-        current_state['player_map'] != previous_state['player_map'] else 0
-    ])
+    # Apply state transition rewards
+    transition = (prev_game_state, curr_game_state)
+    if transition in state_transitions:
+        reward += state_transitions[transition]
     
-    if progress_changes >= 2:
-        reward += progress_changes * 1.0  # Bonus for multiple progress types
+    # Menu interaction rewards
+    if curr_game_state == 'menu' and prev_game_state != 'menu':
+        reward += 1.0  # Reward for entering menu
+    elif curr_game_state != 'menu' and prev_game_state == 'menu':
+        reward += 2.0  # Larger reward for successfully exiting menu
     
     # Action diversity rewards/penalties
-    if 'recent_actions' in current_state and len(current_state['recent_actions']) >= 5:
-        unique_actions = len(set(current_state['recent_actions'][-5:]))
+    recent_actions = current_state.get('recent_actions', [])
+    if len(recent_actions) >= 5:
+        unique_actions = len(set(recent_actions[-5:]))
         if unique_actions >= 3:
             reward += 0.05  # Bonus for action variety
         elif unique_actions == 1:
-            reward -= 0.02  # Penalty for repetitive actions
+            reward -= 0.02  # Penalty for repeating actions
+    
+    # Progress momentum rewards
+    progress_indicators = [
+        curr_level > prev_level,
+        curr_exp > prev_exp,
+        curr_money > prev_money,
+        curr_map != prev_map,
+        distance_moved > 0,
+        curr_party_count > prev_party_count
+    ]
+    
+    progress_count = sum(progress_indicators)
+    if progress_count >= 2:
+        reward += 0.1 * progress_count  # Bonus for compound progress
+    
+    # Small time penalty to encourage efficiency
+    reward -= 0.002
     
     return reward

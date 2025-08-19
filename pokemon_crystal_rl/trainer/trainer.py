@@ -72,6 +72,30 @@ class UnifiedPokemonTrainer:
         self.setup_web_server()
         self.setup_llm_manager()
         self.stats = self.init_stats()
+        
+        # Training control
+        self._training_active = False
+        self.adaptive_llm_interval = self.config.llm_interval
+        self.llm_response_times = []
+        
+        # Screen tracking
+        self.last_screen_hash = None
+        self.consecutive_same_screens = 0
+        self.screen_width = 160
+        self.screen_height = 144
+        
+        # Data bus for component communication
+        from pokemon_crystal_rl.monitoring.data_bus import get_data_bus, DataType
+        self.data_bus = get_data_bus()
+        if self.data_bus:
+            self.data_bus.register_component(
+                "trainer",
+                {
+                    "type": "core",
+                    "mode": self.config.mode.value,
+                    "llm_backend": self.config.llm_backend.value if self.config.llm_backend else None
+                }
+            )
 
     def setup_logging(self):
         """Setup logging system."""
@@ -143,7 +167,7 @@ class UnifiedPokemonTrainer:
             return
 
         # Import here to avoid overhead when not using LLM features
-        from pokemon_crystal_rl.local_llm_agent import LLMManager
+        from pokemon_crystal_rl.llm.local_llm_agent import LLMManager
 
         try:
             self.llm_manager = LLMManager(
@@ -282,3 +306,80 @@ class UnifiedPokemonTrainer:
             return True
         except Exception:
             return False
+            
+    def _execute_synchronized_action(self, action: int) -> None:
+        """Execute action with screen monitoring and error handling."""
+        # Execute action with configurable frames per step
+        for _ in range(self.config.frames_per_action):
+            try:
+                self.pyboy.send_input(action)
+                self.pyboy.tick()
+                
+                # Get and process screen every few frames
+                if _ % (self.config.frames_per_action // 4) == 0:
+                    screen_data = np.array(self.pyboy.screen_image())
+                    
+                    # Check for stuck states
+                    screen_hash = self._get_screen_hash(screen_data)
+                    if screen_hash == self.last_screen_hash:
+                        self.consecutive_same_screens += 1
+                    else:
+                        self.consecutive_same_screens = 0
+                        self.last_screen_hash = screen_hash
+                    
+                    # If stuck, try to get unstuck
+                    if self.consecutive_same_screens > 10:
+                        unstuck_action = self._get_unstuck_action(self.stats['total_actions'])
+                        self.pyboy.send_input(unstuck_action)
+                        self.consecutive_same_screens = 0
+                    
+                    # Detect and handle special states
+                    game_state = self._detect_game_state(screen_data)
+                    if game_state == 'dialogue':
+                        dialogue_action = self._handle_dialogue(self.stats['total_actions'])
+                        if dialogue_action != action:
+                            self.pyboy.send_input(dialogue_action)
+                    elif game_state == 'intro':
+                        title_action = self._handle_title_screen(self.stats['total_actions'])
+                        if title_action != action:
+                            self.pyboy.send_input(title_action)
+                
+            except Exception as e:
+                self.logger.error(f"Error during action execution: {e}")
+                self.error_count['total_errors'] += 1
+                break
+    
+    def _capture_and_queue_screen(self) -> None:
+        """Capture and queue the current game screen."""
+        try:
+            # Capture screen data
+            screen = np.array(self.pyboy.screen_image())
+            
+            # Convert to standard format
+            screen_rgb = self._convert_screen_format(screen)
+            
+            # Resize if configured
+            if self.config.screen_resize and screen_rgb.shape[:2] != self.config.screen_resize:
+                from cv2 import resize, INTER_NEAREST
+                screen_rgb = resize(
+                    screen_rgb,
+                    self.config.screen_resize,
+                    interpolation=INTER_NEAREST
+                )
+            
+            # Publish to data bus if available
+            if self.data_bus:
+                self.data_bus.publish(
+                    DataType.GAME_SCREEN,
+                    {
+                        "screen": screen_rgb,
+                        "timestamp": time.time(),
+                        "frame": self.pyboy.frame_count,
+                        "action": self.stats['total_actions']
+                    },
+                    "trainer"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Error capturing screen: {e}")
+            self.error_count['capture_errors'] += 1
