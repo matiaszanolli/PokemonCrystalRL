@@ -39,8 +39,8 @@ class TestScreenHashDetection:
     """Test screen hash-based stuck detection system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         """Create trainer for anti-stuck testing"""
         mock_pyboy_instance = Mock()
@@ -156,8 +156,8 @@ class TestIntelligentRecoveryActions:
     """Test intelligent recovery action patterns"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -266,8 +266,8 @@ class TestStateAwareAntiStuck:
     """Test state-aware anti-stuck logic"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -352,8 +352,8 @@ class TestAntiStuckPerformance:
     """Test performance characteristics of anti-stuck system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -440,8 +440,8 @@ class TestAntiStuckIntegration:
     """Test integration of anti-stuck logic with full system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -462,8 +462,7 @@ class TestAntiStuckIntegration:
         """Test anti-stuck works with LLM system"""
         trainer.config.llm_backend = LLMBackend.SMOLLM2
         trainer.config.llm_interval = 5
-        
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
+        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}  # Always A button
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             

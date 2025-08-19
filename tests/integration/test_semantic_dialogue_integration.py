@@ -8,9 +8,9 @@ showing how semantic analysis enhances dialogue understanding and decision-makin
 
 import sys
 from pathlib import Path
-from pokemon_crystal_rl.vision.vision_processor import DetectedText, VisualContext
-from pokemon_crystal_rl.trainer.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
-from pokemon_crystal_rl.trainer.semantic_context_system import SemanticContextSystem, GameContext, DialogueIntent
+from pokemon_crystal_rl.core.vision_processor import DetectedText, VisualContext
+from pokemon_crystal_rl.core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
+from pokemon_crystal_rl.core.semantic_context_system import SemanticContextSystem, GameContext, DialogueIntent
 
 
 def test_semantic_dialogue_integration():

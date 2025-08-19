@@ -26,12 +26,49 @@ sys.path.insert(0, parent_dir)
 
 # Import with fallbacks for missing dependencies
 try:
-    from utils.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
-    from vision.vision_processor import DetectedText, VisualContext
-    from utils.semantic_context_system import GameContext
+    from pokemon_crystal_rl.core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
+    from pokemon_crystal_rl.core.vision_processor import DetectedText, VisualContext
+    from pokemon_crystal_rl.core.semantic_context_system import GameContext
 except ImportError:
     # Skip these tests if dependencies aren't available
     pytest.skip("Missing dependencies for dialogue state machine tests", allow_module_level=True)
+
+
+# Test fixtures
+@pytest.fixture
+def dialogue_machine(tmp_path):
+    """Create a dialogue state machine instance for testing"""
+    db_path = tmp_path / "test_dialogue.db"
+    machine = DialogueStateMachine(db_path=str(db_path))
+    return machine
+
+
+@pytest.fixture
+def sample_visual_context():
+    """Create a sample visual context for testing"""
+    text1 = DetectedText("Hello! How can I help you?", 0.95, (10, 10, 200, 30), "dialogue")
+    text2 = DetectedText("Yes", 0.98, (20, 60, 50, 80), "choice")
+    text3 = DetectedText("No", 0.98, (60, 60, 90, 80), "choice")
+    
+    return VisualContext(
+        screen_type="dialogue",
+        detected_text=[text1, text2, text3],
+        ui_elements=[],
+        dominant_colors=[(255, 255, 255)],
+        game_phase="dialogue_interaction",
+        visual_summary="Test dialogue with choices"
+    )
+
+
+@pytest.fixture
+def pokemon_selection_texts():
+    """Create sample texts for Pokemon selection"""
+    return [
+        DetectedText("Choose your starter Pokemon!", 0.95, (10, 10, 200, 30), "dialogue"),
+        DetectedText("Cyndaquil", 0.98, (20, 60, 90, 80), "choice"),
+        DetectedText("Totodile", 0.97, (100, 60, 160, 80), "choice"),
+        DetectedText("Chikorita", 0.96, (180, 60, 240, 80), "choice")
+    ]
 
 
 class TestDialogueStateTransitions:
@@ -704,8 +741,8 @@ class TestStateManagement:
             game_phase="dialogue_interaction",
             visual_summary="Second dialogue turn"
         )
-        
-        dialogue_machine.process_dialogue(second_context)
+
+        dialogue_machine.process_dialogue(second_context, game_state)
         
         # NPC type should persist
         if initial_npc:

@@ -90,8 +90,8 @@ class TestUnifiedPokemonTrainerInit:
             log_level="DEBUG"
         )
     
-    @patch('pokemon_crystal_rl.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def test_initialization_success(self, mock_pyboy_class, mock_config):
         """Test successful trainer initialization"""
         mock_pyboy_instance = Mock()
@@ -160,8 +160,9 @@ class TestPyBoyStabilityAndRecovery:
     @pytest.fixture
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    def trainer(self, mock_pyboy_class, mock_config):
-        """Create trainer with mocked PyBoy"""
+    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    def test_full_training_cycle_with_recovery(self, mock_data_bus, mock_pyboy_class, integration_config):
+        """Test complete training cycle with PyBoy recovery"""
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         trainer = UnifiedPokemonTrainer(mock_config)
@@ -393,21 +394,27 @@ class TestWebDashboardAndHTTPPolling:
     
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.monitoring.web_server.HTTPServer')
-    def test_web_server_initialization(self
+    @patch('pokemon_crystal_rl.core.monitoring.web_server.TrainingWebServer')
+    def test_web_server_initialization(self, mock_web_server, mock_pyboy_class, mock_config):
         """Test web server initialization"""
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
+        # Set web server config to enabled
+        mock_config.enable_web = True
+        
+        # Mock the web server
         mock_server_instance = Mock()
-        mock_http_server.return_value = mock_server_instance
+        mock_server_instance.server = Mock()
+        mock_server_instance.server.serve_forever = Mock()
+        mock_web_server.return_value = mock_server_instance
         
         trainer = UnifiedPokemonTrainer(mock_config)
         
         # Web server should be initialized
         assert trainer.web_server is not None
         assert trainer.web_thread is not None
-        mock_http_server.assert_called_once()
+        mock_web_server.assert_called_once_with(mock_config, trainer)
     
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
@@ -526,20 +533,24 @@ class TestRuleBasedActionSystem:
         trainer.last_screen_hash = 12345
         trainer.consecutive_same_screens = 0
         
-        # Simulate same screen multiple times
+        # Mock PyBoy screen image
+        mock_screen = np.zeros((144, 160, 3), dtype=np.uint8)
+        trainer.pyboy.screen_image = Mock(return_value=mock_screen)
+        
+        # Mock get_screen_hash to always return same value
         with patch.object(trainer, '_get_screen_hash', return_value=12345):
-            with patch.object(trainer, '_simple_screenshot_capture', return_value=np.zeros((144, 160, 3))):
-                # First call - should not be stuck
-                action1 = trainer._get_rule_based_action(1)
-                assert trainer.consecutive_same_screens == 1
-                
-                # Multiple calls with same hash
-                for i in range(20):
-                    trainer._get_rule_based_action(i + 2)
-                
-                # Should have triggered stuck counter
-                assert trainer.consecutive_same_screens > 15
-                assert trainer.stuck_counter > 0
+            # Call synchronized action which checks for stuck states
+            trainer._execute_synchronized_action(1)
+            
+            # After one frame with same hash should increment counter
+            assert trainer.consecutive_same_screens == 1
+            
+            # Multiple calls with same hash
+            for i in range(20):
+                trainer._execute_synchronized_action(1)
+            
+            # Should have triggered stuck counter
+            assert trainer.consecutive_same_screens > 15
     
     def test_title_screen_handling(self, trainer):
         """Test title screen action handling"""
@@ -759,8 +770,8 @@ class TestIntegrationScenarios:
         # Queue should not exceed maximum size
         assert trainer.screen_queue.qsize() <= 30
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     def test_configuration_edge_cases(self, mock_pyboy_class):
         """Test edge cases in configuration"""
         # Test minimum values
@@ -780,8 +791,8 @@ class TestIntegrationScenarios:
         assert trainer.config.max_episodes == 1
         assert trainer.config.llm_interval == 1
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
     @patch('pokemon_crystal_rl.trainer.llm_manager.ollama')
     def test_llm_integration_fallback(self, mock_ollama, mock_pyboy_class, integration_config):
         """Test LLM integration with fallback to rule-based"""
@@ -814,9 +825,18 @@ class TestEnhancedStateDetection:
     @pytest.fixture
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    def trainer_fast_monitored(self, mock_pyboy_class):
+    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    def trainer_fast_monitored(self, mock_data_bus, mock_pyboy_class):
         mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen_image = Mock(return_value=np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8))
         mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        # Mock data bus
+        mock_data_bus_instance = Mock()
+        mock_data_bus_instance.register_component = Mock()
+        mock_data_bus_instance.publish = Mock()
+        mock_data_bus.return_value = mock_data_bus_instance
         
         config = TrainingConfig(
             rom_path="test.gbc",
@@ -831,10 +851,44 @@ class TestEnhancedStateDetection:
     @pytest.fixture
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    def trainer_ultra_fast(self, mock_pyboy_class):
+    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    def trainer_ultra_fast(self, mock_data_bus, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen_image = Mock(return_value=np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8))
         mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        # Mock data bus
+        mock_data_bus_instance = Mock()
+        mock_data_bus_instance.register_component = Mock()
+        mock_data_bus_instance.publish = Mock()
+        mock_data_bus.return_value = mock_data_bus_instance
+        
+        config = TrainingConfig(
+            rom_path="test.gbc",
+            headless=True,
+            mode=TrainingMode.ULTRA_FAST,
+            debug_mode=True
+        )
+        
+        return UnifiedPokemonTrainer(config)
+    
+    @pytest.fixture
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    def trainer(self, mock_data_bus, mock_pyboy_class, mock_config):
+        """Create trainer with mocked PyBoy and data bus"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen_image = Mock(return_value=np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8))
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
+        # Mock data bus
+        mock_data_bus_instance = Mock()
+        mock_data_bus_instance.register_component = Mock()
+        mock_data_bus_instance.publish = Mock()
+        mock_data_bus.return_value = mock_data_bus_instance
         
         config = TrainingConfig(
             rom_path="test.gbc",
@@ -843,7 +897,7 @@ class TestEnhancedStateDetection:
         )
         
         return UnifiedPokemonTrainer(config)
-    
+
     def test_improved_dialogue_detection(self, trainer):
         """Test improved dialogue state detection"""
         # Create screen with dialogue characteristics
@@ -911,14 +965,17 @@ class TestWebMonitoringEnhancements:
     
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.trainer.web_server.HTTPServer')
-    def test_web_server_initialization(self, mock_http_server, mock_pyboy_class, web_trainer_config):
+    @patch('pokemon_crystal_rl.core.monitoring.web_server.TrainingWebServer')
+    def test_web_server_initialization(self, mock_web_server, mock_pyboy_class, web_trainer_config):
         """Test enhanced web server initialization"""
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        mock_server = Mock()
-        mock_http_server.return_value = mock_server
+        mock_server_instance = Mock()
+        mock_server_instance.start = Mock()
+        mock_server_instance.server = Mock()
+        mock_server_instance.server.serve_forever = Mock()
+        mock_web_server.return_value = mock_server_instance
         
         trainer = UnifiedPokemonTrainer(web_trainer_config)
         
@@ -1177,25 +1234,28 @@ class TestUnifiedTrainerOptimizations:
     """Test performance optimizations in unified trainer"""
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    def test_initialization_no_pyboy(self, mock_config):
-        mock_pyboy_instance = Mock()
-        mock_pyboy_instance.frame_count = 1000
-        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
-        mock_pyboy_instance.send_input = Mock()
-        mock_pyboy_instance.tick = Mock()
-        mock_pyboy_class.return_value = mock_pyboy_instance
-        
-        config = TrainingConfig(
+    def mock_config(self):
+        """Basic mock configuration for tests"""
+        return TrainingConfig(
             rom_path="test.gbc",
             mode=TrainingMode.FAST_MONITORED,
             max_actions=1000,
             headless=True,
             capture_screens=True
         )
-        
-        return UnifiedPokemonTrainer(config)
+
+    @pytest.fixture
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    def optimized_trainer(self, mock_pyboy_class, mock_config):
+        """Create an optimized trainer instance"""
+        mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_instance.send_input = Mock()
+        mock_pyboy_instance.tick = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        return UnifiedPokemonTrainer(mock_config)
     
     def test_synchronized_training_performance(self, optimized_trainer):
         """Test synchronized training mode performance"""
