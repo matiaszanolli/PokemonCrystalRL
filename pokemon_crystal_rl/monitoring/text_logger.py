@@ -15,27 +15,24 @@ from pathlib import Path
 import hashlib
 
 try:
-    from ..vision.vision_processor import DetectedText, VisualContext
+    from vision.vision_processor import DetectedText, VisualContext
 except ImportError:
-    try:
-        from vision.vision_processor import DetectedText, VisualContext
-    except ImportError:
-        # Create stub classes if vision processor is not available
-        class DetectedText:
-            def __init__(self, text, confidence, bbox, location):
-                self.text = text
-                self.confidence = confidence
-                self.bbox = bbox
-                self.location = location
-        
-        class VisualContext:
-            def __init__(self, screen_type, detected_text, ui_elements, dominant_colors, game_phase, visual_summary):
-                self.screen_type = screen_type
-                self.detected_text = detected_text or []
-                self.ui_elements = ui_elements or []
-                self.dominant_colors = dominant_colors or []
-                self.game_phase = game_phase
-                self.visual_summary = visual_summary
+    # Create stub classes if vision processor is not available
+    class DetectedText:
+        def __init__(self, text, confidence, bbox, location):
+            self.text = text
+            self.confidence = confidence
+            self.bbox = bbox
+            self.location = location
+    
+    class VisualContext:
+        def __init__(self, screen_type, detected_text, ui_elements, dominant_colors, game_phase, visual_summary):
+            self.screen_type = screen_type
+            self.detected_text = detected_text or []
+            self.ui_elements = ui_elements or []
+            self.dominant_colors = dominant_colors or []
+            self.game_phase = game_phase
+            self.visual_summary = visual_summary
 
 
 @dataclass
@@ -406,7 +403,7 @@ class PokemonTextLogger:
 
 def test_text_logger():
     """Test the text logger with sample data"""
-    from vision_processor import DetectedText, VisualContext
+    from vision.vision_processor import DetectedText, VisualContext
     
     # Create logger
     logger = PokemonTextLogger("test_text_logs")

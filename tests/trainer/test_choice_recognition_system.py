@@ -26,14 +26,14 @@ sys.path.insert(0, parent_dir)
 
 # Import with fallbacks for missing dependencies
 try:
-    from pokemon_crystal_rl.core.choice_recognition_system import (
+    from core.choice_recognition_system import (
         ChoiceRecognitionSystem, 
         RecognizedChoice, 
         ChoiceContext,
         ChoiceType,
         ChoicePosition
     )
-    from pokemon_crystal_rl.core.vision_processor import DetectedText, VisualContext
+    from vision.vision_processor import DetectedText, VisualContext
 except ImportError:
     # Skip these tests if dependencies aren't available
     pytest.skip("Missing dependencies for choice recognition tests", allow_module_level=True)

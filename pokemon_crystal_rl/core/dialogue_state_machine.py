@@ -13,6 +13,9 @@ from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
 import time
 
+from core.semantic_context_system import SemanticContextSystem
+from core.semantic_context_system import GameContext
+
 class DialogueState(Enum):
     """States for the dialogue state machine"""
     UNKNOWN = "unknown"
@@ -54,13 +57,12 @@ class DialogueStateMachine:
     
     def __init__(self, db_path: Optional[Union[str, Path]] = None, semantic_system: Optional['SemanticContextSystem'] = None):
         """Initialize dialogue state machine"""
-        from pokemon_crystal_rl.core.semantic_context_system import SemanticContextSystem
         
-        self.db_path = Path(db_path) if db_path else Path("dialogue.db")
-        self.semantic_system = semantic_system or SemanticContextSystem()
+        self.db_path: Path = Path(db_path) if db_path else Path("dialogue.db")
+        self.semantic_system: SemanticContextSystem = semantic_system or SemanticContextSystem()
         
-        self.current_state = DialogueState.IDLE
-        self.current_npc_type = NPCType.UNKNOWN
+        self.current_state: DialogueState = DialogueState.IDLE
+        self.current_npc_type: NPCType = NPCType.UNKNOWN
         self.current_context: Optional[DialogueContext] = None
         
         self.dialogue_history: List[str] = []
@@ -85,8 +87,8 @@ class DialogueStateMachine:
             return None
             
         # Extract choices
-        choices = [
-            text.text for text in visual_context.detected_text
+        choices: List[str] = [
+            text.text str for text in visual_context.detected_text
             if text.location == "choice"
         ]
             
@@ -113,10 +115,7 @@ class DialogueStateMachine:
         else:
             self.current_context.dialogue_history.extend(dialogue_texts)
             self.current_context.choices = choices
-        
-        # Create semantic analysis context
-        from pokemon_crystal_rl.core.semantic_context_system import GameContext
-        
+                
         context = GameContext(
             current_objective=game_state.get('objective'),
             player_progress=game_state.get('player', {}),

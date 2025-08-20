@@ -26,7 +26,7 @@ sys.path.insert(0, parent_dir)
 # Import with fallbacks for missing dependencies
 try:
     from core.semantic_context_system import SemanticContextSystem, GameContext
-    from core.vision_processor import DetectedText, VisualContext
+    from vision.vision_processor import DetectedText, VisualContext
 except ImportError:
     # Skip these tests if dependencies aren't available
     pytest.skip("Missing dependencies for semantic context system tests", allow_module_level=True)

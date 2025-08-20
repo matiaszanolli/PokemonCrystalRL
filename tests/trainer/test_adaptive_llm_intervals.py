@@ -48,7 +48,7 @@ class TestAdaptiveLLMIntervals:
         
         return UnifiedPokemonTrainer(config)
     
-    def test_adaptive_interval_initialization(self, trainer_with_llm):
+    def test_adaptive_interval_initialization(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test that adaptive interval system is properly initialized"""
         trainer = trainer_with_llm
         
@@ -68,7 +68,7 @@ class TestAdaptiveLLMIntervals:
         assert trainer.stats['llm_total_time'] == 0
         assert trainer.stats['llm_avg_time'] == 0
 
-    def test_track_llm_performance_single_call(self, trainer_with_llm):
+    def test_track_llm_performance_single_call(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test tracking a single LLM performance measurement"""
         trainer = trainer_with_llm
         
@@ -86,7 +86,7 @@ class TestAdaptiveLLMIntervals:
         # Interval should not change yet (need 10 calls)
         assert trainer.adaptive_llm_interval == trainer.config.llm_interval
 
-    def test_track_llm_performance_multiple_calls(self, trainer_with_llm):
+    def test_track_llm_performance_multiple_calls(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test tracking multiple LLM performance measurements"""
         trainer = trainer_with_llm
         
@@ -107,7 +107,7 @@ class TestAdaptiveLLMIntervals:
         assert abs(trainer.stats['llm_avg_time'] - expected_avg) < 0.001
 
     
-    def test_response_times_window_management(self, trainer_with_llm):
+    def test_response_times_window_management(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test that response times window is properly managed (max 20 entries)"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
@@ -147,7 +147,7 @@ class TestAdaptiveLLMIntervals:
         expected_new_interval = min(50, int(original_interval * 1.5))
         assert llm_manager.adaptive_llm_interval == expected_new_interval
     
-    def test_adaptive_interval_fast_llm_decrease(self, trainer_with_llm):
+    def test_adaptive_interval_fast_llm_decrease(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test that interval decreases when LLM calls are consistently fast"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
@@ -169,7 +169,7 @@ class TestAdaptiveLLMIntervals:
         expected_new_interval = max(trainer.config.llm_interval, int(20 * 0.8))
         assert llm_manager.adaptive_llm_interval == expected_new_interval
     
-    def test_adaptive_interval_adjustment_timing(self, trainer_with_llm):
+    def test_adaptive_interval_adjustment_timing(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test that interval adjustment only happens every 10 calls"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
@@ -189,7 +189,7 @@ class TestAdaptiveLLMIntervals:
         # Now interval should have increased
         assert llm_manager.adaptive_llm_interval > original_interval
     
-    def test_adaptive_interval_mixed_performance(self, trainer_with_llm):
+    def test_adaptive_interval_mixed_performance(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test adaptive interval with mixed fast/slow performance"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
@@ -209,7 +209,7 @@ class TestAdaptiveLLMIntervals:
         # Verify the average is in expected range
         assert 1.0 < avg_time < 3.0
     
-    def test_adaptive_interval_bounds_enforcement(self, trainer_with_llm):
+    def test_adaptive_interval_bounds_enforcement(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test that adaptive interval respects minimum and maximum bounds"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
@@ -234,7 +234,7 @@ class TestAdaptiveLLMIntervals:
         # Should not go below original config value
         assert llm_manager.adaptive_llm_interval >= trainer.config.llm_interval
     
-    def test_adaptive_interval_with_real_training_simulation(self, trainer_with_llm):
+    def test_adaptive_interval_with_real_training_simulation(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test adaptive intervals in a realistic training simulation"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
@@ -268,7 +268,7 @@ class TestAdaptiveLLMIntervals:
             
             print(f"Interval adaptation test: {initial_interval} -> {interval_after_slow} (slow) -> {interval_after_fast} (fast)")
     
-    def test_performance_tracking_overhead(self, trainer_with_llm):
+    def test_performance_tracking_overhead(self, trainer_with_llm: UnifiedPokemonTrainer):
         """Test that performance tracking itself has minimal overhead"""
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager

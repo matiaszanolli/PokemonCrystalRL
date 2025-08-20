@@ -5,7 +5,7 @@ memory_map.py - Memory addresses for Pokémon Crystal game state
 # Memory addresses for Pokémon Crystal (Game Boy Color)
 # These addresses may need to be verified/updated for your specific ROM version
 
-MEMORY_ADDRESSES = {
+MEMORY_ADDRESSES: dict[str, int] = {
     # Player position and map data
     'player_x': 0xDCB8,           # Player X coordinate
     'player_y': 0xDCB9,           # Player Y coordinate
@@ -82,7 +82,7 @@ MEMORY_ADDRESSES = {
 }
 
 # Additional derived values that can be calculated
-DERIVED_VALUES = {
+DERIVED_VALUES: dict[str, callable] = {
     'hp_percentage': lambda state: (
         state.get('player_hp', 0) / max(state.get('player_max_hp', 1), 1)
     ),
@@ -99,7 +99,7 @@ DERIVED_VALUES = {
 }
 
 # Map IDs for important locations (these may need verification)
-IMPORTANT_LOCATIONS = {
+IMPORTANT_LOCATIONS: dict[str, int] = {
     'NEW_BARK_TOWN': 1,
     'ROUTE_29': 2,
     'CHERRYGROVE_CITY': 3,
@@ -125,7 +125,7 @@ IMPORTANT_LOCATIONS = {
 }
 
 # Pokémon species IDs (first generation + some Johto)
-POKEMON_SPECIES = {
+POKEMON_SPECIES: dict[str, int] = {
     'BULBASAUR': 1,
     'IVYSAUR': 2,
     'VENUSAUR': 3,
@@ -150,7 +150,7 @@ POKEMON_SPECIES = {
 }
 
 # Status condition flags
-STATUS_CONDITIONS = {
+STATUS_CONDITIONS: dict[str, int] = {
     'NONE': 0x00,
     'SLEEP': 0x01,
     'POISON': 0x02,
@@ -161,7 +161,7 @@ STATUS_CONDITIONS = {
 }
 
 # Badge bit masks
-BADGE_MASKS = {
+BADGE_MASKS: dict[str, int] = {
     # Johto badges
     'ZEPHYR': 0x01,
     'HIVE': 0x02,
