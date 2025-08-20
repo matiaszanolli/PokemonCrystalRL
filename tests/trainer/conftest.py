@@ -43,4 +43,4 @@ def mock_llm_manager(monkeypatch):
     """Mock LocalLLMPokemonAgent to avoid import errors."""
     mock_agent = Mock()
     mock_agent.return_value = Mock()
-    monkeypatch.setattr('llm.local_llm_agent.LLMManager', mock_agent)
+    monkeypatch.setattr('trainer.llm_manager.LLMManager', mock_agent)

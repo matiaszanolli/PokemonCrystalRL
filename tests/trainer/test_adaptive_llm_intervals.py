@@ -29,8 +29,8 @@ class TestAdaptiveLLMIntervals:
     """Test the adaptive LLM interval system comprehensively"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')  # Correct import path
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)  # Correct import path
     def trainer_with_llm(self, mock_pyboy_class):
         """Create trainer with LLM backend for interval testing"""
         mock_pyboy_instance = Mock()
@@ -55,58 +55,57 @@ class TestAdaptiveLLMIntervals:
         # Check that LLM manager exists
         assert trainer.llm_manager is not None
         
-        # Check all required attributes exist in LLM manager
-        assert hasattr(trainer.llm_manager, 'llm_response_times')
-        assert hasattr(trainer.llm_manager, 'adaptive_llm_interval')
-        assert hasattr(trainer.llm_manager, '_track_llm_performance')
+        # Check all required attributes exist in TRAINER (not llm_manager)
+        assert hasattr(trainer, 'llm_response_times')
+        assert hasattr(trainer, 'adaptive_llm_interval')
+        assert hasattr(trainer, '_track_llm_performance')
         
         # Check initial values
-        assert trainer.llm_manager.llm_response_times == []
-        assert trainer.llm_manager.adaptive_llm_interval == trainer.config.llm_interval
-        assert 'llm_total_time' in trainer.llm_manager.stats
-        assert 'llm_avg_time' in trainer.llm_manager.stats
-        assert trainer.llm_manager.stats['llm_total_time'] == 0.0
-        assert trainer.llm_manager.stats['llm_avg_time'] == 0.0
-    
+        assert trainer.llm_response_times == []
+        assert trainer.adaptive_llm_interval == trainer.config.llm_interval
+        assert 'llm_total_time' in trainer.stats
+        assert 'llm_avg_time' in trainer.stats
+        assert trainer.stats['llm_total_time'] == 0
+        assert trainer.stats['llm_avg_time'] == 0
+
     def test_track_llm_performance_single_call(self, trainer_with_llm):
         """Test tracking a single LLM performance measurement"""
         trainer = trainer_with_llm
-        llm_manager = trainer.llm_manager
         
-        # Simulate first LLM call
-        llm_manager._track_llm_performance(2.5)
+        # Simulate first LLM call - use TRAINER method, not llm_manager
+        trainer._track_llm_performance(2.5)
         
         # Verify response times tracking
-        assert len(llm_manager.llm_response_times) == 1
-        assert llm_manager.llm_response_times[0] == 2.5
+        assert len(trainer.llm_response_times) == 1
+        assert trainer.llm_response_times[0] == 2.5
         
         # Verify stats update
-        assert llm_manager.stats['llm_total_time'] == 2.5
-        assert llm_manager.stats['llm_avg_time'] == 2.5
+        assert trainer.stats['llm_total_time'] == 2.5
+        assert trainer.stats['llm_avg_time'] == 2.5
         
         # Interval should not change yet (need 10 calls)
-        assert llm_manager.adaptive_llm_interval == trainer.config.llm_interval
-    
+        assert trainer.adaptive_llm_interval == trainer.config.llm_interval
+
     def test_track_llm_performance_multiple_calls(self, trainer_with_llm):
         """Test tracking multiple LLM performance measurements"""
         trainer = trainer_with_llm
-        llm_manager = trainer.llm_manager
         
         response_times = [1.0, 1.5, 2.0, 0.8, 1.2]
         
         for rt in response_times:
-            llm_manager._track_llm_performance(rt)
+            trainer._track_llm_performance(rt)  # Use trainer method
         
         # Verify all response times are tracked
-        assert len(llm_manager.llm_response_times) == 5
-        assert llm_manager.llm_response_times == response_times
+        assert len(trainer.llm_response_times) == 5
+        assert trainer.llm_response_times == response_times
         
         # Verify cumulative stats
         expected_total = sum(response_times)
         expected_avg = expected_total / len(response_times)
         
-        assert llm_manager.stats['llm_total_time'] == expected_total
-        assert abs(llm_manager.stats['llm_avg_time'] - expected_avg) < 0.001
+        assert trainer.stats['llm_total_time'] == expected_total
+        assert abs(trainer.stats['llm_avg_time'] - expected_avg) < 0.001
+
     
     def test_response_times_window_management(self, trainer_with_llm):
         """Test that response times window is properly managed (max 20 entries)"""

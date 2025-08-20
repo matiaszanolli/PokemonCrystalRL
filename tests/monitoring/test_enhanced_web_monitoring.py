@@ -42,11 +42,11 @@ try:
 except ImportError:
     # Fallback import path
     from scripts.pokemon_trainer import (
-        UnifiedPokemonTrainer,
         TrainingConfig,
         TrainingMode,
         LLMBackend
     )
+    from trainer import UnifiedPokemonTrainer
 
 
 @pytest.mark.web_monitoring
