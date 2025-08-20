@@ -18,8 +18,14 @@ import logging
 import threading
 from datetime import datetime
 from collections import defaultdict, deque
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from queue import Queue
+
+from .config import MonitorConfig
+from .error_handler import ErrorHandler, ErrorSeverity, RecoveryStrategy
+from .database import DatabaseManager
+from .training_state import TrainingState
 
 try:
     from flask import Flask, render_template, request, jsonify, send_from_directory
@@ -40,13 +46,31 @@ import numpy as np
 
 
 class UnifiedMonitor:
-    """Unified web monitoring server for Pokemon Crystal RL training."""
+    """Unified web monitoring server for Pokemon Crystal RL training.
     
-    def __init__(self, training_session=None, host='127.0.0.1', port=5000):
+    This implementation combines the best features from various monitoring implementations:
+    - Real-time WebSocket updates for game state, screenshots, and decisions
+    - Performance analytics and system monitoring
+    - Memory-efficient data management
+    - Comprehensive API endpoints
+    - Robust error handling and recovery
+    - Database integration for data persistence
+    """
+    
+    def __init__(self, config: MonitorConfig, training_session=None):
+        # Configuration
+        self.config = config
         self.training_session = training_session
-        self.host = host
-        self.port = port
+        self.host = '127.0.0.1'
+        self.port = config.web_port
         self.logger = logging.getLogger(__name__)
+        
+        # Database and error handling
+        self.db = DatabaseManager(Path(config.db_path)) if config else None
+        self.error_handler = ErrorHandler()
+        self.training_state = TrainingState.INITIALIZING
+        self.current_run_id = None
+        self.is_monitoring = False
         
         # Find template directory relative to this file
         template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'templates')
@@ -207,6 +231,56 @@ class UnifiedMonitor:
         """Stop the monitoring process."""
         self.is_monitoring = False
         self.logger.info("⏹️ Monitoring stopped")
+
+    def start_training(self, config: Optional[Dict[str, Any]] = None) -> str:
+        """Start a new training run."""
+        if self.training_state not in [TrainingState.INITIALIZING]:
+            raise RuntimeError("Training already in progress")
+        
+        if self.db:
+            self.current_run_id = self.db.start_training_run(config or {})
+        
+        self.training_state = TrainingState.RUNNING
+        self.start_monitoring()
+        return self.current_run_id
+    
+    def stop_training(self, final_reward: Optional[float] = None) -> None:
+        """Stop the current training run."""
+        if self.training_state != TrainingState.RUNNING:
+            return
+        
+        if self.db and self.current_run_id:
+            self.db.end_training_run(
+                self.current_run_id,
+                final_reward=final_reward
+            )
+        
+        self.training_state = TrainingState.COMPLETED
+        self.stop_monitoring()
+    
+    def pause_training(self) -> None:
+        """Pause the current training run."""
+        if self.training_state != TrainingState.RUNNING:
+            return
+        
+        self.training_state = TrainingState.PAUSED
+        if self.db and self.current_run_id:
+            self.db.update_run_status(
+                self.current_run_id,
+                status=str(self.training_state)
+            )
+    
+    def resume_training(self) -> None:
+        """Resume a paused training run."""
+        if self.training_state != TrainingState.PAUSED:
+            return
+        
+        self.training_state = TrainingState.RUNNING
+        if self.db and self.current_run_id:
+            self.db.update_run_status(
+                self.current_run_id,
+                status=str(self.training_state)
+            )
     
     def _monitoring_loop(self):
         """Main monitoring loop."""
@@ -371,8 +445,15 @@ def main():
         datefmt='%H:%M:%S'
     )
     
+    # Create monitor config
+    config = MonitorConfig(
+        web_port=args.port,
+        host=args.host,
+        debug=args.debug
+    )
+
     # Create and run monitor
-    monitor = UnifiedMonitor(host=args.host, port=args.port)
+    monitor = UnifiedMonitor(config=config)
     try:
         monitor.run(debug=args.debug)
     except KeyboardInterrupt:

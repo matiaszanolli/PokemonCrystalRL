@@ -11,7 +11,7 @@ import time
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from pokemon_crystal_rl.trainer import UnifiedPokemonTrainer, TrainingConfig, TrainingMode
+from pokemon_crystal_rl.core.trainer import UnifiedPokemonTrainer, TrainingConfig, TrainingMode
 from pokemon_crystal_rl.monitoring.trainer_monitor_bridge import TrainerWebMonitorBridge, create_integrated_monitoring_system
 from pokemon_crystal_rl.monitoring.web_monitor import PokemonRLWebMonitor
 

@@ -10,13 +10,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import tempfile
 
-from pokemon_crystal_rl.monitoring import (
-    MonitorConfig,
-    ErrorHandler,
-    ErrorSeverity,
-    RecoveryStrategy,
-)
 from pokemon_crystal_rl.monitoring.unified_monitor import UnifiedMonitor
+from pokemon_crystal_rl.monitoring import MonitorConfig, TrainingState
 
 class TestUnifiedMonitor:
     """Test suite for UnifiedMonitor class."""
@@ -126,3 +121,68 @@ class TestUnifiedMonitor:
             assert 'cpu_percent' in stats
             assert 'memory_percent' in stats
             assert 'disk_usage' in stats
+
+    def test_db_integration(self, tmp_path):
+        """Test database integration with MonitorConfig."""
+        config = MonitorConfig(
+            db_path=str(tmp_path / "test.db"),
+            static_dir=str(tmp_path / "static"),
+            web_port=8000
+        )
+        monitor = UnifiedMonitor(config=config)
+        
+        # Verify database initialization
+        assert monitor.db is not None
+        assert monitor.current_run_id is None
+        assert monitor.training_state == TrainingState.INITIALIZING
+        
+        # Clean up
+        monitor.stop_monitoring()
+
+    def test_training_state_management(self, monitor):
+        """Test training state management."""
+        assert monitor.training_state == TrainingState.INITIALIZING
+        
+        # Create mock training session
+        mock_session = Mock()
+        mock_session.get_stats.return_value = {
+            'episode': 1,
+            'total_reward': 100.0,
+            'steps': 50
+        }
+        
+        # Initialize with training session
+        monitor.training_session = mock_session
+        monitor.start_monitoring()
+        
+        # Let monitoring loop run briefly
+        time.sleep(0.1)
+        
+        # Verify stats were updated
+        assert 'episode' in monitor.current_stats
+        assert monitor.current_stats['episode'] == 1
+        
+        # Stop monitoring
+        monitor.stop_monitoring()
+
+    def test_error_handling(self, monitor):
+        """Test error handling functionality."""
+        assert monitor.error_handler is not None
+        
+        # Test error handling with monitoring
+        monitor.start_monitoring()
+        
+        # Simulate an error in the monitoring loop
+        with patch.object(monitor, '_update_training_stats') as mock_update:
+            mock_update.side_effect = Exception("Test error")
+            
+            # Let monitoring loop encounter the error
+            time.sleep(0.1)
+            
+            # Verify monitoring continues despite error
+            assert monitor.is_monitoring
+        
+        monitor.stop_monitoring()
+        
+        # Verify error handler state
+        assert monitor.error_handler is not None

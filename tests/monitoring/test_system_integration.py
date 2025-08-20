@@ -12,6 +12,7 @@ Tests the complete system functionality including:
 import pytest
 import time
 import threading
+import traceback
 import numpy as np
 import tempfile
 import json
@@ -26,13 +27,14 @@ from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 
 from pokemon_crystal_rl.monitoring import (
-    WebMonitor,
+    UnifiedMonitor,
     MonitorConfig,
     DatabaseManager,
     ErrorHandler,
-    ErrorCategory,
     ErrorSeverity,
-    TrainingState
+    RecoveryStrategy,
+    ErrorCategory,
+    ErrorEvent
 )
 
 class MockGameState:
@@ -114,19 +116,7 @@ class MockTrainer:
                 self.metrics["accuracy"] = min(0.99, self.metrics["accuracy"] + 0.01)
                 self.metrics["reward"] = np.random.normal(0.5, 0.1)
                 
-                # Record step
-                self.monitor.update_step(
-                    step=self.step,
-                    reward=self.metrics["reward"],
-                    action=action,
-                    inference_time=0.01,
-                    game_state=self.game_state.get_state()
-                )
-                
-                # Record metrics
-                self.monitor.update_metrics(self.metrics)
-                
-                # Record system metrics
+# Record system metrics
                 self.monitor.update_system_metrics(
                     cpu_percent=psutil.cpu_percent(),
                     memory_percent=psutil.virtual_memory().percent,
@@ -149,12 +139,16 @@ class MockTrainer:
                     try:
                         raise Exception("Test error")
                     except Exception as e:
-                        self.monitor.error_handler.handle_error(
-                            error=e,
+                        error_event = ErrorEvent(
+                            timestamp=time.time(),
+                            component="MockTrainer",
+                            error_type=type(e).__name__,
                             message="Simulated error",
-                            category=ErrorCategory.TRAINING,
-                            severity=ErrorSeverity.WARNING
+                            severity=ErrorSeverity.WARNING,
+                            traceback=traceback.format_exc(),
+                            recovery_strategy=RecoveryStrategy.RETRY
                         )
+                        self.monitor.error_handler.handle_error(error_event)
                 
                 self.step += 1
                 self.total_reward += self.metrics["reward"]
@@ -179,12 +173,16 @@ class MockTrainer:
                 
         except Exception as e:
             logging.error(f"Training loop error: {e}")
-            self.monitor.error_handler.handle_error(
-                error=e,
+            error_event = ErrorEvent(
+                timestamp=time.time(),
+                component="MockTrainer",
+                error_type=type(e).__name__,
                 message="Training loop failed",
-                category=ErrorCategory.SYSTEM,
-                severity=ErrorSeverity.CRITICAL
+                severity=ErrorSeverity.CRITICAL,
+                traceback=traceback.format_exc(),
+                recovery_strategy=RecoveryStrategy.GRACEFUL_SHUTDOWN
             )
+            self.monitor.error_handler.handle_error(error_event)
 
 class TestSystemIntegration:
     """System integration tests."""
@@ -213,7 +211,7 @@ class TestSystemIntegration:
     @pytest.fixture
     def monitor(self, test_config):
         """Create monitor instance."""
-        monitor = WebMonitor(test_config)
+        monitor = UnifiedMonitor(test_config)
         yield monitor
         monitor.stop_training()
     

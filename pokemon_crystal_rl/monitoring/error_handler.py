@@ -17,7 +17,17 @@ import signal
 import weakref
 from typing import Dict, Any, List, Optional, Callable, Type
 from dataclasses import dataclass, asdict
-from enum import Enum
+from enum import Enum, auto
+
+class ErrorCategory(Enum):
+    """Categories of errors that can occur."""
+    SYSTEM = auto()
+    DATABASE = auto()
+    NETWORK = auto()
+    TRAINING = auto()
+    MONITORING = auto()
+    UI = auto()
+    OTHER = auto()
 from collections import defaultdict, deque
 import functools
 
