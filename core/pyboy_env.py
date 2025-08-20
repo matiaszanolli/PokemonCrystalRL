@@ -425,13 +425,19 @@ class PyBoyPokemonCrystalEnv(gym.Env):
         except:
             return 0
 
-    def render(self, mode: str = 'human'):
+    def render(self, mode: str = None):
         """Render the environment."""
+        # Use the provided mode, or fall back to the instance's render_mode
+        render_mode = mode or self.render_mode
+        
         if self.pyboy is None:
+            # For testing without PyBoy, return appropriate values
+            if render_mode == 'rgb_array':
+                return np.zeros((144, 160, 3), dtype=np.uint8)
             return None
             
         try:
-            if mode == 'rgb_array':
+            if render_mode == 'rgb_array':
                 # First try to get the mock screen
                 if hasattr(self.pyboy, 'screen') and hasattr(self.pyboy.screen, 'ndarray'):
                     return self.pyboy.screen.ndarray
@@ -442,13 +448,19 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                         return np.array(screen)
                 # Fallback: create a dummy screen for testing
                 return np.zeros((144, 160, 3), dtype=np.uint8)
-            elif mode == 'human':
-                return None  # Always return None for human mode
+            elif render_mode == 'human':
+                if not self.headless:
+                    # PyBoy handles the display automatically when not in headless mode
+                    return None
+                else:
+                    return None
+            else:
+                return None
         except Exception as e:
             if self.debug_mode:
                 print(f"Warning: Error during rendering: {e}")
             # Return dummy screen for testing if rgb_array mode
-            if mode == 'rgb_array':
+            if render_mode == 'rgb_array':
                 return np.zeros((144, 160, 3), dtype=np.uint8)
         return None
 
