@@ -46,6 +46,10 @@ class GameStateDetector:
             hash_val = hash_val * 31 + mean
 
         return hash_val
+    
+    def is_stuck(self) -> bool:
+        """Check if the game appears to be stuck."""
+        return self.consecutive_same_screens > 20 or self.stuck_counter > 0
 
     def detect_game_state(self, screen: np.ndarray) -> str:
         """Detect game state from screen content."""
@@ -282,14 +286,12 @@ class PokemonTrainer:
 
     def setup_llm_manager(self):
         """Setup LLM manager if LLM backend is enabled."""
-        if not self.config.llm_backend:
+        if not self.config.llm_backend or self.config.llm_backend == LLMBackend.NONE:
             self.llm_manager = None
             return
 
-        # Import here to avoid overhead when not using LLM features
-        from trainer.llm_manager import LLMManager
-
         try:
+            from trainer.llm_manager import LLMManager
             self.llm_manager = LLMManager(
                 model=self.config.llm_backend.value,
                 interval=self.config.llm_interval

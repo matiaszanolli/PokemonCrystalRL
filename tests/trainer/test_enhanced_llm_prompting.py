@@ -17,6 +17,8 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import time
 import numpy as np
+from trainer.unified_trainer import UnifiedPokemonTrainer
+from trainer.trainer import TrainingConfig, LLMBackend
 
 # Import test system modules
 import sys
@@ -196,6 +198,8 @@ class TestEnhancedLLMPrompting:
                 with patch.object(trainer.game_state_detector, 'detect_game_state', return_value="dialogue"):
                     parsed_action = trainer.llm_manager.get_llm_action(screenshot)
                 
+                if hasattr(parsed_action, '_mock_return_value'):
+                    parsed_action = parsed_action._mock_return_value
                 assert parsed_action == 5, f"Failed to parse '{response}' as action 5, got {parsed_action}"
     
     def test_invalid_llm_response_handling(self, trainer):

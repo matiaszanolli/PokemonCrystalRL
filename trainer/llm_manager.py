@@ -245,3 +245,12 @@ class LLMManager:
             self.prompt_effectiveness[prompt]['successes'] += 1
         else:
             self.prompt_effectiveness[prompt]['failures'] += 1
+
+    def get_llm_action(self, screenshot: Optional[np.ndarray] = None) -> Optional[int]:
+        """Get LLM action with screenshot (for compatibility with tests)."""
+        return self.get_action(screenshot=screenshot)
+
+    def get_llm_action_with_vision(self, screenshot: np.ndarray, step: int) -> int:
+        """Get LLM action with vision processing."""
+        action = self.get_action(screenshot=screenshot, step=step)
+        return action if action is not None else self._get_fallback_action("overworld", 0)

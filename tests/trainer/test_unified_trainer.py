@@ -674,6 +674,7 @@ class TestTrainingModes:
         # Start time should remain the same
         assert trainer.stats['start_time'] == initial_time
 
+
 class TestIntegrationScenarios:
     """Integration tests for complete training scenarios"""
     
