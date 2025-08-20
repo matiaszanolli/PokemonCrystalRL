@@ -7,18 +7,18 @@ from enum import Enum, auto
 
 class PyBoyGameState(Enum):
     """Game states for Pokemon Crystal"""
-    UNKNOWN = auto()
-    TITLE_SCREEN = auto()
-    INTRO = auto()
-    OVERWORLD = auto()
-    MENU = auto()
-    DIALOGUE = auto()
-    BATTLE = auto()
-    EVOLUTION = auto()
-    TRANSITION = auto()
-    POKEMON_CENTER = auto()
-    SHOP = auto()
-    GAME_OVER = auto()
+    UNKNOWN = "unknown"
+    TITLE_SCREEN = "title_screen"
+    INTRO = "intro"
+    OVERWORLD = "overworld"
+    MENU = "menu"
+    DIALOGUE = "dialogue"
+    BATTLE = "battle"
+    EVOLUTION = "evolution"
+    TRANSITION = "transition"
+    POKEMON_CENTER = "pokemon_center"
+    SHOP = "shop"
+    GAME_OVER = "game_over"
     LOADING = "loading"
     INTRO_SEQUENCE = "intro_sequence"
     NEW_GAME_MENU = "new_game_menu"
@@ -35,6 +35,7 @@ class PyBoyGameState(Enum):
     PC_BOX = "pc_box"
     CONTINUE = "continue"
     PAUSE = "pause"
+    CUTSCENE = "cutscene" 
 
     @classmethod
     def from_str(cls, state_str: str) -> "PyBoyGameState":
@@ -50,6 +51,8 @@ class PyBoyGameState(Enum):
         non_input_states = {
             PyBoyGameState.LOADING,
             PyBoyGameState.INTRO,
+            PyBoyGameState.INTRO_SEQUENCE,
+            PyBoyGameState.CUTSCENE,
             PyBoyGameState.EVOLUTION
         }
         return self not in non_input_states
@@ -84,6 +87,7 @@ class PyBoyGameState(Enum):
         transitional_states = {
             PyBoyGameState.LOADING,
             PyBoyGameState.INTRO_SEQUENCE,
+            PyBoyGameState.CUTSCENE,
             PyBoyGameState.EVOLUTION
         }
         return self in transitional_states

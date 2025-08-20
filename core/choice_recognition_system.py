@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
 from enum import Enum
 import numpy as np
-from core.vision_processor import VisualContext
+from vision.vision_processor import VisualContext
 
 
 class ChoiceType(Enum):
