@@ -8,7 +8,7 @@ This package provides comprehensive monitoring tools:
 - System resource monitoring
 """
 
-from .data_bus import TrainingDataBus, DataType, get_data_bus
+from .data_bus import DataBus, DataType, get_data_bus
 from .unified_monitor import UnifiedMonitor
 from .game_streamer import GameStreamer
 from .monitoring_client import MonitoringClient
@@ -21,7 +21,7 @@ from .web_server import WebServer
 from .error_handler import ErrorHandler
 
 __all__ = [
-    'TrainingDataBus',
+    'DataBus',
     'DataType',
     'get_data_bus',
     'UnifiedMonitor',

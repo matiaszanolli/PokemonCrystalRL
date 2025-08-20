@@ -287,7 +287,7 @@ class PokemonTrainer:
             return
 
         # Import here to avoid overhead when not using LLM features
-        from pokemon_crystal_rl.llm.local_llm_agent import LLMManager
+        from trainer.llm_manager import LLMManager
 
         try:
             self.llm_manager = LLMManager(
