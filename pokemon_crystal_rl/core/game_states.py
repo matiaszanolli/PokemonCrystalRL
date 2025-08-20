@@ -6,18 +6,18 @@ from enum import Enum, auto
 
 class PyBoyGameState(Enum):
     """Game states for Pokemon Crystal"""
-    UNKNOWN = auto()
-    TITLE_SCREEN = auto()
-    INTRO = auto()
-    OVERWORLD = auto()
-    MENU = auto()
-    DIALOGUE = auto()
-    BATTLE = auto()
-    EVOLUTION = auto()
-    TRANSITION = auto()
-    POKEMON_CENTER = auto()
-    SHOP = auto()
-    GAME_OVER = auto()
+    UNKNOWN = "unknown"
+    TITLE_SCREEN = "title_screen"
+    INTRO = "intro"
+    OVERWORLD = "overworld"
+    MENU = "menu"
+    DIALOGUE = "dialogue"
+    BATTLE = "battle"
+    EVOLUTION = "evolution"
+    TRANSITION = "transition"
+    POKEMON_CENTER = "pokemon_center"
+    SHOP = "shop"
+    GAME_OVER = "game_over"
     LOADING = "loading"
     INTRO_SEQUENCE = "intro_sequence"
     NEW_GAME_MENU = "new_game_menu"
