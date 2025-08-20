@@ -29,7 +29,7 @@ sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
 from pokemon_crystal_rl.trainer import (
-    UnifiedPokemonTrainer,
+    PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend

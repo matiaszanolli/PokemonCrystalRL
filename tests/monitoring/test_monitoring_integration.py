@@ -22,7 +22,7 @@ from pokemon_crystal_rl.core.monitoring.data_bus import DataBus, DataType, init_
 from pokemon_crystal_rl.core.monitoring.web_server import TrainingWebServer
 from .mock_llm_manager import MockLLMManager
 from pokemon_crystal_rl.trainer import (
-    UnifiedPokemonTrainer,
+    PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend

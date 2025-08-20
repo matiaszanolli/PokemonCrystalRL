@@ -25,7 +25,7 @@ from typing import Optional
 # Add the parent directory to Python path to find the trainer module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from trainer import TrainingConfig, TrainingMode, LLMBackend, UnifiedPokemonTrainer
+from pokemon_crystal_rl.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
 
 # Make PyBoy available at module level for testing
 try:
@@ -358,7 +358,7 @@ def main():
     # Create and start trainer with comprehensive error handling
     start_time = time.time()
     try:
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = PokemonTrainer(config)
         trainer.start_training()
         
         # Display completion summary

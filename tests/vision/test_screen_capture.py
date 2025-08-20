@@ -6,20 +6,28 @@ Fix for blank screen issue - The trainer needs screen capture to be started.
 import os
 import sys
 import time
+import numpy as np
+from unittest.mock import Mock, patch
 
 # Add the parent directory to the Python path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from pokemon_crystal_rl.core.trainer import UnifiedPokemonTrainer, TrainingConfig, TrainingMode
-from pokemon_crystal_rl.monitoring.trainer_monitor_bridge import TrainerWebMonitorBridge, create_integrated_monitoring_system
-from pokemon_crystal_rl.monitoring.web_monitor import PokemonRLWebMonitor
+from pokemon_crystal_rl.trainer import PokemonTrainer
+from pokemon_crystal_rl.trainer import TrainingConfig, TrainingMode
+from pokemon_crystal_rl.monitoring.trainer_monitor_bridge import TrainerWebMonitorBridge
+from pokemon_crystal_rl.monitoring.web_monitor import WebMonitor
+from pokemon_crystal_rl.monitoring.config import MonitorConfig
 
 
-def create_fixed_trainer():
+def create_fixed_trainer(pyboy_mock):
     """Create a trainer with proper screen capture initialization"""
     print("🔧 Creating trainer with screen capture fix...")
     
+    # Create mock PyBoy instance
+    pyboy_mock.frame_count = 1000
+    pyboy_mock.screen.ndarray = Mock(return_value=np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8))
+
     # Create config with screen capture enabled
     config = TrainingConfig(
         mode=TrainingMode.FAST_MONITORED,
@@ -32,7 +40,7 @@ def create_fixed_trainer():
     )
     
     # Create trainer
-    trainer = UnifiedPokemonTrainer(config)
+    trainer = PokemonTrainer(config)
     
     # IMPORTANT: Start the screen capture thread manually
     if config.capture_screens:
@@ -43,13 +51,16 @@ def create_fixed_trainer():
     return trainer
 
 
-def test_fixed_streaming():
+@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+def test_fixed_streaming(mock_pyboy_class):
     """Test the fixed streaming system"""
     print("🧪 Testing Fixed Socket Streaming")
     print("=" * 60)
     
     # Create fixed trainer
-    trainer = create_fixed_trainer()
+    mock_pyboy_instance = Mock()
+    mock_pyboy_class.return_value = mock_pyboy_instance
+    trainer = create_fixed_trainer(mock_pyboy_instance)
     
     # Wait for first screenshot to be captured
     print("⏳ Waiting for first screenshot...")
@@ -89,7 +100,16 @@ def test_fixed_streaming():
     print("\n🌉 Testing with bridge...")
     
     # Create web monitor and bridge
-    web_monitor = PokemonRLWebMonitor()
+    config = MonitorConfig(
+        web_port=8000,
+        update_interval=0.1,
+        snapshot_interval=0.5,
+        db_path=":memory:",
+        max_events=1000,
+        max_snapshots=10,
+        debug=True
+    )
+    web_monitor = WebMonitor(config)
     bridge = TrainerWebMonitorBridge(trainer, web_monitor)
     
     # Start bridge

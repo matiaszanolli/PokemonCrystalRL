@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pokemon_crystal_rl.trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, UnifiedPokemonTrainer
+from pokemon_crystal_rl.trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
 
 @pytest.fixture
 def base_config():
@@ -21,7 +21,7 @@ def trainer_fast_monitored(base_config):
     with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy_class:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
-        trainer = UnifiedPokemonTrainer(base_config)
+        trainer = PokemonTrainer(base_config)
         return trainer
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def trainer_ultra_fast(base_config):
     with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy_class:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = PokemonTrainer(config)
         return trainer
 
 @pytest.fixture(autouse=True)

@@ -1,5 +1,5 @@
 """
-Bridge to connect UnifiedPokemonTrainer with PokemonRLWebMonitor.
+Bridge to connect PokemonTrainer with PokemonRLWebMonitor.
 
 This module solves the blank screen issue by connecting the trainer's screenshot
 capture system with the web monitor's WebSocket streaming system.
@@ -13,12 +13,13 @@ import io
 from typing import Optional, Dict, Any
 from PIL import Image
 
-from .web_monitor import PokemonRLWebMonitor
+from .web_monitor import WebMonitor
+from .config import MonitorConfig
 
 
 class TrainerWebMonitorBridge:
     """
-    Bridge class that connects UnifiedPokemonTrainer with PokemonRLWebMonitor.
+    Bridge class that connects PokemonTrainer with WebMonitor.
     
     Solves the blank screen issue by:
     1. Monitoring the trainer's latest_screen data
@@ -27,12 +28,12 @@ class TrainerWebMonitorBridge:
     4. Transferring training statistics between systems
     """
     
-    def __init__(self, trainer, web_monitor: PokemonRLWebMonitor):
+    def __init__(self, trainer, web_monitor: WebMonitor):
         """
         Initialize the bridge.
         
         Args:
-            trainer: UnifiedPokemonTrainer instance
+            trainer: PokemonTrainer instance
             web_monitor: PokemonRLWebMonitor instance
         """
         self.trainer = trainer
@@ -287,7 +288,7 @@ def create_integrated_monitoring_system(trainer, host='127.0.0.1', port=5001):
     Factory function to create a fully integrated monitoring system.
     
     Args:
-        trainer: UnifiedPokemonTrainer instance
+        trainer: PokemonTrainer instance
         host: Host for web monitor
         port: Port for web monitor
         
@@ -297,7 +298,7 @@ def create_integrated_monitoring_system(trainer, host='127.0.0.1', port=5001):
     print("🏗️ Creating integrated monitoring system...")
     
     # Create web monitor
-    web_monitor = PokemonRLWebMonitor()
+    web_monitor = WebMonitor(MonitorConfig(web_port=port, update_interval=0.1, snapshot_interval=0.5, db_path=":memory:", max_events=1000, max_snapshots=10, debug=True))
     
     # Create bridge
     bridge = TrainerWebMonitorBridge(trainer, web_monitor)

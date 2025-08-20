@@ -178,7 +178,7 @@ class TrainingConfig:
     curriculum_stages: int = 5
 
 
-class UnifiedPokemonTrainer:
+class PokemonTrainer:
     """Unified Pokemon Crystal Trainer class."""
 
     def __init__(self, config: TrainingConfig):

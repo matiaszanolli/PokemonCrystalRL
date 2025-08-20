@@ -7,7 +7,8 @@ LLM integration, web monitoring, and optimized video streaming.
 """
 
 # Import all public components
-from .trainer import UnifiedPokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
+from .trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
+from .unified_trainer import UnifiedPokemonTrainer
 from .game_state_detection import GameStateDetector
 from .llm_manager import LLMManager
 from .dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
@@ -17,6 +18,7 @@ from .semantic_context_system import SemanticContextSystem, GameContext, Dialogu
 __version__ = "2.0.0"
 
 __all__ = [
+    'PokemonTrainer',
     'UnifiedPokemonTrainer',
     'TrainingConfig',
     'TrainingMode',

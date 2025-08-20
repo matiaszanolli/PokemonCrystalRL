@@ -160,9 +160,7 @@ class TestPyBoyStabilityAndRecovery:
     @pytest.fixture
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
     @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
-    def test_full_training_cycle_with_recovery(self, mock_data_bus, mock_pyboy_class, integration_config):
-        """Test complete training cycle with PyBoy recovery"""
+    def trainer(self, mock_pyboy_class, mock_config):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         trainer = UnifiedPokemonTrainer(mock_config)
@@ -589,21 +587,22 @@ class TestTrainingModes:
     """Test different training modes and their execution"""
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    def test_initialization_no_pyboy(self, mock_pyboy_class, mock_config):
-        mock_pyboy_instance = Mock()
-        mock_pyboy_class.return_value = mock_pyboy_instance
-        
-        config = TrainingConfig(
+    def mock_config(self):
+        return TrainingConfig(
             rom_path="test.gbc",
             mode=TrainingMode.FAST_MONITORED,
             max_actions=10,
             capture_screens=False,
             headless=True
         )
-        
-        return UnifiedPokemonTrainer(config)
+
+    @pytest.fixture
+    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    def trainer_fast_monitored(self, mock_pyboy_class, mock_config):
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        return UnifiedPokemonTrainer(mock_config)
     
     @pytest.fixture
     @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')

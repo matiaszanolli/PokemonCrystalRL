@@ -24,7 +24,7 @@ def get_free_port():
 
 from pokemon_crystal_rl.core.monitoring.bridge import TrainerWebBridge
 from pokemon_crystal_rl.trainer import (
-    UnifiedPokemonTrainer,
+    PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend
