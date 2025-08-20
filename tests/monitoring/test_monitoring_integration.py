@@ -18,10 +18,10 @@ import threading
 import tempfile
 from pathlib import Path
 
-from pokemon_crystal_rl.core.monitoring.data_bus import DataBus, DataType, init_data_bus
-from pokemon_crystal_rl.core.monitoring.web_server import TrainingWebServer
+from monitoring.data_bus import DataBus, DataType, init_data_bus
+from monitoring.web_server import TrainingWebServer
 from .mock_llm_manager import MockLLMManager
-from pokemon_crystal_rl.trainer import (
+from trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
@@ -69,8 +69,8 @@ class TestMonitoringIntegration:
     def test_trainer_data_bus_registration(self, mock_config, data_bus):
         """Test trainer registration with data bus"""
         # Mock PyBoy and LLM manager
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
@@ -99,8 +99,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
             screen_callback
         )
 
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
             mock_pyboy_instance.screen_image = Mock(return_value=mock_screen)
@@ -126,8 +126,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
         """Test web server data streaming"""
         import requests
 
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
             mock_pyboy_instance.screen_image = Mock(return_value=mock_screen)
@@ -167,8 +167,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
         """Test clean web server shutdown"""
         import requests
 
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
 
@@ -199,8 +199,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss
 
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
             mock_pyboy_instance.screen_image = Mock(return_value=mock_screen)
@@ -246,8 +246,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
             error_callback
         )
 
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
             mock_pyboy_instance.screen_image = Mock(return_value=mock_screen)
@@ -271,8 +271,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
 
     def test_component_lifecycle(self, mock_config, data_bus):
         """Test component lifecycle management"""
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
 
@@ -314,8 +314,8 @@ patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMM
             stats_callback
         )
 
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy, \
-             patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
+        with patch('trainer.trainer.PyBoy') as mock_pyboy, \
+             patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
 

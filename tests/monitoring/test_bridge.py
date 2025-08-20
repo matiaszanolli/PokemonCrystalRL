@@ -22,8 +22,8 @@ def get_free_port():
         port = s.getsockname()[1]
     return port
 
-from pokemon_crystal_rl.core.monitoring.bridge import TrainerWebBridge
-from pokemon_crystal_rl.trainer import (
+from core.monitoring.bridge import TrainerWebBridge
+from trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,

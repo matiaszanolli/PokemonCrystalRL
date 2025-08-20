@@ -33,7 +33,7 @@ sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
 try:
-    from pokemon_crystal_rl.trainer.trainer import (
+    from trainer.trainer import (
         PokemonTrainer,
         TrainingConfig,
         TrainingMode,

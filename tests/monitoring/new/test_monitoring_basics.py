@@ -5,7 +5,7 @@ import tempfile
 import numpy as np
 from pathlib import Path
 from unittest.mock import Mock, patch
-from pokemon_crystal_rl.monitoring import (
+from monitoring import (
     UnifiedMonitor,
     MonitorConfig,
     DatabaseManager,

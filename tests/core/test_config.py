@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import json
 
-from pokemon_crystal_rl.core.config import (
+from core.config import (
     UnifiedConfig,
     TrainingMode,
     LLMBackend,

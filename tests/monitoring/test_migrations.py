@@ -16,7 +16,7 @@ import tempfile
 from datetime import datetime
 import shutil
 
-from pokemon_crystal_rl.monitoring import (
+from monitoring import (
     UnifiedMonitor,
     MonitorConfig,
     DatabaseManager,
@@ -24,7 +24,7 @@ from pokemon_crystal_rl.monitoring import (
     ErrorSeverity,
     RecoveryStrategy
 )
-from pokemon_crystal_rl.monitoring.error_handler import (
+from monitoring.error_handler import (
     ErrorHandler,
     ErrorCategory,
     ErrorSeverity

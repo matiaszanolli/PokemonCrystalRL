@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pokemon_crystal_rl.trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
+from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
 
 @pytest.fixture
 def base_config():
@@ -18,7 +18,7 @@ def base_config():
 @pytest.fixture
 def trainer_fast_monitored(base_config):
     """Create a trainer fixture with fast monitored mode."""
-    with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy_class:
+    with patch('trainer.trainer.PyBoy') as mock_pyboy_class:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         trainer = PokemonTrainer(base_config)
@@ -32,7 +32,7 @@ def trainer_ultra_fast(base_config):
     config.max_actions = 10
     config.capture_screens = False
 
-    with patch('pokemon_crystal_rl.trainer.trainer.PyBoy') as mock_pyboy_class:
+    with patch('trainer.trainer.PyBoy') as mock_pyboy_class:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         trainer = PokemonTrainer(config)
@@ -43,4 +43,4 @@ def mock_llm_manager(monkeypatch):
     """Mock LocalLLMPokemonAgent to avoid import errors."""
     mock_agent = Mock()
     mock_agent.return_value = Mock()
-    monkeypatch.setattr('pokemon_crystal_rl.llm.local_llm_agent.LLMManager', mock_agent)
+    monkeypatch.setattr('llm.local_llm_agent.LLMManager', mock_agent)

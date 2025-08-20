@@ -12,8 +12,8 @@ import os
 import numpy as np
 import websockets
 
-from pokemon_crystal_rl.monitoring import UnifiedMonitor, MonitorConfig
-from pokemon_crystal_rl.monitoring.error_handler import ErrorSeverity, RecoveryStrategy
+from monitoring import UnifiedMonitor, MonitorConfig
+from monitoring.error_handler import ErrorSeverity, RecoveryStrategy
 
 @pytest.fixture
 def mock_data_bus():
@@ -52,7 +52,7 @@ class TestUnifiedMonitor:
     
     def test_monitor_initialization(self, mock_monitor_config, mock_data_bus):
         """Test monitor initialization."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -62,7 +62,7 @@ class TestUnifiedMonitor:
     
     def test_start_stop_monitoring(self, mock_monitor_config, mock_data_bus):
         """Test start and stop monitoring."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -76,7 +76,7 @@ class TestUnifiedMonitor:
     
     def test_screenshot_update(self, mock_monitor_config, mock_data_bus):
         """Test screenshot update functionality."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -95,7 +95,7 @@ class TestUnifiedMonitor:
     
     def test_text_update(self, mock_monitor_config, mock_data_bus):
         """Test text recognition update."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -112,7 +112,7 @@ class TestUnifiedMonitor:
     
     def test_action_update(self, mock_monitor_config, mock_data_bus):
         """Test action history update."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -129,7 +129,7 @@ class TestUnifiedMonitor:
     
     def test_decision_update(self, mock_monitor_config, mock_data_bus):
         """Test decision history update."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -150,7 +150,7 @@ class TestUnifiedMonitor:
     
     def test_memory_cleanup(self, mock_monitor_config, mock_data_bus):
         """Test memory management cleanup."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -167,7 +167,7 @@ class TestUnifiedMonitor:
     
     def test_system_stats(self, mock_monitor_config, mock_data_bus):
         """Test system statistics collection."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -183,7 +183,7 @@ class TestErrorHandling:
     
     def test_error_handling(self, mock_monitor_config, mock_data_bus):
         """Test error handling."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             
@@ -201,7 +201,7 @@ class TestErrorHandling:
     
     def test_error_recovery(self, mock_monitor_config, mock_data_bus):
         """Test error recovery mechanisms."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(config=mock_monitor_config)
             monitor.start_monitoring()
@@ -239,7 +239,7 @@ class TestTrainingControl:
     @pytest.fixture
     def monitor(self, mock_monitor_config, mock_data_bus):
         """Create a configured monitor for testing."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             return UnifiedMonitor(config=mock_monitor_config)
     

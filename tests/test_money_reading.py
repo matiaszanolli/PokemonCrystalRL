@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 import pytest
-from pokemon_crystal_rl.core.pyboy_env import PyBoyPokemonCrystalEnv
+from core.pyboy_env import PyBoyPokemonCrystalEnv
 
 
 class MemoryMock:

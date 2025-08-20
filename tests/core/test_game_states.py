@@ -1,7 +1,7 @@
 """Test suite for game states."""
 
 import pytest
-from pokemon_crystal_rl.core.game_states import PyBoyGameState
+from core.game_states import PyBoyGameState
 
 
 def test_state_creation():

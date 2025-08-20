@@ -36,9 +36,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Tuple, Dict, Any
 
-from pokemon_crystal_rl.trainer.trainer import UnifiedPokemonTrainer
-from pokemon_crystal_rl.trainer.config import TrainingConfig, TrainingMode, LLMBackend
-from pokemon_crystal_rl.monitoring.trainer_monitor_bridge import create_integrated_monitoring_system
+from trainer.trainer import UnifiedPokemonTrainer
+from trainer.config import TrainingConfig, TrainingMode, LLMBackend
+from monitoring.trainer_monitor_bridge import create_integrated_monitoring_system
 
 
 def backup_save_files(rom_path: str) -> List[Tuple[str, str]]:

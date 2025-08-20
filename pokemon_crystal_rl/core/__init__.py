@@ -8,7 +8,7 @@ Contains core game environments, memory mapping, base classes, and video streami
 from .memory_map import MEMORY_ADDRESSES
 
 # Import game states and vision processor
-from pokemon_crystal_rl.core.game_states import PyBoyGameState, STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
+from core.game_states import PyBoyGameState, STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
 from .vision_processor import PokemonVisionProcessor
 
 # Import PyBoy environment and video streaming as optional dependencies

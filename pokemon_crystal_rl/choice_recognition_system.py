@@ -15,12 +15,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
 from datetime import datetime
-import hashlib
-
-try:
-    from pokemon_crystal_rl.vision.vision_processor import DetectedText, VisualContext
-except ImportError:
-    from vision.vision_processor import DetectedText, VisualContext
+from vision.vision_processor import DetectedText, VisualContext
 
 
 class ChoiceType(Enum):

@@ -10,8 +10,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import tempfile
 
-from pokemon_crystal_rl.monitoring.unified_monitor import UnifiedMonitor
-from pokemon_crystal_rl.monitoring import MonitorConfig, TrainingState
+from monitoring.unified_monitor import UnifiedMonitor
+from monitoring import MonitorConfig, TrainingState
 
 class TestUnifiedMonitor:
     """Test suite for UnifiedMonitor class."""
@@ -113,7 +113,7 @@ class TestUnifiedMonitor:
         """Test system statistics collection."""
         # Since PSUTIL_AVAILABLE is a module-level variable,
         # we mock it to test both cases
-        from pokemon_crystal_rl.monitoring.unified_monitor import PSUTIL_AVAILABLE
+        from monitoring.unified_monitor import PSUTIL_AVAILABLE
         
         stats = monitor._get_system_stats()
         

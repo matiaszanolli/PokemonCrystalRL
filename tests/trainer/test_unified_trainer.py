@@ -25,7 +25,7 @@ import queue
 import io
 from PIL import Image
 
-from pokemon_crystal_rl.trainer import (
+from trainer import (
     UnifiedPokemonTrainer,
     TrainingConfig,
     TrainingMode,
@@ -90,8 +90,8 @@ class TestUnifiedPokemonTrainerInit:
             log_level="DEBUG"
         )
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_initialization_success(self, mock_pyboy_class, mock_config):
         """Test successful trainer initialization"""
         mock_pyboy_instance = Mock()
@@ -107,14 +107,14 @@ class TestUnifiedPokemonTrainerInit:
         assert trainer.stats['total_actions'] == 0
         assert trainer.pyboy is not None
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', False)
+    @patch('trainer.trainer.PYBOY_AVAILABLE', False)
     def test_initialization_no_pyboy(self, mock_config):
         """Test initialization when PyBoy is not available"""
         with pytest.raises(RuntimeError, match="PyBoy not available"):
             UnifiedPokemonTrainer(mock_config)
 
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_logging_setup(self, mock_pyboy_class, mock_config):
         """Test logging system initialization"""
         mock_pyboy_instance = Mock()
@@ -127,8 +127,8 @@ class TestUnifiedPokemonTrainerInit:
         assert trainer.logger.level == logging.DEBUG
         assert len(trainer.logger.handlers) >= 1  # At least console handler
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_error_tracking_init(self, mock_pyboy_class, mock_config):
         """Test error tracking initialization"""
         mock_pyboy_instance = Mock()
@@ -158,8 +158,8 @@ class TestPyBoyStabilityAndRecovery:
         )
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class, mock_config):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -213,7 +213,7 @@ class TestPyBoyStabilityAndRecovery:
         new_pyboy.frame_count = 0
         trainer.mock_pyboy_class.return_value = new_pyboy
         
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy', trainer.mock_pyboy_class):
+        with patch('trainer.trainer.PyBoy', trainer.mock_pyboy_class):
             result = trainer._attempt_pyboy_recovery()
         
         assert result is True
@@ -235,7 +235,7 @@ class TestPyBoyStabilityAndRecovery:
         new_pyboy.load_state = Mock()
         trainer.mock_pyboy_class.return_value = new_pyboy
         
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy', trainer.mock_pyboy_class):
+        with patch('trainer.trainer.PyBoy', trainer.mock_pyboy_class):
             with patch('builtins.open', mock_open(read_data=b"save_data")):
                 result = trainer._attempt_pyboy_recovery()
         
@@ -247,7 +247,7 @@ class TestPyBoyStabilityAndRecovery:
         trainer.pyboy = Mock()
         
         # Mock failed recovery - patch the PyBoy constructor inside the recovery method
-        with patch('pokemon_crystal_rl.trainer.trainer.PyBoy', side_effect=Exception("Recovery failed")):
+        with patch('trainer.trainer.PyBoy', side_effect=Exception("Recovery failed")):
             result = trainer._attempt_pyboy_recovery()
         
         assert result is False
@@ -304,8 +304,8 @@ class TestErrorHandlingAndLogging:
         )
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class, mock_config):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -390,9 +390,9 @@ class TestWebDashboardAndHTTPPolling:
             headless=True
         )
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.core.monitoring.web_server.TrainingWebServer')
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('core.monitoring.web_server.TrainingWebServer')
     def test_web_server_initialization(self, mock_web_server, mock_pyboy_class, mock_config):
         """Test web server initialization"""
         mock_pyboy_instance = Mock()
@@ -414,8 +414,8 @@ class TestWebDashboardAndHTTPPolling:
         assert trainer.web_thread is not None
         mock_web_server.assert_called_once_with(mock_config, trainer)
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_screenshot_memory_management(self, mock_pyboy_class, mock_config):
         """Test screenshot capture memory management"""
         mock_pyboy_instance = Mock()
@@ -429,8 +429,8 @@ class TestWebDashboardAndHTTPPolling:
         assert trainer.latest_screen is None
         assert trainer.capture_active is False
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_api_status_endpoint_data(self, mock_pyboy_class, mock_config):
         """Test API status endpoint data structure"""
         mock_pyboy_instance = Mock()
@@ -456,8 +456,8 @@ class TestRuleBasedActionSystem:
     """Test improved rule-based action system"""
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -597,16 +597,16 @@ class TestTrainingModes:
         )
 
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_fast_monitored(self, mock_pyboy_class, mock_config):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         return UnifiedPokemonTrainer(mock_config)
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_ultra_fast(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -699,8 +699,8 @@ class TestIntegrationScenarios:
             log_level="DEBUG"
         )
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_full_training_cycle_with_recovery(self, mock_pyboy_class, integration_config):
         """Test complete training cycle with PyBoy recovery"""
         # Setup mocks
@@ -746,8 +746,8 @@ class TestIntegrationScenarios:
         trainer._attempt_pyboy_recovery.assert_called()
         assert trainer.error_count['total_errors'] > 0
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_initialization_no_pyboy(self, mock_pyboy_class, mock_config):
         """Test memory leak prevention in screen capture"""
         mock_pyboy_instance = Mock()
@@ -769,8 +769,8 @@ class TestIntegrationScenarios:
         # Queue should not exceed maximum size
         assert trainer.screen_queue.qsize() <= 30
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_configuration_edge_cases(self, mock_pyboy_class):
         """Test edge cases in configuration"""
         # Test minimum values
@@ -790,9 +790,9 @@ class TestIntegrationScenarios:
         assert trainer.config.max_episodes == 1
         assert trainer.config.llm_interval == 1
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.llm_manager.ollama')
     def test_llm_integration_fallback(self, mock_ollama, mock_pyboy_class, integration_config):
         """Test LLM integration with fallback to rule-based"""
         # Configure for LLM use
@@ -822,9 +822,9 @@ class TestEnhancedStateDetection:
     """Test enhanced state detection system"""
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('core.monitoring.data_bus.get_data_bus')
     def trainer_fast_monitored(self, mock_data_bus, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -848,9 +848,9 @@ class TestEnhancedStateDetection:
         return UnifiedPokemonTrainer(config)
 
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('core.monitoring.data_bus.get_data_bus')
     def trainer_ultra_fast(self, mock_data_bus, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -873,9 +873,9 @@ class TestEnhancedStateDetection:
         return UnifiedPokemonTrainer(config)
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.core.monitoring.data_bus.get_data_bus')
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('core.monitoring.data_bus.get_data_bus')
     def trainer(self, mock_data_bus, mock_pyboy_class, mock_config):
         """Create trainer with mocked PyBoy and data bus"""
         mock_pyboy_instance = Mock()
@@ -962,9 +962,9 @@ class TestWebMonitoringEnhancements:
             debug_mode=True
         )
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.core.monitoring.web_server.TrainingWebServer')
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('core.monitoring.web_server.TrainingWebServer')
     def test_web_server_initialization(self, mock_web_server, mock_pyboy_class, web_trainer_config):
         """Test enhanced web server initialization"""
         mock_pyboy_instance = Mock()
@@ -984,8 +984,8 @@ class TestWebMonitoringEnhancements:
         assert trainer.screen_queue.maxsize == 30  # Memory-bounded queue
         assert trainer.capture_active is False
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_real_time_stats_tracking(self, mock_pyboy_class, web_trainer_config):
         """Test real-time statistics tracking for web interface"""
         mock_pyboy_instance = Mock()
@@ -1007,8 +1007,8 @@ class TestWebMonitoringEnhancements:
         assert trainer.stats['actions_per_second'] >= 0
         assert 'uptime_seconds' in trainer.stats or trainer.stats['start_time'] > 0
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_screenshot_capture_optimization(self, mock_pyboy_class, web_trainer_config):
         """Test optimized screenshot capture for web monitoring"""
         mock_pyboy_instance = Mock()
@@ -1062,8 +1062,8 @@ class TestLLMBackendSwitching:
             )
         }
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_performance_tracking_initialization(self, mock_pyboy_class, model_configs):
         """Test LLM performance tracking initialization"""
         mock_pyboy_instance = Mock()
@@ -1079,8 +1079,8 @@ class TestLLMBackendSwitching:
         assert 'llm_total_time' in trainer.stats
         assert 'llm_avg_time' in trainer.stats
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_performance_tracking_functionality(self, mock_pyboy_class, model_configs):
         """Test LLM performance tracking functionality"""
         mock_pyboy_instance = Mock()
@@ -1105,8 +1105,8 @@ class TestLLMBackendSwitching:
         assert trainer.stats['llm_total_time'] == 4.0
         assert trainer.stats['llm_avg_time'] == 2.0
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_adaptive_interval_slow_llm_increase(self, mock_pyboy_class, model_configs):
         """Test adaptive interval increases for slow LLM calls"""
         mock_pyboy_instance = Mock()
@@ -1126,8 +1126,8 @@ class TestLLMBackendSwitching:
         assert trainer.adaptive_llm_interval > original_interval
         assert trainer.adaptive_llm_interval <= 50  # Should not exceed max
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_adaptive_interval_fast_llm_decrease(self, mock_pyboy_class, model_configs):
         """Test adaptive interval decreases for fast LLM calls"""
         mock_pyboy_instance = Mock()
@@ -1153,8 +1153,8 @@ class TestLLMBackendSwitching:
         assert trainer.adaptive_llm_interval < increased_interval
         assert trainer.adaptive_llm_interval >= trainer.config.llm_interval
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_response_times_window_management(self, mock_pyboy_class, model_configs):
         """Test that response times window is properly managed"""
         mock_pyboy_instance = Mock()
@@ -1173,8 +1173,8 @@ class TestLLMBackendSwitching:
         assert abs(trainer.llm_response_times[0] - 1.5) < 1e-10  # 6th response time (index 5)
         assert abs(trainer.llm_response_times[-1] - 3.4) < 1e-10  # 25th response time (index 24)
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_smollm2_backend_configuration(self, mock_pyboy_class, model_configs):
         """Test SmolLM2 backend configuration"""
         mock_pyboy_instance = Mock()
@@ -1185,8 +1185,8 @@ class TestLLMBackendSwitching:
         assert trainer.config.llm_backend == LLMBackend.SMOLLM2
         # Would test model-specific configuration
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_fallback_to_rule_based(self, mock_pyboy_class, model_configs):
         """Test fallback to rule-based when LLM fails"""
         mock_pyboy_instance = Mock()
@@ -1194,7 +1194,7 @@ class TestLLMBackendSwitching:
         
         trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
         
-        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Mock LLM failure
             mock_ollama.generate.side_effect = Exception("Model not available")
             mock_ollama.show.side_effect = Exception("Connection failed")
@@ -1205,8 +1205,8 @@ class TestLLMBackendSwitching:
             # Should either return None (triggering rule-based) or a valid action
             assert action is None or (1 <= action <= 8)
     
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_no_llm_backend_performance(self, mock_pyboy_class, model_configs):
         """Test performance with no LLM backend"""
         mock_pyboy_instance = Mock()
@@ -1244,8 +1244,8 @@ class TestUnifiedTrainerOptimizations:
         )
 
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def optimized_trainer(self, mock_pyboy_class, mock_config):
         """Create an optimized trainer instance"""
         mock_pyboy_instance = Mock()

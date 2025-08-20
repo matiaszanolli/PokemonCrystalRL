@@ -16,8 +16,8 @@ from unittest.mock import Mock, patch
 from collections import deque
 from gymnasium import spaces
 
-from pokemon_crystal_rl.utils.utils import calculate_reward
-from pokemon_crystal_rl.core.pyboy_env import PyBoyPokemonCrystalEnv
+from utils.utils import calculate_reward
+from core.pyboy_env import PyBoyPokemonCrystalEnv
 
 
 class MockPyBoyPokemonCrystalEnv(PyBoyPokemonCrystalEnv):

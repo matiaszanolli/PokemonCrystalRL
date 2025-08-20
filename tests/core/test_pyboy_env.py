@@ -71,7 +71,7 @@ def mock_pyboy():
 @pytest.fixture
 def env(mock_pyboy):
     """Create a test environment instance."""
-    with patch('pokemon_crystal_rl.core.pyboy_env.PyBoy', return_value=mock_pyboy):
+    with patch('core.pyboy_env.PyBoy', return_value=mock_pyboy):
         env = PyBoyPokemonCrystalEnv(
             rom_path="test.gbc",
             headless=True,

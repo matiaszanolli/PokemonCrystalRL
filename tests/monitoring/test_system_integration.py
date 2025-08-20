@@ -26,7 +26,7 @@ from unittest.mock import Mock, patch
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 
-from pokemon_crystal_rl.monitoring import (
+from monitoring import (
     UnifiedMonitor,
     MonitorConfig,
     DatabaseManager,
@@ -116,7 +116,7 @@ class MockTrainer:
                 self.metrics["accuracy"] = min(0.99, self.metrics["accuracy"] + 0.01)
                 self.metrics["reward"] = np.random.normal(0.5, 0.1)
                 
-# Record system metrics
+                # Record system metrics
                 self.monitor.update_system_metrics(
                     cpu_percent=psutil.cpu_percent(),
                     memory_percent=psutil.virtual_memory().percent,

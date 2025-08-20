@@ -21,11 +21,11 @@ import os
 import numpy as np
 import websockets
 
-from pokemon_crystal_rl.monitoring import UnifiedMonitor, MonitorConfig
-from pokemon_crystal_rl.monitoring.web_interface import WebInterface
-from pokemon_crystal_rl.monitoring import UnifiedMonitor, MonitorConfig
-from pokemon_crystal_rl.monitoring.data_bus import DataType
-from pokemon_crystal_rl.monitoring.error_handler import ErrorCategory, ErrorSeverity
+from monitoring import UnifiedMonitor, MonitorConfig
+from monitoring.web_interface import WebInterface
+from monitoring import UnifiedMonitor, MonitorConfig
+from monitoring.data_bus import DataType
+from monitoring.error_handler import ErrorCategory, ErrorSeverity
 
 
 @pytest.fixture
@@ -202,7 +202,7 @@ class TestUnifiedMonitor:
     
     def test_monitor_initialization(self, mock_monitor_config, mock_data_bus):
         """Test monitor initialization."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(mock_monitor_config)
             
@@ -213,7 +213,7 @@ class TestUnifiedMonitor:
     @pytest.mark.asyncio
     async def test_monitor_start_stop(self, mock_monitor_config, mock_data_bus):
         """Test monitor start and stop."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(mock_monitor_config)
             
@@ -227,7 +227,7 @@ class TestUnifiedMonitor:
     
     def test_event_handling(self, mock_monitor_config, mock_data_bus):
         """Test event handling."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(mock_monitor_config)
             
@@ -243,7 +243,7 @@ class TestMonitoringIntegration:
     async def test_full_monitoring_stack(self, mock_monitor_config, mock_data_bus,
                                        temp_dir):
         """Test full monitoring stack integration."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             # Initialize components
             monitor = UnifiedMonitor(mock_monitor_config)
@@ -288,7 +288,7 @@ class TestErrorHandling:
     
     def test_error_handling_unified_monitor(self, mock_monitor_config, mock_data_bus):
         """Test error handling in web monitor."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(mock_monitor_config)
             
@@ -307,7 +307,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_error_recovery(self, mock_monitor_config, mock_data_bus):
         """Test error recovery mechanisms."""
-        with patch("pokemon_crystal_rl.monitoring.unified_monitor.get_data_bus",
+        with patch("monitoring.unified_monitor.get_data_bus",
                   return_value=mock_data_bus):
             monitor = UnifiedMonitor(mock_monitor_config)
             monitor.start_monitoring()

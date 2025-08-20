@@ -2,8 +2,8 @@
 
 import pytest
 import numpy as np
-from pokemon_crystal_rl.utils import calculate_reward
-from pokemon_crystal_rl.utils.preprocess_state import preprocess_state
+from utils import calculate_reward
+from utils.preprocess_state import preprocess_state
 
 
 def test_calculate_reward_no_previous_state():

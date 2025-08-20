@@ -11,7 +11,7 @@ from io import BytesIO
 import tempfile
 import os
 
-from pokemon_crystal_rl.monitoring.web_server import TrainingWebServer, TrainingHandler
+from monitoring.web_server import TrainingWebServer, TrainingHandler
 
 
 class TestTrainingWebServer(unittest.TestCase):
@@ -35,7 +35,7 @@ class TestTrainingWebServer(unittest.TestCase):
         self.assertEqual(server.port, 8080)
         self.assertIsNone(server.server)
         
-    @patch('pokemon_crystal_rl.monitoring.web_server.socket.socket')
+    @patch('monitoring.web_server.socket.socket')
     def test_find_available_port_success(self, mock_socket):
         """Test finding available port successfully"""
         # Mock socket that binds successfully
@@ -49,7 +49,7 @@ class TestTrainingWebServer(unittest.TestCase):
         mock_sock.setsockopt.assert_called_once()
         mock_sock.bind.assert_called_once_with(("localhost", 8080))
     
-    @patch('pokemon_crystal_rl.monitoring.web_server.socket.socket')
+    @patch('monitoring.web_server.socket.socket')
     def test_find_available_port_retry(self, mock_socket):
         """Test finding available port after retries"""
         mock_sock = Mock()
@@ -63,7 +63,7 @@ class TestTrainingWebServer(unittest.TestCase):
         self.assertEqual(server.port, 8082)  # original port + 2 attempts
         self.assertEqual(mock_sock.bind.call_count, 3)
         
-    @patch('pokemon_crystal_rl.monitoring.web_server.socket.socket')
+    @patch('monitoring.web_server.socket.socket')
     def test_find_available_port_all_fail(self, mock_socket):
         """Test exception when no port available"""
         mock_sock = Mock()
@@ -75,7 +75,7 @@ class TestTrainingWebServer(unittest.TestCase):
             
         self.assertIn("Could not find available port", str(context.exception))
         
-    @patch('pokemon_crystal_rl.monitoring.web_server.socket.socket')
+    @patch('monitoring.web_server.socket.socket')
     def test_find_available_port_with_debug_logging(self, mock_socket):
         """Test port finding with debug logging enabled"""
         mock_sock = Mock()
@@ -87,7 +87,7 @@ class TestTrainingWebServer(unittest.TestCase):
         # Should log the port change
         self.assertEqual(server.port, 8081)
         
-    @patch('pokemon_crystal_rl.monitoring.web_server.HTTPServer')
+    @patch('monitoring.web_server.HTTPServer')
     def test_start_server(self, mock_http_server):
         """Test starting the web server"""
         with patch.object(TrainingWebServer, '_find_available_port', return_value=8080):
@@ -148,7 +148,7 @@ class TestTrainingHandler(unittest.TestCase):
         self.mock_server = Mock()
         
         # Patch the parent class initialization
-        with patch('pokemon_crystal_rl.monitoring.web_server.BaseHTTPRequestHandler.__init__'):
+        with patch('monitoring.web_server.BaseHTTPRequestHandler.__init__'):
             self.handler = TrainingHandler(self.mock_trainer, self.mock_request, 
                                          self.mock_client_address, self.mock_server)
             
@@ -163,7 +163,7 @@ class TestTrainingHandler(unittest.TestCase):
         """Test TrainingHandler initialization"""
         self.assertEqual(self.handler.trainer, self.mock_trainer)
         
-    @patch('pokemon_crystal_rl.monitoring.web_server.BaseHTTPRequestHandler.__init__')
+    @patch('monitoring.web_server.BaseHTTPRequestHandler.__init__')
     def test_handler_init_calls_super(self, mock_super_init):
         """Test that handler initialization calls parent constructor"""
         handler = TrainingHandler(self.mock_trainer, self.mock_request,
@@ -317,9 +317,9 @@ class TestTrainingHandler(unittest.TestCase):
         mock_error.assert_called_once_with(404)
 
     @patch('builtins.open', new_callable=mock_open, read_data="<html>Dashboard</html>")
-    @patch('pokemon_crystal_rl.monitoring.web_server.os.path.join')
-    @patch('pokemon_crystal_rl.monitoring.web_server.os.path.dirname')
-    @patch('pokemon_crystal_rl.monitoring.web_server.os.path.abspath')
+    @patch('monitoring.web_server.os.path.join')
+    @patch('monitoring.web_server.os.path.dirname')
+    @patch('monitoring.web_server.os.path.abspath')
     def test_serve_comprehensive_dashboard_success(self, mock_abspath, mock_dirname, mock_join, mock_file):
         """Test serving comprehensive dashboard successfully"""
         mock_abspath.return_value = "/path/to/file"
@@ -517,7 +517,7 @@ class TestTrainingHandler(unittest.TestCase):
         self.mock_trainer._current_map = 2
         self.mock_trainer._player_x = 10
         self.mock_trainer._player_y = 8
-        with patch('pokemon_crystal_rl.monitoring.web_server.time.time', return_value=1234567950):
+        with patch('monitoring.web_server.time.time', return_value=1234567950):
             with patch.object(self.handler, 'send_response') as mock_response, \
                  patch.object(self.handler, 'send_header') as mock_header, \
                  patch.object(self.handler, 'end_headers') as mock_end:
@@ -537,8 +537,8 @@ class TestTrainingHandler(unittest.TestCase):
         self.assertEqual(response_data['total_actions'], 150)
         self.assertEqual(response_data['elapsed_time'], 60)  # 950 - 890
 
-    @patch('pokemon_crystal_rl.monitoring.web_server.PSUTIL_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.monitoring.web_server.psutil')
+    @patch('monitoring.web_server.PSUTIL_AVAILABLE', True)
+    @patch('monitoring.web_server.psutil')
     def test_serve_api_system_with_psutil(self, mock_psutil):
         """Test serving API system endpoint with psutil available"""
         mock_psutil.cpu_percent.return_value = 50.0
@@ -564,7 +564,7 @@ class TestTrainingHandler(unittest.TestCase):
         self.assertEqual(response_data['disk_usage'], 70.0)
         self.assertFalse(response_data['gpu_available'])
 
-    @patch('pokemon_crystal_rl.monitoring.web_server.PSUTIL_AVAILABLE', False)
+    @patch('monitoring.web_server.PSUTIL_AVAILABLE', False)
     def test_serve_api_system_without_psutil(self):
         """Test serving API system endpoint without psutil"""
         self.handler.wfile = Mock()
@@ -582,8 +582,8 @@ class TestTrainingHandler(unittest.TestCase):
         self.assertFalse(response_data['gpu_available'])
         self.assertEqual(response_data['error'], 'psutil not available')
 
-    @patch('pokemon_crystal_rl.monitoring.web_server.PSUTIL_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.monitoring.web_server.psutil')
+    @patch('monitoring.web_server.PSUTIL_AVAILABLE', True)
+    @patch('monitoring.web_server.psutil')
     def test_serve_api_system_psutil_exception(self, mock_psutil):
         """Test serving API system endpoint when psutil throws exception"""
         mock_psutil.cpu_percent.side_effect = Exception("Test error")
@@ -958,7 +958,7 @@ class TestWebServerIntegration(unittest.TestCase):
         self.mock_trainer = Mock()
         self.mock_trainer.config = self.mock_config
         
-    @patch('pokemon_crystal_rl.monitoring.web_server.socket.socket')
+    @patch('monitoring.web_server.socket.socket')
     def test_server_lifecycle(self, mock_socket):
         """Test complete server lifecycle"""
         # Mock successful port binding
@@ -969,7 +969,7 @@ class TestWebServerIntegration(unittest.TestCase):
         server = TrainingWebServer(self.mock_config, self.mock_trainer)
         
         # Test starting server
-        with patch('pokemon_crystal_rl.monitoring.web_server.HTTPServer') as mock_http_server:
+        with patch('monitoring.web_server.HTTPServer') as mock_http_server:
             mock_server_instance = Mock()
             mock_http_server.return_value = mock_server_instance
             

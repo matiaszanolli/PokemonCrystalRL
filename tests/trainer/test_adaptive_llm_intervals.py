@@ -16,7 +16,7 @@ import os
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from pokemon_crystal_rl.trainer import (
+from trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
@@ -32,8 +32,8 @@ class TestAdaptiveLLMIntervals:
     """Test the adaptive LLM interval system comprehensively"""
     
     @pytest.fixture
-    @patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
-    @patch('pokemon_crystal_rl.trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_with_llm(self, mock_pyboy_class):
         """Create trainer with LLM backend for interval testing"""
         mock_pyboy_instance = Mock()
@@ -243,7 +243,7 @@ class TestAdaptiveLLMIntervals:
         trainer = trainer_with_llm
         llm_manager = trainer.llm_manager
         
-        with patch('pokemon_crystal_rl.trainer.llm_manager.ollama') as mock_ollama:
+        with patch('trainer.llm_manager.ollama') as mock_ollama:
             initial_interval = llm_manager.adaptive_llm_interval
             
             # Phase 1: Slow performance - should increase interval

@@ -25,7 +25,7 @@ from typing import Optional
 # Add the parent directory to Python path to find the trainer module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pokemon_crystal_rl.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
+from trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
 
 # Make PyBoy available at module level for testing
 try:
