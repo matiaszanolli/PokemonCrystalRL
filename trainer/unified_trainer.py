@@ -18,7 +18,7 @@ import numpy as np
 from typing import Optional, Dict, List, Any
 from pathlib import Path
 from trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
-from core.monitoring.web_server import TrainingWebServer
+from monitoring.web_server import WebServer as TrainingWebServer
 
 class UnifiedPokemonTrainer(PokemonTrainer):
     """Enhanced Pokemon trainer with integrated features"""
@@ -106,7 +106,7 @@ class UnifiedPokemonTrainer(PokemonTrainer):
                     pass
             
             # Create new instance
-            from pokemon_crystal_rl.trainer.trainer import PyBoy
+            from trainer.trainer import PyBoy
             self.pyboy = PyBoy(str(Path(self.config.rom_path).resolve()))
             
             # Load save state if configured
