@@ -14,8 +14,22 @@ import base64
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from vision.debug_screen_capture import (
-    test_pyboy_screen_methods, main, PYBOY_AVAILABLE
+    _test_pyboy_screen_methods, main, PYBOY_AVAILABLE
 )
+
+
+class TestDebugScreenCapture(unittest.TestCase):
+    """Test debug screen capture utility functions"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.rom_path = "test_rom.gbc"
+        
+    @patch('vision.debug_screen_capture.PyBoy')
+    def test_pyboy_screen_methods_basic(self, mock_pyboy):
+        """Test basic functionality of pyboy screen methods"""
+        _test_pyboy_screen_methods(self.rom_path)
+        mock_pyboy.assert_called_once()
 
 
 class TestPyBoyAvailability(unittest.TestCase):
@@ -66,8 +80,8 @@ class TestPyBoyScreenMethods(unittest.TestCase):
     def test_pyboy_not_available(self):
         """Test behavior when PyBoy is not available"""
         with patch('vision.debug_screen_capture.PYBOY_AVAILABLE', False):
+            result = _test_pyboy_screen_methods(self.rom_path)
             # Should return early without error
-            result = test_pyboy_screen_methods(self.rom_path)
             self.assertIsNone(result)
     
     @patch('vision.debug_screen_capture.PyBoy')
@@ -76,7 +90,7 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         """Test PyBoy initialization"""
         mock_pyboy_class.return_value = self.mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
         # Verify PyBoy was initialized with correct parameters
         mock_pyboy_class.assert_called_once_with(
@@ -95,7 +109,7 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         """Test screen.ndarray method testing"""
         mock_pyboy_class.return_value = self.mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
         # Verify ndarray property was accessed
         self.assertTrue(hasattr(self.mock_pyboy.screen, 'ndarray'))
@@ -106,7 +120,7 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         """Test screen.image method testing"""
         mock_pyboy_class.return_value = self.mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
         # Verify image method was called
         self.mock_screen.image.assert_called()
@@ -122,7 +136,7 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         self.mock_screen.method2 = Mock()
         self.mock_screen._private_method = Mock()
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
         # The test should enumerate available methods
         # This is tested implicitly through the dir() call in the function
@@ -133,9 +147,9 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         """Test continuous screen capture"""
         mock_pyboy_class.return_value = self.mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # Verify additional tick calls for continuous capture (10 more frames)
+        # Verify additional tick calls for continuous capture
         # Total should be initial 10 + continuous 10 = at least 20
         self.assertGreaterEqual(self.mock_pyboy.tick.call_count, 20)
         
@@ -145,9 +159,9 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         """Test PIL image processing within screen capture"""
         mock_pyboy_class.return_value = self.mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # The function should process images through PIL
+        # The function should process images
         # This is tested implicitly as the function completes without error
         
     @patch('vision.debug_screen_capture.PyBoy')
@@ -156,9 +170,9 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         """Test base64 encoding within screen capture"""
         mock_pyboy_class.return_value = self.mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # The function should encode images to base64
+        # The function should encode images
         # This is tested implicitly as the function completes without error
 
 
@@ -178,7 +192,7 @@ class TestErrorHandling(unittest.TestCase):
         # The debug function doesn't handle PyBoy initialization errors
         # It's designed to show the error output for debugging purposes
         with self.assertRaises(Exception):
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
     
     @patch('vision.debug_screen_capture.PyBoy')
     @patch('vision.debug_screen_capture.PYBOY_AVAILABLE', True)
@@ -191,7 +205,7 @@ class TestErrorHandling(unittest.TestCase):
         
         # Should handle missing screen attribute gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
     
@@ -209,7 +223,7 @@ class TestErrorHandling(unittest.TestCase):
         
         # Should handle missing ndarray attribute gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
     
@@ -227,7 +241,7 @@ class TestErrorHandling(unittest.TestCase):
         
         # Should handle missing image method gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
             
@@ -247,7 +261,7 @@ class TestErrorHandling(unittest.TestCase):
         
         # Should handle PIL conversion error gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
     
@@ -269,7 +283,7 @@ class TestErrorHandling(unittest.TestCase):
         
         # Should handle base64 encoding error gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
     
@@ -296,7 +310,7 @@ class TestErrorHandling(unittest.TestCase):
         
         # Should handle tick error gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
 
@@ -324,9 +338,9 @@ class TestImageProcessing(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # The function should complete without error, testing resizing implicitly
+        # The function should complete without error
         
     @patch('vision.debug_screen_capture.PyBoy')
     @patch('vision.debug_screen_capture.PYBOY_AVAILABLE', True)
@@ -339,9 +353,9 @@ class TestImageProcessing(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # The function should complete without error, testing PNG saving implicitly
+        # The function should complete without error
         
     @patch('vision.debug_screen_capture.PyBoy')
     @patch('vision.debug_screen_capture.PYBOY_AVAILABLE', True)
@@ -363,7 +377,7 @@ class TestImageProcessing(unittest.TestCase):
             mock_pyboy_class.return_value = mock_pyboy
             
             try:
-                test_pyboy_screen_methods(self.rom_path)
+                _test_pyboy_screen_methods(self.rom_path)
             except Exception as e:
                 # Some formats might fail, that's expected behavior
                 pass
@@ -372,7 +386,7 @@ class TestImageProcessing(unittest.TestCase):
 class TestMainFunction(unittest.TestCase):
     """Test main function"""
     
-    @patch('vision.debug_screen_capture.test_pyboy_screen_methods')
+    @patch('vision.debug_screen_capture._test_pyboy_screen_methods')
     def test_main_function_execution(self, mock_test_function):
         """Test main function executes test_pyboy_screen_methods"""
         main()
@@ -382,7 +396,7 @@ class TestMainFunction(unittest.TestCase):
         args = mock_test_function.call_args[0]
         self.assertIn('pokemon_crystal.gbc', args[0])
     
-    @patch('vision.debug_screen_capture.test_pyboy_screen_methods')
+    @patch('vision.debug_screen_capture._test_pyboy_screen_methods')
     def test_main_function_error_handling(self, mock_test_function):
         """Test main function handles errors gracefully"""
         mock_test_function.side_effect = Exception("Mock test error")
@@ -418,7 +432,7 @@ class TestScreenDataAnalysis(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
         # The function should analyze min/max values
         # This is tested implicitly through function completion
@@ -436,7 +450,7 @@ class TestScreenDataAnalysis(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
         # The function should extract and display sample values
         # This is tested implicitly through function completion
@@ -461,9 +475,9 @@ class TestContinuousCapture(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # Verify sleep was called for timing (10 times for continuous capture)
+        # Verify sleep was called
         self.assertEqual(mock_sleep.call_count, 10)
         
         # Verify sleep duration
@@ -481,9 +495,9 @@ class TestContinuousCapture(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # The function should track successful and failed captures
+        # The function should track successful
         # This is tested implicitly through function completion without error
         
     @patch('vision.debug_screen_capture.PyBoy')
@@ -508,7 +522,7 @@ class TestContinuousCapture(unittest.TestCase):
         
         # Should handle individual frame failures gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
 
@@ -541,7 +555,7 @@ class TestImageFormatValidation(unittest.TestCase):
             mock_pyboy_class.return_value = mock_pyboy
             
             try:
-                test_pyboy_screen_methods(self.rom_path)
+                _test_pyboy_screen_methods(self.rom_path)
             except Exception as e:
                 self.fail(f"test_pyboy_screen_methods failed with {test_data.shape}: {e}")
     
@@ -556,9 +570,9 @@ class TestImageFormatValidation(unittest.TestCase):
         mock_pyboy.screen = mock_screen
         mock_pyboy_class.return_value = mock_pyboy
         
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # The function should use optimize=True when saving PNG
+        # The function should use optimize
         # This is tested implicitly through function completion
 
 
@@ -594,9 +608,9 @@ class TestIntegrationScenarios(unittest.TestCase):
         mock_pyboy_class.return_value = mock_pyboy
         
         # Should complete entire workflow without error
-        test_pyboy_screen_methods(self.rom_path)
+        _test_pyboy_screen_methods(self.rom_path)
         
-        # Verify key operations were performed
+        # Verify key operations
         self.assertTrue(mock_pyboy.tick.called)
         self.assertTrue(mock_pyboy.stop.called)
     
@@ -619,7 +633,7 @@ class TestIntegrationScenarios(unittest.TestCase):
         
         # Should handle mixed success/failure gracefully
         try:
-            test_pyboy_screen_methods(self.rom_path)
+            _test_pyboy_screen_methods(self.rom_path)
         except Exception as e:
             self.fail(f"test_pyboy_screen_methods raised exception: {e}")
 

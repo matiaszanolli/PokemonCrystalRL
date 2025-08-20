@@ -11,14 +11,27 @@ import os
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 import numpy as np
+from .config import MonitorConfig
+from .database import DatabaseManager
+from .error_handler import ErrorHandler, ErrorSeverity, RecoveryStrategy
+from .training_state import TrainingState
 
-
-class PokemonRLWebMonitor:
+class WebMonitor:
     """Web-based monitoring interface for Pokemon Crystal RL trainer."""
     
-    def __init__(self, host: str = '127.0.0.1', port: int = 8080):
-        self.host = host
-        self.port = port
+    def __init__(self, config: MonitorConfig):
+        self.config = config
+        self.db = DatabaseManager(Path(config.db_path))
+        self.error_handler = ErrorHandler()
+        
+        # State
+        self.training_state = TrainingState.INITIALIZING
+        self.current_run_id = None
+        self._subscribers = []
+        self._update_thread = None
+        self._running = False
+        
+        # Queues
         self.screenshot_queue = queue.Queue(maxsize=30)  # Bounded queue
         self.current_stats: Dict[str, Any] = {}
         self.last_action: Optional[str] = None
@@ -44,12 +57,10 @@ class PokemonRLWebMonitor:
         self.logger = logging.getLogger('web_monitor')
         self.logger.setLevel(logging.INFO)
     
-    def run(self, host: Optional[str] = None, port: Optional[int] = None, debug: bool = False):
+    def run(self):
         """Start the web monitoring server."""
-        if host:
-            self.host = host
-        if port:
-            self.port = port
+        host = '127.0.0.1'  # Default to localhost
+        port = self.config.web_port
         
         class MonitorHandler(http.server.SimpleHTTPRequestHandler):
             def __init__(self, *args, monitor=self, **kwargs):
@@ -120,8 +131,8 @@ class PokemonRLWebMonitor:
         
         handler = lambda *args, **kwargs: MonitorHandler(*args, monitor=self, **kwargs)
         
-        with socketserver.TCPServer((self.host, self.port), handler) as httpd:
-            self.logger.info(f"Web monitor running at http://{self.host}:{self.port}")
+        with socketserver.TCPServer((host, port), handler) as httpd:
+            self.logger.info(f"Web monitor running at http://{host}:{port}")
             try:
                 httpd.serve_forever()
             except KeyboardInterrupt:

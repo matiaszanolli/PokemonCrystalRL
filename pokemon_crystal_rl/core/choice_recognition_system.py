@@ -1,180 +1,338 @@
 #!/usr/bin/env python3
 """
-choice_recognition_system.py - Choice Recognition System for Pokemon Crystal
+choice_recognition_system.py - Recognition system for game choices/options
 
-This module handles detection and analysis of choice options in dialogues
-and menus, integrating with the semantic context system for informed decisions.
+This module provides the system for recognizing and handling different types of
+choices presented in the game, including binary choices, menu selections,
+Pokemon choices, etc.
 """
 
-from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Tuple, Optional, Any
+from enum import Enum
+import numpy as np
+from pokemon_crystal_rl.core.vision_processor import VisualContext
+
 
 class ChoiceType(Enum):
-    """Types of choices available in the game"""
-    UNKNOWN = "unknown"
+    """Types of choices that can be recognized"""
     YES_NO = "yes_no"
-    MENU_OPTION = "menu_option"
+    MULTIPLE_CHOICE = "multiple_choice"
     POKEMON_SELECTION = "pokemon_selection"
-    ITEM_SELECTION = "item_selection"
-    MOVE_SELECTION = "move_selection"
+    MENU_SELECTION = "menu_selection"
     DIRECTIONAL = "directional"
+    CONFIRMATION = "confirmation"
+
+
+class ChoicePosition(Enum):
+    """Position of a choice in the UI"""
+    TOP = "top"
+    MIDDLE = "middle"
+    BOTTOM = "bottom"
+    LEFT = "left"
+    CENTER = "center"
+    RIGHT = "right"
+
 
 @dataclass
 class ChoiceContext:
-    """Context information for choice recognition"""
-    dialogue_text: str
-    screen_type: str
-    npc_type: str
-    current_objective: Optional[str]
-    conversation_history: List[str]
-    ui_layout: str
+    """Context for choice recognition and analysis"""
+    dialogue_text: Optional[str] = None  # Current dialogue text if any
+    screen_type: str = "unknown"  # Type of screen showing choices
+    npc_type: Optional[str] = None  # Type of NPC if interacting
+    current_objective: Optional[str] = None  # Current game objective
+    conversation_history: List[str] = None  # Recent dialogue history
+    ui_layout: str = "standard_dialogue"  # UI layout type
+    battle_context: Optional[Dict] = None  # Battle context if in battle
+    move_types: Optional[Dict[str, str]] = None  # Move types mapping
+    semantic_context: Optional[Dict] = None  # Additional semantic info
+    previous_moves: Optional[List[str]] = None  # Previously used moves
+
+    def __post_init__(self):
+        if self.conversation_history is None:
+            self.conversation_history = []
+
 
 @dataclass
-class Choice:
-    """Represents a recognized choice option"""
-    text: str
-    choice_type: ChoiceType
-    bbox: Tuple[int, int, int, int]
-    priority: float
-    expected_outcome: Optional[str]
+class RecognizedChoice:
+    """A recognized choice option with analysis"""
+    text: str  # Choice text
+    choice_type: ChoiceType  # Type of choice
+    position: ChoicePosition  # Position in UI
+    action_mapping: List[str]  # Actions to select this choice
+    confidence: float  # Recognition confidence
+    priority: float  # Priority for selection
+    expected_outcome: str  # Expected outcome if selected
+    context_tags: List[str]  # Contextual tags
+    ui_coordinates: Tuple[int, int, int, int]  # Position in UI
+
 
 class ChoiceRecognitionSystem:
-    """System for recognizing and analyzing choice options"""
+    """System for recognizing and analyzing game choices"""
     
     def __init__(self, db_path: Optional[str] = None):
-        """Initialize choice recognition system"""
-        self.db_path = db_path
-        
-    def recognize_choices(self, visual_context: 'VisualContext', choice_context: ChoiceContext) -> List[Choice]:
-        """Recognize available choices from visual and semantic context"""
+        self.db_path = db_path or "data/choice_patterns.db"
+        self.initialize_patterns()
+        self.initialize_action_mappings()
+        self.initialize_ui_layouts()
+
+    def initialize_patterns(self):
+        """Initialize choice recognition patterns"""
+        self.choice_patterns = {
+            "yes_no_basic": {
+                "pattern": r"yes|no|okay|sure|nope",
+                "type": ChoiceType.YES_NO,
+                "indicators": ["affirmative", "negative"],
+                "confidence_boost": 1.2
+            },
+            "pokemon_selection": {
+                "pattern": r"cyndaquil|totodile|chikorita",
+                "type": ChoiceType.POKEMON_SELECTION,
+                "indicators": ["starter", "pokemon_name"],
+                "confidence_boost": 1.1
+            },
+            "menu_selection": {
+                "pattern": r"fight|use item|switch|run",
+                "type": ChoiceType.MENU_SELECTION,
+                "indicators": ["menu", "battle"],
+                "confidence_boost": 1.0
+            },
+            "numbered_choices": {
+                "pattern": r"\d+[.)] .+",
+                "type": ChoiceType.MULTIPLE_CHOICE,
+                "indicators": ["numbered", "list"],
+                "confidence_boost": 1.0
+            }
+        }
+
+    def initialize_action_mappings(self):
+        """Initialize mappings from choices to game actions"""
+        self.action_mappings = {
+            "yes": ["A"],
+            "no": ["B"],
+            "cyndaquil": ["A"],
+            "totodile": ["DOWN", "A"],
+            "chikorita": ["DOWN", "DOWN", "A"],
+            "fight": ["A"],
+            "run": ["DOWN", "DOWN", "DOWN", "A"],
+            "confirm": ["A"],
+            "cancel": ["B"]
+        }
+
+    def initialize_ui_layouts(self):
+        """Initialize UI layout definitions"""
+        self.ui_layouts = {
+            "standard_dialogue": {
+                "description": "Standard dialogue layout with choices",
+                "choice_positions": ["top", "bottom"],
+                "navigation": "vertical"
+            },
+            "menu_selection": {
+                "description": "Standard menu layout",
+                "choice_positions": ["top", "middle", "bottom"],
+                "navigation": "vertical"
+            },
+            "pokemon_selection": {
+                "description": "Pokemon selection layout",
+                "choice_positions": ["left", "center", "right"],
+                "navigation": "horizontal"
+            },
+            "yes_no_dialog": {
+                "description": "Yes/No dialogue prompt",
+                "choice_positions": ["top", "bottom"],
+                "navigation": "vertical"
+            }
+        }
+
+    def recognize_choices(self, visual_context: VisualContext, 
+                        choice_context: ChoiceContext) -> List[RecognizedChoice]:
+        """Recognize and analyze choices in the current screen"""
         if not visual_context or not visual_context.detected_text:
             return []
-            
+
         choices = []
-        
-        # Extract choice text elements
-        choice_texts = [
-            text for text in visual_context.detected_text
-            if text.location in ["choice", "menu"]
-        ]
-        
-        if not choice_texts:
-            return []
-            
-        # Special case for yes/no choices
-        if len(choice_texts) == 2 and any("yes" in text.text.lower() for text in choice_texts):
-            yes_choice = next(text for text in choice_texts if "yes" in text.text.lower())
-            no_choice = next(text for text in choice_texts if "no" in text.text.lower())
-            
-            # Yes choice usually has higher priority based on context
-            yes_priority = 0.8
-            no_priority = 0.2
-            
-            choices.extend([
-                Choice(
-                    text=yes_choice.text,
-                    choice_type=ChoiceType.YES_NO,
-                    bbox=yes_choice.bbox,
-                    priority=yes_priority,
-                    expected_outcome="confirm"
-                ),
-                Choice(
-                    text=no_choice.text,
-                    choice_type=ChoiceType.YES_NO,
-                    bbox=no_choice.bbox,
-                    priority=no_priority,
-                    expected_outcome="decline"
-                )
-            ])
-            
-        # Pokemon selection choices
-        elif any("starter" in choice_context.dialogue_text.lower()):
-            for text in choice_texts:
-                # Assign different priorities based on Pokemon type
-                if "cyndaquil" in text.text.lower():
-                    priority = 0.9  # Fire type often preferred
-                elif "totodile" in text.text.lower():
-                    priority = 0.8  # Water type second choice
-                else:
-                    priority = 0.7  # Grass type
-                    
-                choices.append(Choice(
-                    text=text.text,
-                    choice_type=ChoiceType.POKEMON_SELECTION,
-                    bbox=text.bbox,
-                    priority=priority,
-                    expected_outcome="select_pokemon"
-                ))
-                
-        # Item selection choices
-        elif "buy" in choice_context.dialogue_text.lower() or "shop" in choice_context.ui_layout.lower():
-            for text in choice_texts:
-                # Prioritize based on item type
-                priority = 0.5  # Default priority
-                if "potion" in text.text.lower():
-                    priority = 0.9  # Healing items high priority
-                elif "ball" in text.text.lower():
-                    priority = 0.8  # Pokeballs also important
-                    
-                choices.append(Choice(
-                    text=text.text,
-                    choice_type=ChoiceType.ITEM_SELECTION,
-                    bbox=text.bbox,
-                    priority=priority,
-                    expected_outcome="purchase_item"
-                ))
-                
-        # Generic menu options
-        else:
-            for text in choice_texts:
-                choices.append(Choice(
-                    text=text.text,
-                    choice_type=ChoiceType.MENU_OPTION,
-                    bbox=text.bbox,
-                    priority=0.5,  # Default priority for menu options
-                    expected_outcome="select_option"
-                ))
-                
+        texts = self._extract_choice_texts(visual_context.detected_text)
+
+        for i, text_info in enumerate(texts):
+            text = text_info["text"]
+            # Pattern match the choice
+            choice_type, confidence = self._match_choice_patterns(text.lower())
+            if not choice_type:
+                continue
+
+            # Determine position based on UI layout
+            position = self._determine_choice_position(text_info, i, len(texts))
+
+            # Generate action mapping
+            action_mapping = self._generate_action_mapping(text.lower(), choice_type, position, i)
+
+            # Calculate priority
+            priority = self._calculate_choice_priority(text, choice_type, choice_context, confidence)
+
+            # Determine expected outcome
+            expected_outcome = self._determine_expected_outcome(text, choice_type, choice_context)
+
+            # Generate context tags
+            context_tags = self._generate_context_tags(text, choice_type, choice_context)
+
+            # Create recognized choice
+            choice = RecognizedChoice(
+                text=text,
+                choice_type=choice_type,
+                position=position,
+                action_mapping=action_mapping,
+                confidence=confidence,
+                priority=priority,
+                expected_outcome=expected_outcome,
+                context_tags=context_tags,
+                ui_coordinates=text_info.get("coordinates", (0, 0, 0, 0))
+            )
+            choices.append(choice)
+
         return choices
-        
-    def get_best_choice_action(self, choices: List[Choice]) -> List[str]:
-        """Get the recommended action sequence for the best choice"""
+
+    def get_best_choice_action(self, choices: List[RecognizedChoice]) -> List[str]:
+        """Get the best action sequence based on available choices"""
         if not choices:
-            return []
-            
-        # Get highest priority choice
+            return ["A"]  # Default to A button if no choices
+
+        # Get choice with highest priority
         best_choice = max(choices, key=lambda x: x.priority)
+        return best_choice.action_mapping
+
+    def _extract_choice_texts(self, detected_texts: List) -> List[Dict]:
+        """Extract potential choice texts from detected text"""
+        choice_texts = []
+        for text in detected_texts:
+            if 2 <= len(text.text) <= 20:  # Reasonable length for a choice
+                choice_texts.append({
+                    "text": text.text,
+                    "coordinates": text.bbox,
+                    "confidence": text.confidence,
+                    "location": text.location
+                })
+        return choice_texts
+
+    def _match_choice_patterns(self, text: str) -> Tuple[Optional[ChoiceType], float]:
+        """Match text against choice patterns"""
+        if not text:
+            return None, 0.0
+
+        best_match = None
+        best_confidence = 0.0
+
+        # Simple pattern matching for demonstration
+        text = text.lower()
+        if any(x in text for x in ["yes", "okay", "sure"]):
+            return ChoiceType.YES_NO, 0.9
+        elif any(x in text for x in ["no", "nope", "cancel"]):
+            return ChoiceType.YES_NO, 0.9
+        elif any(x in text for x in ["cyndaquil", "totodile", "chikorita"]):
+            return ChoiceType.POKEMON_SELECTION, 0.95
+        elif text.startswith(("1.", "2.", "3.")):
+            return ChoiceType.MULTIPLE_CHOICE, 0.8
+        elif any(x in text for x in ["fight", "item", "pokemon", "run"]):
+            return ChoiceType.MENU_SELECTION, 0.85
+        elif any(x in text for x in ["north", "south", "east", "west"]):
+            return ChoiceType.DIRECTIONAL, 0.8
+
+        return None, 0.0
+
+    def _determine_choice_position(self, choice_info: Dict, index: int, total: int) -> ChoicePosition:
+        """Determine UI position of a choice"""
+        if total == 1:
+            return ChoicePosition.CENTER
+        elif total == 2:
+            return ChoicePosition.TOP if index == 0 else ChoicePosition.BOTTOM
+        else:
+            if index == 0:
+                return ChoicePosition.TOP
+            elif index == total - 1:
+                return ChoicePosition.BOTTOM
+            else:
+                return ChoicePosition.MIDDLE
+
+    def _generate_action_mapping(self, text: str, choice_type: ChoiceType, 
+                               position: ChoicePosition, index: int) -> List[str]:
+        """Generate action sequence to select this choice"""
+        # Direct text mappings
+        if text in self.action_mappings:
+            return self.action_mappings[text]
+
+        # Position-based mappings
+        if position == ChoicePosition.TOP:
+            return ["A"]
+        elif position == ChoicePosition.MIDDLE:
+            return ["DOWN", "A"]
+        elif position == ChoicePosition.BOTTOM:
+            return ["DOWN", "DOWN", "A"]
+
+        return ["A"]  # Default to A button
+
+    def _calculate_choice_priority(self, text: str, choice_type: ChoiceType, 
+                                 context: ChoiceContext, confidence: float) -> float:
+        """Calculate priority score for a choice"""
+        priority = confidence * 50  # Base priority from confidence
+
+        # Adjust based on NPC type
+        if context.npc_type == "professor" and choice_type == ChoiceType.POKEMON_SELECTION:
+            priority += 20
+
+        # Adjust based on current objective
+        if context.current_objective == "get_starter_pokemon" and "cyndaquil" in text.lower():
+            priority += 30
+
+        return min(priority, 100)  # Cap at 100
+
+    def _determine_expected_outcome(self, text: str, choice_type: ChoiceType, 
+                                  context: Optional[ChoiceContext]) -> str:
+        """Determine expected outcome of selecting this choice"""
+        text = text.lower()
         
-        # Map choice type to action sequence
-        if best_choice.choice_type == ChoiceType.YES_NO:
-            return ["A"]  # Simple selection
-            
-        elif best_choice.choice_type == ChoiceType.POKEMON_SELECTION:
-            return ["A"]  # Pokemon selection
-            
-        elif best_choice.choice_type == ChoiceType.ITEM_SELECTION:
-            return ["A", "A"]  # Select and confirm
-            
-        elif best_choice.choice_type == ChoiceType.MENU_OPTION:
-            return ["A"]  # Menu selection
-            
-        return []  # Default empty action sequence
-        
-    def filter_choices(self, choices: List[Choice], criteria: Dict[str, Any]) -> List[Choice]:
-        """Filter choices based on given criteria"""
-        filtered = choices.copy()
-        
-        if "type" in criteria:
-            filtered = [c for c in filtered if c.choice_type == criteria["type"]]
-            
-        if "min_priority" in criteria:
-            filtered = [c for c in filtered if c.priority >= criteria["min_priority"]]
-            
-        if "text_contains" in criteria:
-            filtered = [c for c in filtered if criteria["text_contains"].lower() in c.text.lower()]
-            
-        if "outcome" in criteria:
-            filtered = [c for c in filtered if c.expected_outcome == criteria["outcome"]]
-            
-        return filtered
+        if choice_type == ChoiceType.YES_NO:
+            return "accept_or_confirm" if text in ["yes", "okay", "sure"] else "decline_or_cancel"
+        elif choice_type == ChoiceType.POKEMON_SELECTION:
+            return f"select_{text}"
+        elif choice_type == ChoiceType.MENU_SELECTION:
+            return f"enter_{text}_menu"
+        elif choice_type == ChoiceType.DIRECTIONAL:
+            return f"move_{text}"
+        else:
+            return "unknown_outcome"
+
+    def _generate_context_tags(self, text: str, choice_type: ChoiceType, 
+                             context: ChoiceContext) -> List[str]:
+        """Generate contextual tags for the choice"""
+        tags = [f"type_{choice_type.name.lower()}"]
+
+        if context.npc_type:
+            tags.append(f"npc_{context.npc_type}")
+        if context.current_objective:
+            tags.append(f"objective_{context.current_objective}")
+
+        # Add response type tags
+        if choice_type == ChoiceType.YES_NO:
+            if text.lower() in ["yes", "okay", "sure"]:
+                tags.append("positive_response")
+            else:
+                tags.append("negative_response")
+        elif choice_type == ChoiceType.POKEMON_SELECTION:
+            tags.append("pokemon_choice")
+
+        return tags
+
+    def update_choice_effectiveness(self, choice_text: str, actions: List[str], 
+                                  success: bool, ui_layout: str):
+        """Update effectiveness metrics for choices"""
+        # This would update the database with success/failure metrics
+        pass
+
+    def get_choice_statistics(self) -> Dict:
+        """Get statistics about choice recognition performance"""
+        return {
+            "total_choice_recognitions": 0,
+            "average_confidence": 0.0,
+            "loaded_patterns": len(self.choice_patterns),
+            "loaded_action_mappings": len(self.action_mappings),
+            "top_action_mappings": []
+        }

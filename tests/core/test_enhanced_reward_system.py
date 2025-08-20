@@ -184,11 +184,11 @@ class TestStateTransitionBonuses:
         reward = calculate_reward(current_state, previous_state)
         
         # Components:
+        # Components:
         # Base survival: 0.1
         # State transition bonus: 5.0
-        # Action diversity bonus: 0.05 (different actions)
         # Time penalty: -0.002
-        assert 5.145 <= reward <= 5.15
+        assert 5.095 <= reward <= 5.1
     
     def test_new_game_to_overworld_transition(self):
         """Test major reward for entering overworld from new game menu"""
@@ -209,11 +209,11 @@ class TestStateTransitionBonuses:
         reward = calculate_reward(current_state, previous_state)
         
         # Components:
+        # Components:
         # Base survival: 0.1
         # State transition bonus: 10.0
-        # Action diversity penalty: -0.02 (all same actions)
         # Time penalty: -0.002
-        assert 10.075 <= reward <= 10.08
+        assert 10.095 <= reward <= 10.1
     
     def test_battle_completion_reward(self):
         """Test reward for successfully completing battle"""

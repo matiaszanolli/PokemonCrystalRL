@@ -5,7 +5,7 @@ Game state detection module for Pokemon Crystal RL agent
 
 from typing import Dict, List, Any
 import numpy as np
-from .game_states import PyBoyGameState, STATE_UI_ELEMENTS
+from core.game_states import PyBoyGameState, STATE_UI_ELEMENTS
 
 def detect_game_state(visual_context) -> PyBoyGameState:
     """Detect current game state from visual context"""

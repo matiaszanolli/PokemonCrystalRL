@@ -145,10 +145,42 @@ def test_read_badges(env):
 
 
 def test_read_bcd_money(env):
-    """Test reading BCD format money."""
+    """Test reading BCD format money. In Pokémon Crystal (USA),
+    money is stored in Ᵽ (Pokédollar) format using BCD encoding.
+    
+    Memory layout example for Ᵽ100:
+    Byte 0: 0x00 (00)
+    Byte 1: 0x01 (01)
+    Byte 2: 0x00 (00)
+    """
     env.reset()
-    money = env._read_bcd_money()
-    assert money == 100  # 0x01 0x00 0x00 in BCD format
+    
+    # Test case 1: Ᵽ100 (encoded as 00 01 00)
+    mock_memory = {
+        env.memory_addresses['money']: 0x00,      # First byte
+        env.memory_addresses['money'] + 1: 0x01,  # Second byte
+        env.memory_addresses['money'] + 2: 0x00   # Third byte
+    }
+    env.pyboy.memory.update(mock_memory)
+    assert env._read_bcd_money() == 100
+    
+    # Test case 2: Ᵽ3000 (encoded as 03 00 00)
+    mock_memory = {
+        env.memory_addresses['money']: 0x03,      # First byte
+        env.memory_addresses['money'] + 1: 0x00,  # Second byte
+        env.memory_addresses['money'] + 2: 0x00   # Third byte
+    }
+    env.pyboy.memory.update(mock_memory)
+    assert env._read_bcd_money() == 3000
+    
+    # Test case 3: Invalid BCD digits should return 0
+    mock_memory = {
+        env.memory_addresses['money']: 0xAB,      # Invalid BCD
+        env.memory_addresses['money'] + 1: 0x00,  # Second byte
+        env.memory_addresses['money'] + 2: 0x00   # Third byte
+    }
+    env.pyboy.memory.update(mock_memory)
+    assert env._read_bcd_money() == 0
 
 
 def test_render(env):

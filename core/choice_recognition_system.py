@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 choice_recognition_system.py - Recognition system for game choices/options
 
@@ -10,7 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
 from enum import Enum
 import numpy as np
-from .vision_processor import VisualContext
+from core.vision_processor import VisualContext
 
 
 class ChoiceType(Enum):

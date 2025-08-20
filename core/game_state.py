@@ -1,5 +1,9 @@
 """
+"""
 game_state.py - Game state detection and management system.
+
+Note: This module is deprecated. Use game_states.py instead.
+"""
 
 This module handles detecting different game states (battle, menu, dialogue, etc.)
 based on screen content and other indicators.

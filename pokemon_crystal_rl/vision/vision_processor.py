@@ -19,10 +19,7 @@ import logging
 import json
 import hashlib
 
-try:
-    from ..core.game_states import PyBoyGameState
-except ImportError:
-    from pokemon_crystal_rl.core.game_states import PyBoyGameState
+from pokemon_crystal_rl.core import PyBoyGameState
 
 # Visual context classes
 @dataclass

@@ -7,6 +7,10 @@ Contains core game environments, memory mapping, base classes, and video streami
 # Import memory_map first as it has no external dependencies
 from .memory_map import MEMORY_ADDRESSES
 
+# Import game states and vision processor
+from pokemon_crystal_rl.core.game_states import PyBoyGameState, STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
+from .vision_processor import PokemonVisionProcessor
+
 # Import PyBoy environment and video streaming as optional dependencies
 try:
     from .pyboy_env import PyBoyPokemonCrystalEnv
@@ -27,7 +31,8 @@ except ImportError:
 
 __all__ = [
     'MEMORY_ADDRESSES', 'PyBoyPokemonCrystalEnv', 
-    'PyBoyVideoStreamer', 'create_video_streamer', 'StreamQuality', 'VIDEO_STREAMING_AVAILABLE'
+    'PyBoyVideoStreamer', 'create_video_streamer', 'StreamQuality', 'VIDEO_STREAMING_AVAILABLE',
+    'PyBoyGameState', 'STATE_UI_ELEMENTS', 'STATE_TRANSITION_REWARDS', 'PokemonVisionProcessor'
 ]
 
 # Try to import optional modules
