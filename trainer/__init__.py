@@ -5,7 +5,7 @@ This module provides the core training systems and LLM-based decision making
 for the Pokemon Crystal RL agent.
 """
 
-from .trainer import TrainingMode, TrainingConfig, LLMBackend
+from .trainer import TrainingMode, TrainingConfig, LLMBackend, PyBoy, PYBOY_AVAILABLE
 from .unified_trainer import UnifiedPokemonTrainer
 from .dialogue_state_machine import DialogueStateMachine, DialogueState
 from .game_state_detection import GameStateDetector

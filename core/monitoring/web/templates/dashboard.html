@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokemon Crystal RL Training Monitor</title>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/styles.css">
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    
+    <!-- Application scripts -->
+    <script src="/static/monitor.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Pokemon Crystal RL Training Monitor</h1>
+            <div class="connection-status">
+                <span id="connection-status" class="status-indicator status-inactive" title="Disconnected"></span>
+                Connection Status
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <!-- Game screen panel -->
+            <div class="panel">
+                <h2>Game Screen</h2>
+                <div class="game-screen">
+                    <img id="game-screen" src="data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt="Game screen">
+                </div>
+            </div>
+            
+            <!-- Training stats panel -->
+            <div class="panel">
+                <h2>Training Statistics</h2>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Total Actions</div>
+                        <div id="total-actions" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Episodes</div>
+                        <div id="total-episodes" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Duration</div>
+                        <div id="session-duration" class="stat-value">00:00:00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Actions/sec</div>
+                        <div id="actions-per-second" class="stat-value">0.0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System performance panel -->
+            <div class="panel">
+                <h2>System Performance</h2>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Memory Usage</div>
+                        <div id="memory-usage" class="stat-value">0 MB</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">CPU Usage</div>
+                        <div id="cpu-usage" class="stat-value">0%</div>
+                    </div>
+                </div>
+                <div class="performance-chart">
+                    <canvas id="memory-chart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Performance trends panel -->
+            <div class="panel">
+                <h2>Performance Trends</h2>
+                <div class="performance-chart">
+                    <canvas id="actions-chart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Game actions panel -->
+            <div class="panel">
+                <h2>Recent Actions</h2>
+                <ul id="action-list" class="action-list"></ul>
+            </div>
+            
+            <!-- Text log panel -->
+            <div class="panel">
+                <h2>Text Log</h2>
+                <div id="text-log" class="text-log"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -10,7 +10,7 @@ import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from typing import Optional, Dict, Any
 
-from monitoring.data_bus import DataBus, DataType, get_data_bus
+from core.monitoring.data_bus import DataBus, DataType, get_data_bus
 
 
 class MonitoringRequestHandler(SimpleHTTPRequestHandler):

@@ -11,7 +11,7 @@ import numpy as np
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
-from pokemon_crystal_rl.core.monitoring.data_bus import get_data_bus, init_data_bus, DataType
+from monitoring.data_bus import get_data_bus, init_data_bus, DataType
 from pokemon_crystal_rl.core.monitoring.web_server import TrainingWebServer
 
 
@@ -213,7 +213,7 @@ class PokemonTrainer:
         
         # Data bus for component communication
         # Data bus for component communication
-        from pokemon_crystal_rl.core.monitoring.data_bus import get_data_bus, DataType
+        from monitoring.data_bus import get_data_bus, DataType
         self.data_bus = get_data_bus()
         if self.data_bus:
             self.data_bus.register_component(
