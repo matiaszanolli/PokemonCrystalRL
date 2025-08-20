@@ -17,8 +17,8 @@ import queue
 import numpy as np
 from typing import Optional, Dict, List, Any
 from pathlib import Path
-from pokemon_crystal_rl.trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
-from pokemon_crystal_rl.core.monitoring.web_server import TrainingWebServer
+from trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
+from core.monitoring.web_server import TrainingWebServer
 
 class UnifiedPokemonTrainer(PokemonTrainer):
     """Enhanced Pokemon trainer with integrated features"""
