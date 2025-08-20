@@ -2,7 +2,7 @@
 Game state definitions and management for Pokemon Crystal RL agent.
 """
 
-from enum import Enum, auto
+from enum import Enum
 
 class PyBoyGameState(Enum):
     """Game states for Pokemon Crystal"""
@@ -34,6 +34,7 @@ class PyBoyGameState(Enum):
     PC_BOX = "pc_box"
     CONTINUE = "continue"
     PAUSE = "pause"
+    CUTSCENE = "cutscene"  # Add missing CUTSCENE state
 
     @classmethod
     def from_str(cls, state_str: str) -> "PyBoyGameState":
@@ -49,6 +50,8 @@ class PyBoyGameState(Enum):
         non_input_states = {
             PyBoyGameState.LOADING,
             PyBoyGameState.INTRO,
+            PyBoyGameState.INTRO_SEQUENCE,  # Add this
+            PyBoyGameState.CUTSCENE,        # Add this
             PyBoyGameState.EVOLUTION
         }
         return self not in non_input_states
@@ -83,6 +86,7 @@ class PyBoyGameState(Enum):
         transitional_states = {
             PyBoyGameState.LOADING,
             PyBoyGameState.INTRO_SEQUENCE,
+            PyBoyGameState.CUTSCENE,        # Add this
             PyBoyGameState.EVOLUTION
         }
         return self in transitional_states
