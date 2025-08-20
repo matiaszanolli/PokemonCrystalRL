@@ -54,6 +54,14 @@ def mock_pyboy():
     }
     mock.memory.update(pokemon1_data)
     mock.memory.update(pokemon2_data)
+
+    # Add button_press method for action testing
+    mock.button_press = Mock()
+
+    # Add screen_image method that returns the mock screen
+    def screen_image():
+        return mock.screen.ndarray
+    mock.screen_image = screen_image
     
     # Mock get_memory_value to use our mock memory dict
     def get_memory_value(addr):
