@@ -194,7 +194,7 @@ class WebMonitor:
         self.last_update_time = time.time()
         
         # Initialize components
-        self.server_config
+        self.server_config = ServerConfig(
             host=self.config.host,
             port=self.config.port,
             static_dir=self.config.static_dir,
@@ -705,7 +705,7 @@ class WebMonitor:
                 'web_monitor'
             )
     
-    def start(self) -> None:
+    def run(self) -> None:
         """Run the monitor in the current thread."""
         loop = asyncio.get_event_loop()
         try:

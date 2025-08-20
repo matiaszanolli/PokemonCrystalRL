@@ -7,8 +7,6 @@ Provides optimized video streaming functionality with:
 - Memory-efficient frame handling
 - Automatic frame rate control
 - Performance monitoring
-"""
-Game streamer module for Pokemon Crystal RL.
 
 This module handles real-time streaming of game visuals and actions
 for monitoring and debugging purposes.
@@ -16,7 +14,7 @@ for monitoring and debugging purposes.
 
 import cv2
 import numpy as np
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union, List
 from queue import Queue
 import threading
 import time
