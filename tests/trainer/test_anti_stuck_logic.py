@@ -15,6 +15,7 @@ import numpy as np
 import time
 from unittest.mock import Mock, patch, MagicMock
 from collections import deque
+from trainer.unified_trainer import UnifiedPokemonTrainer
 
 # Import test system modules
 import sys
@@ -24,7 +25,6 @@ sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
 from trainer import (
-    PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend

@@ -26,9 +26,9 @@ sys.path.insert(0, parent_dir)
 
 # Import with fallbacks for missing dependencies
 try:
-    from pokemon_crystal_rl.core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
-    from pokemon_crystal_rl.core.vision_processor import DetectedText, VisualContext
-    from pokemon_crystal_rl.core.semantic_context_system import GameContext
+    from core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
+    from vision.vision_processor import DetectedText, VisualContext
+    from core.semantic_context_system import GameContext
 except ImportError:
     # Skip these tests if dependencies aren't available
     pytest.skip("Missing dependencies for dialogue state machine tests", allow_module_level=True)

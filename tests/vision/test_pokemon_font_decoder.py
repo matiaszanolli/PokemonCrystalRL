@@ -8,7 +8,7 @@ import cv2
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, List, Tuple, Optional
 
-from pokemon_crystal_rl.vision.pokemon_font_decoder import PokemonFontDecoder, CharacterMatch
+from vision.pokemon_font_decoder import PokemonFontDecoder, CharacterMatch
 
 
 class TestCharacterMatch(unittest.TestCase):
