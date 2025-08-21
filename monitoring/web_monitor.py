@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 from enum import Enum, auto
 from contextlib import contextmanager
+import numpy as np
 
 
 class TrainingState(Enum):

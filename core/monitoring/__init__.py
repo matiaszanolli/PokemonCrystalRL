@@ -8,15 +8,9 @@ This package provides unified monitoring capabilities including:
 """
 
 from monitoring.data_bus import (
-    DataBus,
-    DataType,
-    DataMessage,
-    get_data_bus,
-    init_data_bus,
-    shutdown_data_bus,
-    # Backward compatibility
-    TrainingDataBus
+    DataBus, DataType, DataMessage, get_data_bus, init_data_bus, shutdown_data_bus, TrainingDataBus
 )
+
 
 from .web_server import (
     TrainingWebServer,

@@ -7,16 +7,30 @@ from typing import Dict, Any, Optional, List
 import threading
 import time
 import queue
+from dataclasses import dataclass, asdict
+
 
 
 class DataType(Enum):
-    """Types of data that can be published on the bus"""
-    GAME_SCREEN = "game_screen"
+    """Types of data that can be published to the data bus"""
     GAME_STATE = "game_state"
     TRAINING_STATS = "training_stats"
-    ACTION = "action"
-    LLM_RESPONSE = "llm_response"
-    ERROR = "error"
+    ACTION_TAKEN = "action_taken"
+    LLM_DECISION = "llm_decision"
+    SYSTEM_INFO = "system_info"
+    GAME_SCREEN = "game_screen"
+    ERROR_EVENT = "error_event"
+    COMPONENT_STATUS = "component_status"
+
+
+@dataclass
+class DataMessage:
+    """Standard message format for the data bus"""
+    data_type: DataType
+    timestamp: float
+    data: Dict[str, Any]
+    source_component: str
+    message_id: str
 
 
 class DataBus:

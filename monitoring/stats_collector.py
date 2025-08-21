@@ -1,290 +1,491 @@
+#!/usr/bin/env python3
 """
-Stats collector module for Pokemon Crystal RL.
+StatsCollector - Thread-safe real-time statistics aggregation
 
-This module handles collection, aggregation, and tracking of various metrics including:
-- Training statistics (rewards, episodes, actions)
-- System performance (memory usage, CPU load)
-- Model metrics (loss values, gradients)
-- Game state statistics (in-game progress, status)
+This module provides a robust stats collection system that captures training
+metrics, game state changes, LLM decisions, and performance data in real-time.
 """
 
 import time
-import psutil
-import numpy as np
-from typing import Dict, List, Any, Optional, Union
-from collections import deque
 import threading
+import queue
 import logging
-from datetime import datetime
 import json
+from typing import Dict, Any, Optional, List, Callable
+from dataclasses import dataclass, asdict
+from collections import deque, defaultdict
+import statistics
+from enum import Enum
 
-from .data_bus import DataType, get_data_bus
+try:
+    from .data_bus import get_data_bus, DataType, DataMessage
+except ImportError:
+    from data_bus import get_data_bus, DataType, DataMessage
 
 
-class MetricBuffer:
-    """Thread-safe circular buffer for storing metric values."""
-    
-    def __init__(self, max_size: int = 1000):
-        self.buffer = deque(maxlen=max_size)
-        self._lock = threading.Lock()
-        
-    def add(self, value: Union[float, int]) -> None:
-        """Add a value to the buffer."""
-        with self._lock:
-            self.buffer.append(value)
-    
-    def get_stats(self) -> Dict[str, float]:
-        """Calculate statistics from buffered values."""
-        with self._lock:
-            if not self.buffer:
-                return {
-                    'mean': 0.0,
-                    'std': 0.0,
-                    'min': 0.0,
-                    'max': 0.0,
-                    'count': 0
-                }
-            
-            values = np.array(self.buffer)
-            return {
-                'mean': float(np.mean(values)),
-                'std': float(np.std(values)),
-                'min': float(np.min(values)),
-                'max': float(np.max(values)),
-                'count': len(values)
-            }
-    
-    def clear(self) -> None:
-        """Clear all values from the buffer."""
-        with self._lock:
-            self.buffer.clear()
+class MetricType(Enum):
+    """Types of metrics that can be collected"""
+    COUNTER = "counter"          # Incrementing values (actions taken, errors)
+    GAUGE = "gauge"              # Current values (speed, memory usage)
+    HISTOGRAM = "histogram"      # Distribution of values (response times)
+    TIMER = "timer"              # Duration measurements
+    RATE = "rate"                # Rate of change over time
+
+
+@dataclass
+class MetricPoint:
+    """A single metric data point"""
+    timestamp: float
+    value: float
+    tags: Dict[str, str]
+
+
+@dataclass
+class AggregatedMetric:
+    """Aggregated metric with statistics"""
+    name: str
+    metric_type: MetricType
+    current_value: float
+    count: int
+    sum_value: float
+    min_value: float
+    max_value: float
+    avg_value: float
+    last_updated: float
+    tags: Dict[str, str]
 
 
 class StatsCollector:
-    """Collects and aggregates various training and system metrics."""
+    """
+    Thread-safe real-time statistics aggregation system
     
-    def __init__(self, metrics_history_size: int = 1000,
-                 update_interval: float = 1.0):
-        self.metrics_history_size = metrics_history_size
-        self.update_interval = update_interval
-        
-        # Initialize metric buffers
-        self.metric_buffers: Dict[str, MetricBuffer] = {
-            # Training metrics
-            'episode_reward': MetricBuffer(metrics_history_size),
-            'episode_length': MetricBuffer(metrics_history_size),
-            'step_reward': MetricBuffer(metrics_history_size),
-            
-            # Model metrics
-            'loss': MetricBuffer(metrics_history_size),
-            'policy_loss': MetricBuffer(metrics_history_size),
-            'value_loss': MetricBuffer(metrics_history_size),
-            'entropy': MetricBuffer(metrics_history_size),
-            'grad_norm': MetricBuffer(metrics_history_size),
-            
-            # Performance metrics
-            'fps': MetricBuffer(metrics_history_size),
-            'step_time': MetricBuffer(metrics_history_size),
-            'inference_time': MetricBuffer(metrics_history_size),
-        }
-        
-        # Episode tracking
-        self.current_episode = 0
-        self.total_steps = 0
-        self.episode_start_time = time.time()
-        
-        # System metrics
-        self.process = psutil.Process()
-        
-        # Collection state
-        self.is_collecting = False
-        self.collector_thread: Optional[threading.Thread] = None
-        self._collection_lock = threading.Lock()
-        
-        # Data bus connection
-        self.data_bus = get_data_bus()
-        
-        # Logging setup
-        self.logger = logging.getLogger(__name__)
-        
-        self.logger.info("📊 Stats collector initialized")
+    Features:
+    - Non-blocking stats collection
+    - Multiple metric types (counters, gauges, histograms, timers, rates)
+    - Configurable aggregation windows
+    - Historical data storage
+    - Performance metrics calculation
+    - Thread-safe operations
+    """
     
-    def start_collecting(self) -> None:
-        """Start the metrics collection process."""
-        with self._collection_lock:
-            if self.is_collecting:
-                return
+    def __init__(self, 
+                 max_history: int = 1000,
+                 aggregation_window: float = 10.0,
+                 cleanup_interval: float = 60.0,
+                 enable_data_bus: bool = True):
+        
+        self.max_history = max_history
+        self.aggregation_window = aggregation_window
+        self.cleanup_interval = cleanup_interval
+        self.enable_data_bus = enable_data_bus
+        
+        # Thread safety
+        self._lock = threading.RLock()
+        self._collection_thread: Optional[threading.Thread] = None
+        self._collection_active = False
+        
+        # Metrics storage
+        self._raw_metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=max_history))
+        self._aggregated_metrics: Dict[str, AggregatedMetric] = {}
+        self._metric_types: Dict[str, MetricType] = {}
+        
+        # Performance tracking
+        self._collection_count = 0
+        self._collection_errors = 0
+        self._last_aggregation_time = 0.0
+        
+        # Rate calculation tracking
+        self._rate_tracking: Dict[str, List[tuple]] = defaultdict(list)  # (timestamp, value)
+        
+        # Setup logging
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        
+        # Data bus integration
+        self.data_bus = get_data_bus() if enable_data_bus else None
+        if self.data_bus:
+            self.data_bus.register_component("stats_collector", {
+                "type": "statistics",
+                "max_history": max_history,
+                "aggregation_window": aggregation_window
+            })
             
-            self.is_collecting = True
-            self.collector_thread = threading.Thread(
+            # Subscribe to relevant data types
+            self.data_bus.subscribe(DataType.TRAINING_STATS, self._handle_training_stats, "stats_collector")
+            self.data_bus.subscribe(DataType.ACTION_TAKEN, self._handle_action_taken, "stats_collector")
+            self.data_bus.subscribe(DataType.LLM_DECISION, self._handle_llm_decision, "stats_collector")
+            self.data_bus.subscribe(DataType.GAME_STATE, self._handle_game_state, "stats_collector")
+            self.data_bus.subscribe(DataType.ERROR_EVENT, self._handle_error_event, "stats_collector")
+        
+        self.logger.info("📊 StatsCollector initialized")
+    
+    def start_collection(self) -> bool:
+        """Start the stats collection process"""
+        if self._collection_active:
+            self.logger.warning("Stats collection already active")
+            return True
+        
+        with self._lock:
+            self._collection_active = True
+            self._collection_thread = threading.Thread(
                 target=self._collection_loop,
-                daemon=True
+                daemon=True,
+                name="StatsCollector"
             )
-            self.collector_thread.start()
-            
-            self.logger.info("📈 Stats collection started")
+            self._collection_thread.start()
+        
+        self.logger.info("🚀 Stats collection started")
+        return True
     
-    def stop_collecting(self) -> None:
-        """Stop the metrics collection process."""
-        with self._collection_lock:
-            self.is_collecting = False
-            if self.collector_thread and self.collector_thread.is_alive():
-                self.collector_thread.join(timeout=5.0)
-            
-            self.logger.info("⏹️ Stats collection stopped")
+    def stop_collection(self) -> None:
+        """Stop the stats collection process"""
+        if not self._collection_active:
+            return
+        
+        with self._lock:
+            self._collection_active = False
+        
+        if self._collection_thread and self._collection_thread.is_alive():
+            self._collection_thread.join(timeout=5.0)
+            if self._collection_thread.is_alive():
+                self.logger.warning("Stats collection thread did not shut down cleanly")
+        
+        self.logger.info("🛑 Stats collection stopped")
     
-    def record_metric(self, name: str, value: Union[float, int]) -> None:
-        """Record a single metric value."""
-        if name in self.metric_buffers:
-            self.metric_buffers[name].add(value)
-            
-            # Publish individual metrics for real-time monitoring
-            if self.data_bus:
-                self.data_bus.publish(
-                    DataType.TRAINING_METRICS,
-                    {
-                        'metric': name,
-                        'value': value,
-                        'timestamp': time.time()
-                    },
-                    'stats_collector'
-                )
+    def record_counter(self, name: str, value: float = 1.0, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a counter metric (incrementing value)"""
+        self._record_metric(name, MetricType.COUNTER, value, tags or {})
     
-    def record_episode_end(self, total_reward: float, episode_steps: int) -> None:
-        """Record metrics for a completed episode."""
-        self.current_episode += 1
-        self.total_steps += episode_steps
+    def record_gauge(self, name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a gauge metric (current value)"""
+        self._record_metric(name, MetricType.GAUGE, value, tags or {})
+    
+    def record_histogram(self, name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a histogram metric (distribution of values)"""
+        self._record_metric(name, MetricType.HISTOGRAM, value, tags or {})
+    
+    def record_timer(self, name: str, duration: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a timer metric (duration measurement)"""
+        self._record_metric(name, MetricType.TIMER, duration, tags or {})
+    
+    def record_rate(self, name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a rate metric (rate of change over time)"""
+        self._record_metric(name, MetricType.RATE, value, tags or {})
+    
+    def get_metric(self, name: str) -> Optional[AggregatedMetric]:
+        """Get current aggregated metric"""
+        with self._lock:
+            return self._aggregated_metrics.get(name)
+    
+    def get_all_metrics(self) -> Dict[str, AggregatedMetric]:
+        """Get all current aggregated metrics"""
+        with self._lock:
+            return self._aggregated_metrics.copy()
+    
+    def get_metrics_summary(self) -> Dict[str, Any]:
+        """Get summary of all metrics"""
+        with self._lock:
+            summary = {}
+            
+            for name, metric in self._aggregated_metrics.items():
+                summary[name] = {
+                    "type": metric.metric_type.value,
+                    "current": metric.current_value,
+                    "count": metric.count,
+                    "avg": metric.avg_value,
+                    "min": metric.min_value,
+                    "max": metric.max_value,
+                    "last_updated": metric.last_updated,
+                    "tags": metric.tags
+                }
+            
+            return summary
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get performance statistics for the collector itself"""
+        with self._lock:
+            return {
+                "collection_count": self._collection_count,
+                "collection_errors": self._collection_errors,
+                "error_rate": self._collection_errors / max(self._collection_count, 1),
+                "active_metrics": len(self._aggregated_metrics),
+                "total_data_points": sum(len(deque_data) for deque_data in self._raw_metrics.values()),
+                "last_aggregation": self._last_aggregation_time,
+                "is_collecting": self._collection_active
+            }
+    
+    def reset_metrics(self, pattern: Optional[str] = None) -> None:
+        """Reset metrics (optionally matching a pattern)"""
+        with self._lock:
+            if pattern is None:
+                self._raw_metrics.clear()
+                self._aggregated_metrics.clear()
+                self._metric_types.clear()
+                self._rate_tracking.clear()
+                self.logger.info("All metrics reset")
+            else:
+                # Reset metrics matching pattern
+                to_remove = [name for name in self._aggregated_metrics.keys() if pattern in name]
+                for name in to_remove:
+                    del self._aggregated_metrics[name]
+                    del self._raw_metrics[name]
+                    del self._metric_types[name]
+                    if name in self._rate_tracking:
+                        del self._rate_tracking[name]
+                self.logger.info(f"Reset {len(to_remove)} metrics matching '{pattern}'")
+    
+    def export_metrics(self, format: str = "json") -> str:
+        """Export metrics in specified format"""
+        with self._lock:
+            if format == "json":
+                data = {
+                    "timestamp": time.time(),
+                    "metrics": {name: asdict(metric) for name, metric in self._aggregated_metrics.items()},
+                    "performance": self.get_performance_stats()
+                }
+                return json.dumps(data, indent=2)
+            else:
+                raise ValueError(f"Unsupported export format: {format}")
+    
+    def shutdown(self) -> None:
+        """Clean shutdown of the stats collector"""
+        self.logger.info("🛑 Shutting down StatsCollector")
         
-        # Record episode metrics
-        self.record_metric('episode_reward', total_reward)
-        self.record_metric('episode_length', episode_steps)
+        # Stop collection
+        self.stop_collection()
         
-        # Calculate episode timing
-        duration = time.time() - self.episode_start_time
-        fps = episode_steps / duration if duration > 0 else 0
-        self.record_metric('fps', fps)
+        # Clear data
+        with self._lock:
+            self._raw_metrics.clear()
+            self._aggregated_metrics.clear()
+            self._metric_types.clear()
+            self._rate_tracking.clear()
         
-        # Reset episode timer
-        self.episode_start_time = time.time()
-        
-        # Publish episode summary
+        # Notify data bus
         if self.data_bus:
             self.data_bus.publish(
-                DataType.EPISODE_SUMMARY,
-                {
-                    'episode': self.current_episode,
-                    'total_reward': total_reward,
-                    'steps': episode_steps,
-                    'fps': fps,
-                    'total_steps': self.total_steps,
-                    'duration': duration,
-                    'timestamp': time.time()
-                },
-                'stats_collector'
+                DataType.COMPONENT_STATUS,
+                {"component": "stats_collector", "status": "shutdown"},
+                "stats_collector"
             )
+        
+        self.logger.info("✅ StatsCollector shutdown complete")
     
-    def record_model_metrics(self, metrics: Dict[str, float]) -> None:
-        """Record model-related metrics (loss, gradients, etc.)."""
-        for name, value in metrics.items():
-            if name in self.metric_buffers:
-                self.record_metric(name, value)
+    # Internal methods
     
-    def get_all_metrics(self) -> Dict[str, Dict[str, float]]:
-        """Get statistics for all tracked metrics."""
-        return {
-            name: buffer.get_stats()
-            for name, buffer in self.metric_buffers.items()
-        }
-    
-    def get_system_metrics(self) -> Dict[str, float]:
-        """Get current system performance metrics."""
+    def _record_metric(self, name: str, metric_type: MetricType, value: float, tags: Dict[str, str]) -> None:
+        """Internal method to record a metric"""
+        current_time = time.time()
+        
         try:
-            cpu_percent = self.process.cpu_percent()
-            memory_info = self.process.memory_info()
-            
-            return {
-                'cpu_percent': cpu_percent,
-                'memory_rss': memory_info.rss / (1024 * 1024),  # MB
-                'memory_vms': memory_info.vms / (1024 * 1024),  # MB
-                'threads': self.process.num_threads(),
-                'system_cpu': psutil.cpu_percent(),
-                'system_memory': psutil.virtual_memory().percent
-            }
+            with self._lock:
+                # Store raw data point
+                point = MetricPoint(current_time, value, tags)
+                self._raw_metrics[name].append(point)
+                
+                # Track metric type
+                self._metric_types[name] = metric_type
+                
+                # Handle rate metrics specially
+                if metric_type == MetricType.RATE:
+                    self._rate_tracking[name].append((current_time, value))
+                    # Keep only recent data points for rate calculation
+                    cutoff = current_time - self.aggregation_window
+                    self._rate_tracking[name] = [(t, v) for t, v in self._rate_tracking[name] if t > cutoff]
+                
+                self._collection_count += 1
+                
         except Exception as e:
-            self.logger.error(f"⚠️ Error getting system metrics: {e}")
-            return {}
-    
-    def clear_metrics(self) -> None:
-        """Clear all collected metrics."""
-        for buffer in self.metric_buffers.values():
-            buffer.clear()
-        
-        self.current_episode = 0
-        self.total_steps = 0
-        self.episode_start_time = time.time()
-        
-        self.logger.info("🧹 Metrics cleared")
+            self._collection_errors += 1
+            self.logger.error(f"Failed to record metric {name}: {e}")
     
     def _collection_loop(self) -> None:
-        """Main metrics collection loop."""
-        last_update = time.time()
+        """Main collection loop running in a separate thread"""
+        self.logger.info("🔄 Stats collection loop started")
         
-        while self.is_collecting:
+        last_aggregation = time.time()
+        
+        while self._collection_active:
             try:
                 current_time = time.time()
-                if current_time - last_update >= self.update_interval:
-                    # Get current metrics
-                    system_metrics = self.get_system_metrics()
-                    all_metrics = self.get_all_metrics()
-                    
-                    # Prepare complete metrics package
-                    metrics_package = {
-                        'timestamp': datetime.now().isoformat(),
-                        'system': system_metrics,
-                        'training': all_metrics,
-                        'metadata': {
-                            'total_episodes': self.current_episode,
-                            'total_steps': self.total_steps
-                        }
-                    }
-                    
-                    # Publish to data bus
-                    if self.data_bus:
-                        self.data_bus.publish(
-                            DataType.SYSTEM_INFO,
-                            metrics_package,
-                            'stats_collector'
-                        )
-                    
-                    last_update = current_time
                 
-                time.sleep(0.1)  # Prevent tight loop
+                # Aggregate metrics at regular intervals
+                if (current_time - last_aggregation) >= self.aggregation_window:
+                    self._aggregate_metrics()
+                    last_aggregation = current_time
+                    self._last_aggregation_time = current_time
+                
+                # Update heartbeat
+                if self.data_bus:
+                    self.data_bus.update_component_heartbeat("stats_collector")
+                
+                # Sleep briefly
+                time.sleep(1.0)
                 
             except Exception as e:
-                self.logger.error(f"❌ Metrics collection error: {e}")
-                time.sleep(1)  # Avoid rapid retries on error
+                self._collection_errors += 1
+                self.logger.error(f"Error in collection loop: {e}")
+                time.sleep(5.0)  # Back off on error
+        
+        self.logger.info("🔄 Stats collection loop ended")
     
-    def save_metrics(self, filepath: str) -> None:
-        """Save current metrics to a JSON file."""
-        try:
-            metrics_data = {
-                'timestamp': datetime.now().isoformat(),
-                'metrics': self.get_all_metrics(),
-                'system': self.get_system_metrics(),
-                'metadata': {
-                    'total_episodes': self.current_episode,
-                    'total_steps': self.total_steps
-                }
-            }
-            
-            with open(filepath, 'w') as f:
-                json.dump(metrics_data, f, indent=2)
-            
-            self.logger.info(f"💾 Metrics saved to {filepath}")
-            
-        except Exception as e:
-            self.logger.error(f"⚠️ Error saving metrics: {e}")
+    def _aggregate_metrics(self) -> None:
+        """Aggregate raw metrics into summary statistics"""
+        current_time = time.time()
+        cutoff_time = current_time - self.aggregation_window
+        
+        with self._lock:
+            for name, raw_data in self._raw_metrics.items():
+                if not raw_data:
+                    continue
+                
+                metric_type = self._metric_types.get(name, MetricType.GAUGE)
+                
+                # Filter recent data points
+                recent_points = [p for p in raw_data if p.timestamp > cutoff_time]
+                if not recent_points:
+                    continue
+                
+                # Calculate statistics based on metric type
+                values = [p.value for p in recent_points]
+                
+                if metric_type == MetricType.COUNTER:
+                    # For counters, sum the increments
+                    current_value = sum(values)
+                elif metric_type == MetricType.RATE:
+                    # For rates, calculate rate of change
+                    if name in self._rate_tracking and len(self._rate_tracking[name]) >= 2:
+                        rate_data = self._rate_tracking[name]
+                        if len(rate_data) >= 2:
+                            time_diff = rate_data[-1][0] - rate_data[0][0]
+                            value_diff = rate_data[-1][1] - rate_data[0][1]
+                            current_value = value_diff / time_diff if time_diff > 0 else 0.0
+                        else:
+                            current_value = 0.0
+                    else:
+                        current_value = 0.0
+                else:
+                    # For gauges, histograms, timers - use most recent value
+                    current_value = values[-1]
+                
+                # Create aggregated metric
+                aggregated = AggregatedMetric(
+                    name=name,
+                    metric_type=metric_type,
+                    current_value=current_value,
+                    count=len(values),
+                    sum_value=sum(values),
+                    min_value=min(values),
+                    max_value=max(values),
+                    avg_value=statistics.mean(values),
+                    last_updated=current_time,
+                    tags=recent_points[-1].tags  # Use tags from most recent point
+                )
+                
+                self._aggregated_metrics[name] = aggregated
+        
+        # Publish aggregated metrics to data bus
+        if self.data_bus:
+            try:
+                self.data_bus.publish(
+                    DataType.TRAINING_STATS,
+                    {
+                        "metrics_count": len(self._aggregated_metrics),
+                        "aggregation_time": current_time,
+                        "collection_performance": self.get_performance_stats()
+                    },
+                    "stats_collector"
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to publish stats to data bus: {e}")
     
-    def __del__(self):
-        """Cleanup on deletion."""
-        self.stop_collecting()
+    # Data bus event handlers
+    
+    def _handle_training_stats(self, message: DataMessage) -> None:
+        """Handle training statistics from data bus"""
+        data = message.data
+        
+        # Record various training metrics
+        if "total_actions" in data:
+            self.record_gauge("training.total_actions", float(data["total_actions"]))
+        
+        if "actions_per_second" in data:
+            self.record_gauge("training.speed", float(data["actions_per_second"]))
+        
+        if "llm_calls" in data:
+            self.record_gauge("training.llm_calls", float(data["llm_calls"]))
+    
+    def _handle_action_taken(self, message: DataMessage) -> None:
+        """Handle action events from data bus"""
+        data = message.data
+        
+        # Count actions
+        self.record_counter("actions.total")
+        
+        if "action_id" in data:
+            action_name = data.get("action_name", f"action_{data['action_id']}")
+            self.record_counter(f"actions.{action_name}")
+        
+        if "execution_time" in data:
+            self.record_timer("actions.execution_time", float(data["execution_time"]))
+    
+    def _handle_llm_decision(self, message: DataMessage) -> None:
+        """Handle LLM decision events from data bus"""
+        data = message.data
+        
+        # Count LLM decisions
+        self.record_counter("llm.decisions")
+        
+        if "response_time" in data:
+            self.record_timer("llm.response_time", float(data["response_time"]))
+        
+        if "success" in data:
+            if data["success"]:
+                self.record_counter("llm.success")
+            else:
+                self.record_counter("llm.errors")
+    
+    def _handle_game_state(self, message: DataMessage) -> None:
+        """Handle game state changes from data bus"""
+        data = message.data
+        
+        if "state" in data:
+            state = data["state"]
+            self.record_counter(f"game_state.{state}")
+            
+            # Track state transitions
+            if "previous_state" in data and data["previous_state"]:
+                transition = f"{data['previous_state']}_to_{state}"
+                self.record_counter(f"transitions.{transition}")
+    
+    def _handle_error_event(self, message: DataMessage) -> None:
+        """Handle error events from data bus"""
+        data = message.data
+        
+        # Count errors
+        self.record_counter("errors.total")
+        
+        if "component" in data:
+            self.record_counter(f"errors.{data['component']}")
+        
+        if "severity" in data:
+            self.record_counter(f"errors.{data['severity']}")
+
+
+# Context manager for timing operations
+class Timer:
+    """Context manager for timing operations and recording to stats collector"""
+    
+    def __init__(self, stats_collector: StatsCollector, metric_name: str, tags: Optional[Dict[str, str]] = None):
+        self.stats_collector = stats_collector
+        self.metric_name = metric_name
+        self.tags = tags or {}
+        self.start_time = None
+    
+    def __enter__(self):
+        self.start_time = time.time()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.start_time:
+            duration = time.time() - self.start_time
+            self.stats_collector.record_timer(self.metric_name, duration, self.tags)
