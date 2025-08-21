@@ -72,10 +72,9 @@ class UnifiedPokemonTrainer(PokemonTrainer):
             return
             
         try:
-            self.web_server = TrainingWebServer(self.config, self)
-            if self.web_server and self.web_server.server:
-                self.web_thread = threading.Thread(target=self.web_server.server.serve_forever)
-                self.web_thread.daemon = True
+            self.web_server = TrainingWebServer(TrainingWebServer.ServerConfig.from_training_config(self.config))
+            if self.web_server:
+                self.web_thread = threading.Thread(target=self.web_server.run, daemon=True)
                 self.web_thread.start()
             else:
                 self.logger.warning("Web server initialization failed - server or configuration invalid")

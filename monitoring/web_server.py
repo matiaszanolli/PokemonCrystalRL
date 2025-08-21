@@ -56,9 +56,19 @@ class ServerConfig:
     max_request_size: int = 10 * 1024 * 1024  # 10MB
     session_timeout: int = 3600  # 1 hour
 
+    @classmethod
+    def from_training_config(cls, training_config):
+        """Create ServerConfig from TrainingConfig"""
+        return cls(
+            host=training_config.web_host,
+            port=training_config.web_port,
+            debug=training_config.debug_mode
+        )
+
 
 class WebServer:
     """HTTP and WebSocket server for monitoring interface."""
+    ServerConfig = ServerConfig
     
     def __init__(self, config: Optional[ServerConfig] = None):
         self.config = config or ServerConfig()
@@ -86,6 +96,7 @@ class WebServer:
         self.is_running = False
         self.start_time = None
         self._cleanup_task = None
+        self._ready = threading.Event()
         
         self.logger.info("🌐 Web server initialized")
     
@@ -391,10 +402,11 @@ class WebServer:
     
     def _setup_signal_handlers(self) -> None:
         """Setup handlers for system signals."""
+        loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            self.app.loop.add_signal_handler(
+            loop.add_signal_handler(
                 sig,
-                lambda s=sig: asyncio.create_task(self.shutdown(sig))
+                lambda s=sig: loop.create_task(self.shutdown(s))
             )
     
     async def shutdown(self, sig: Optional[signal.Signals] = None) -> None:
@@ -467,9 +479,15 @@ class WebServer:
     
     def run(self) -> None:
         """Run the server in the current thread."""
-        loop = asyncio.get_event_loop()
+        if threading.current_thread() is threading.main_thread():
+            loop = asyncio.get_event_loop()
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         try:
             loop.run_until_complete(self.start())
+            self._ready.set()  # Signal server is ready
             loop.run_forever()
         except KeyboardInterrupt:
             loop.run_until_complete(self.shutdown())
@@ -477,7 +495,9 @@ class WebServer:
             loop.close()
     
     def run_in_thread(self) -> threading.Thread:
-        """Run the server in a separate thread."""
+        """Run the server in a separate thread and wait for it to be ready."""
         thread = threading.Thread(target=self.run, daemon=True)
         thread.start()
+        # Wait for server to be ready
+        self._ready.wait(timeout=5.0)
         return thread

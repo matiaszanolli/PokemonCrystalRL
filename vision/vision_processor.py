@@ -19,33 +19,12 @@ import logging
 import json
 import hashlib
 
-from core import PyBoyGameState
-
-# Visual context classes
-@dataclass
-class DetectedText:
-    """Detected text in the game screen"""
-    text: str
-    confidence: float
-    bbox: Tuple[int, int, int, int]  # x1, y1, x2, y2
-    location: str  # 'menu', 'dialogue', 'ui', 'world'
-
-@dataclass
-class GameUIElement:
-    """UI element detected in the game screen"""
-    element_type: str  # 'healthbar', 'menu', 'dialogue_box', 'battle_ui'
-    bbox: Tuple[int, int, int, int]
-    confidence: float
-
-@dataclass
-class VisualContext:
-    """Complete visual analysis of a game screenshot"""
-    screen_type: str  # 'overworld', 'battle', 'menu', 'dialogue', 'intro'
-    detected_text: List[DetectedText]
-    ui_elements: List[GameUIElement]
-    dominant_colors: List[Tuple[int, int, int]]
-    game_phase: str  # 'intro', 'gameplay', 'battle', 'menu_navigation'
-    visual_summary: str
+from shared_types import (
+    DetectedText,
+    GameUIElement,
+    VisualContext,
+    PyBoyGameState
+)
 
 class UnifiedVisionProcessor:
     """Unified vision processor for Pokemon Crystal screenshots."""

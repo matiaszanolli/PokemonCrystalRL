@@ -216,18 +216,18 @@ class PokemonTrainer:
         self.capture_active = False
         
         # Data bus for component communication
-        # Data bus for component communication
-        from monitoring.data_bus import get_data_bus, DataType
-        self.data_bus = get_data_bus()
-        if self.data_bus:
-            self.data_bus.register_component(
-                "trainer",
-                {
-                    "type": "core",
-                    "mode": self.config.mode.value,
-                    "llm_backend": self.config.llm_backend.value if self.config.llm_backend else None
-                }
-            )
+        if self.config.mode == TrainingMode.FAST_MONITORED:
+            from monitoring.data_bus import get_data_bus, DataType
+            self.data_bus = get_data_bus()
+            if self.data_bus:
+                self.data_bus.register_component(
+                    "trainer",
+                    {
+                        "type": "core",
+                        "mode": self.config.mode.value,
+                        "llm_backend": self.config.llm_backend.value if self.config.llm_backend else None
+                    }
+                )
 
     def setup_logging(self):
         """Setup logging system."""
@@ -278,8 +278,10 @@ class PokemonTrainer:
             return
             
         try:
-            self.web_server = TrainingWebServer(self.config, self)
-            self.web_server.start()
+            self.web_server = TrainingWebServer(TrainingWebServer.ServerConfig.from_training_config(self.config))
+            self.web_server.run_in_thread()
+            # Give the server a little time to start
+            time.sleep(0.1)
         except Exception as e:
             self.logger.error(f"Failed to start web server: {e}")
             self.web_server = None

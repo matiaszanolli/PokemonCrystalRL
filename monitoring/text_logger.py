@@ -14,7 +14,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import hashlib
 
-from vision.vision_processor import DetectedText, VisualContext
+from shared_types import DetectedText, VisualContext
 
 
 
@@ -44,7 +44,7 @@ class GameplaySession:
     session_summary: str
 
 
-class PokemonTextLogger:
+class TextLogger:
     """
     Logs and manages all text transcriptions from Pokemon Crystal gameplay
     """
@@ -386,10 +386,10 @@ class PokemonTextLogger:
 
 def test_text_logger():
     """Test the text logger with sample data"""
-    from vision.vision_processor import DetectedText, VisualContext
+    from shared_types import DetectedText, VisualContext
     
     # Create logger
-    logger = PokemonTextLogger("test_text_logs")
+    logger = TextLogger("test_text_logs")
     
     # Create sample visual context
     sample_texts = [

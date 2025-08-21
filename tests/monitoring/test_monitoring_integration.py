@@ -57,9 +57,10 @@ def mock_config(free_port):
 @pytest.fixture
 def data_bus():
     """Create and initialize a data bus for testing"""
-    data_bus = DataBus()
+    from monitoring.data_bus import get_data_bus, shutdown_data_bus
+    data_bus = get_data_bus()
     yield data_bus
-    data_bus.shutdown()
+    shutdown_data_bus()
 
 
 @pytest.mark.monitoring
@@ -242,7 +243,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             error_received.set()
 
         data_bus.subscribe(
-            DataType.ERROR,
+            DataType.ERROR_EVENT,
             "test",
             error_callback
         )
