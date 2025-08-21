@@ -1,489 +1,637 @@
 """
-Database module for Pokemon Crystal RL monitoring.
-
-Provides persistent storage for:
-- Training runs and configurations
-- Performance metrics and statistics
-- Game events and progress
-- System monitoring data
+Database manager for Pokemon Crystal RL monitoring system.
 """
 
 import sqlite3
 import json
-import time
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
-from pathlib import Path
-import threading
-from contextlib import contextmanager
+import shutil
 import logging
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+from datetime import datetime
 import pandas as pd
-import numpy as np
 
 
 class DatabaseManager:
     """Manages SQLite database for monitoring data."""
     
-    SCHEMA_VERSION = 1
-    
-    def __init__(self, db_path: Union[str, Path] = "monitoring.db"):
-        self.db_path = Path(db_path)
-        self.logger = logging.getLogger(__name__)
-        self._connection_lock = threading.Lock()
-        
-        # Ensure database directory exists
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Initialize database
+    def __init__(self, db_path: Path):
+        """Initialize database manager."""
+        self.db_path = db_path
+        self.logger = logging.getLogger('database')
         self._init_database()
-        self.logger.info("📀 Database initialized")
     
-    @contextmanager
-    def _get_connection(self):
-        """Get a database connection with proper locking."""
-        with self._connection_lock:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row  # Return rows as dictionaries
-            try:
-                yield conn
-            finally:
-                conn.close()
-    
-    def _init_database(self) -> None:
+    def _init_database(self):
         """Initialize database schema."""
-        with self._get_connection() as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
             
-            # Create schema version table
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version INTEGER PRIMARY KEY,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Check schema version
-            cursor.execute('SELECT version FROM schema_version')
-            result = cursor.fetchone()
-            current_version = result['version'] if result else 0
-            
-            if current_version < self.SCHEMA_VERSION:
-                self._create_schema(cursor)
-                cursor.execute('INSERT OR REPLACE INTO schema_version (version) VALUES (?)',
-                             (self.SCHEMA_VERSION,))
-            
-            conn.commit()
+            # Create tables
+            cursor.executescript("""
+                -- Training runs table
+                CREATE TABLE IF NOT EXISTS training_runs (
+                    run_id TEXT PRIMARY KEY,
+                    start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    end_time DATETIME,
+                    status TEXT,
+                    total_episodes INTEGER DEFAULT 0,
+                    total_steps INTEGER DEFAULT 0,
+                    final_reward REAL,
+                    config TEXT,
+                    notes TEXT
+                );
+                
+                -- Episodes table
+                CREATE TABLE IF NOT EXISTS episodes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    episode_number INTEGER NOT NULL,
+                    start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    end_time DATETIME,
+                    total_steps INTEGER,
+                    total_reward REAL,
+                    success BOOLEAN,
+                    metadata TEXT,
+                    FOREIGN KEY (run_id) REFERENCES training_runs(run_id),
+                    UNIQUE (run_id, episode_number)
+                );
+                
+                -- Steps table
+                CREATE TABLE IF NOT EXISTS steps (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    episode_id INTEGER NOT NULL,
+                    step_number INTEGER NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    action TEXT NOT NULL,
+                    reward REAL,
+                    inference_time REAL,
+                    state_id INTEGER,
+                    FOREIGN KEY (run_id) REFERENCES training_runs(run_id),
+                    FOREIGN KEY (episode_id) REFERENCES episodes(id),
+                    FOREIGN KEY (state_id) REFERENCES game_states(id)
+                );
+                
+                -- Performance metrics table
+                CREATE TABLE IF NOT EXISTS performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    metric_name TEXT NOT NULL,
+                    metric_value REAL NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES training_runs(run_id)
+                );
+                
+                -- System metrics table
+                CREATE TABLE IF NOT EXISTS system_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    cpu_percent REAL,
+                    memory_percent REAL,
+                    disk_usage REAL,
+                    FOREIGN KEY (run_id) REFERENCES training_runs(run_id)
+                );
+                
+                -- Game states table
+                CREATE TABLE IF NOT EXISTS game_states (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    frame_number INTEGER,
+                    map_id INTEGER,
+                    player_x INTEGER,
+                    player_y INTEGER,
+                    state_data TEXT,
+                    FOREIGN KEY (run_id) REFERENCES training_runs(run_id)
+                );
+                
+                -- Events table
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    event_type TEXT NOT NULL,
+                    event_data TEXT,
+                    FOREIGN KEY (run_id) REFERENCES training_runs(run_id)
+                );
+                
+                -- Add indices
+                CREATE INDEX IF NOT EXISTS idx_episodes_run_id ON episodes(run_id);
+                CREATE INDEX IF NOT EXISTS idx_steps_run_id ON steps(run_id);
+                CREATE INDEX IF NOT EXISTS idx_steps_episode_id ON steps(episode_id);
+                CREATE INDEX IF NOT EXISTS idx_perf_metrics_run_id ON performance_metrics(run_id);
+                CREATE INDEX IF NOT EXISTS idx_perf_metrics_name ON performance_metrics(metric_name);
+                CREATE INDEX IF NOT EXISTS idx_sys_metrics_run_id ON system_metrics(run_id);
+                CREATE INDEX IF NOT EXISTS idx_game_states_run_id ON game_states(run_id);
+                CREATE INDEX IF NOT EXISTS idx_game_states_frame ON game_states(frame_number);
+                CREATE INDEX IF NOT EXISTS idx_events_run_id ON events(run_id);
+                CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+            """)
     
-    def _create_schema(self, cursor: sqlite3.Cursor) -> None:
-        """Create database schema."""
-        # Training runs table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS training_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                start_time TIMESTAMP,
-                end_time TIMESTAMP,
-                status TEXT,
-                total_episodes INTEGER DEFAULT 0,
-                total_steps INTEGER DEFAULT 0,
-                final_reward REAL,
-                config TEXT,
-                metadata TEXT
-            )
-        ''')
-        
-        # Episodes table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS episodes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER,
-                episode_number INTEGER,
-                start_time TIMESTAMP,
-                end_time TIMESTAMP,
-                total_steps INTEGER,
-                total_reward REAL,
-                success BOOLEAN,
-                metadata TEXT,
-                FOREIGN KEY (run_id) REFERENCES training_runs (id)
-            )
-        ''')
-        
-        # Metrics table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER,
-                episode_id INTEGER,
-                timestamp TIMESTAMP,
-                metric_type TEXT,
-                metric_name TEXT,
-                value REAL,
-                metadata TEXT,
-                FOREIGN KEY (run_id) REFERENCES training_runs (id),
-                FOREIGN KEY (episode_id) REFERENCES episodes (id)
-            )
-        ''')
-        
-        # Game states table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS game_states (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER,
-                episode_id INTEGER,
-                timestamp TIMESTAMP,
-                state_type TEXT,
-                map_id INTEGER,
-                player_x INTEGER,
-                player_y INTEGER,
-                metadata TEXT,
-                FOREIGN KEY (run_id) REFERENCES training_runs (id),
-                FOREIGN KEY (episode_id) REFERENCES episodes (id)
-            )
-        ''')
-        
-        # Events table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER,
-                episode_id INTEGER,
-                timestamp TIMESTAMP,
-                event_type TEXT,
-                event_data TEXT,
-                metadata TEXT,
-                FOREIGN KEY (run_id) REFERENCES training_runs (id),
-                FOREIGN KEY (episode_id) REFERENCES episodes (id)
-            )
-        ''')
-        
-        # System metrics table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS system_metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER,
-                timestamp TIMESTAMP,
-                cpu_percent REAL,
-                memory_percent REAL,
-                gpu_usage REAL,
-                disk_usage REAL,
-                metadata TEXT,
-                FOREIGN KEY (run_id) REFERENCES training_runs (id)
-            )
-        ''')
-        
-        # Create indexes
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_run_time ON training_runs (start_time)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_episode_run ON episodes (run_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_metrics_run ON metrics (run_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_metrics_type ON metrics (metric_type)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_events_run ON events (run_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_events_type ON events (event_type)')
+    def _connect(self) -> sqlite3.Connection:
+        """Create database connection."""
+        return sqlite3.connect(
+            self.db_path,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
     
-    def start_training_run(self, config: Dict[str, Any] = None,
-                         metadata: Dict[str, Any] = None) -> int:
+    def start_training_run(self, config: Dict[str, Any]) -> str:
         """Start a new training run."""
-        with self._get_connection() as conn:
+        run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        with self._connect() as conn:
             cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO training_runs
-                (start_time, status, config, metadata)
-                VALUES (?, ?, ?, ?)
-            ''', (
-                datetime.now().isoformat(),
-                'running',
-                json.dumps(config or {}),
-                json.dumps(metadata or {})
+            cursor.execute("""
+                INSERT INTO training_runs (
+                    run_id,
+                    status,
+                    config
+                ) VALUES (?, ?, ?)
+            """, (
+                run_id,
+                "initializing",
+                json.dumps(config)
             ))
-            
-            run_id = cursor.lastrowid
-            conn.commit()
-            
-            self.logger.info(f"📝 Started training run {run_id}")
-            return run_id
+        
+        return run_id
     
-    def end_training_run(self, run_id: int, status: str = 'completed',
-                        final_reward: Optional[float] = None) -> None:
+    def end_training_run(
+        self,
+        run_id: str,
+        final_reward: Optional[float] = None
+    ):
         """End a training run."""
-        with self._get_connection() as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
-            
-            cursor.execute('''
+            cursor.execute("""
                 UPDATE training_runs
-                SET end_time = ?, status = ?, final_reward = ?
-                WHERE id = ?
-            ''', (
-                datetime.now().isoformat(),
-                status,
-                final_reward,
-                run_id
-            ))
-            
-            conn.commit()
-            self.logger.info(f"✅ Ended training run {run_id} with status: {status}")
-    
-    def record_episode(self, run_id: int, episode_number: int,
-                      steps: int, reward: float, success: bool,
-                      metadata: Dict[str, Any] = None) -> int:
-        """Record an episode completion."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO episodes
-                (run_id, episode_number, start_time, end_time,
-                 total_steps, total_reward, success, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                run_id,
-                episode_number,
-                datetime.now().isoformat(),
-                datetime.now().isoformat(),
-                steps,
-                reward,
-                success,
-                json.dumps(metadata or {})
-            ))
-            
-            episode_id = cursor.lastrowid
-            
-            # Update run statistics
-            cursor.execute('''
-                UPDATE training_runs
-                SET total_episodes = total_episodes + 1,
-                    total_steps = total_steps + ?
-                WHERE id = ?
-            ''', (steps, run_id))
-            
-            conn.commit()
-            return episode_id
-    
-    def record_metrics(self, run_id: int, metrics: Dict[str, Any],
-                      episode_id: Optional[int] = None) -> None:
-        """Record training metrics."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            timestamp = datetime.now().isoformat()
-            
-            for metric_type, type_metrics in metrics.items():
-                if isinstance(type_metrics, dict):
-                    for name, value in type_metrics.items():
-                        if isinstance(value, (int, float)):
-                            cursor.execute('''
-                                INSERT INTO metrics
-                                (run_id, episode_id, timestamp,
-                                 metric_type, metric_name, value)
-                                VALUES (?, ?, ?, ?, ?, ?)
-                            ''', (
-                                run_id,
-                                episode_id,
-                                timestamp,
-                                metric_type,
-                                name,
-                                value
-                            ))
-            
-            conn.commit()
-    
-    def record_game_state(self, run_id: int, state_type: str,
-                         map_id: int, player_x: int, player_y: int,
-                         metadata: Dict[str, Any] = None,
-                         episode_id: Optional[int] = None) -> None:
-        """Record game state."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO game_states
-                (run_id, episode_id, timestamp, state_type,
-                 map_id, player_x, player_y, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                run_id,
-                episode_id,
-                datetime.now().isoformat(),
-                state_type,
-                map_id,
-                player_x,
-                player_y,
-                json.dumps(metadata or {})
-            ))
-            
-            conn.commit()
-    
-    def record_event(self, run_id: int, event_type: str,
-                    event_data: Dict[str, Any],
-                    metadata: Dict[str, Any] = None,
-                    episode_id: Optional[int] = None) -> None:
-        """Record an event."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO events
-                (run_id, episode_id, timestamp, event_type,
-                 event_data, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                run_id,
-                episode_id,
-                datetime.now().isoformat(),
-                event_type,
-                json.dumps(event_data),
-                json.dumps(metadata or {})
-            ))
-            
-            conn.commit()
-    
-    def record_system_metrics(self, run_id: int,
-                            cpu_percent: float,
-                            memory_percent: float,
-                            gpu_usage: Optional[float] = None,
-                            disk_usage: Optional[float] = None,
-                            metadata: Dict[str, Any] = None) -> None:
-        """Record system performance metrics."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO system_metrics
-                (run_id, timestamp, cpu_percent, memory_percent,
-                 gpu_usage, disk_usage, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                run_id,
-                datetime.now().isoformat(),
-                cpu_percent,
-                memory_percent,
-                gpu_usage,
-                disk_usage,
-                json.dumps(metadata or {})
-            ))
-            
-            conn.commit()
-    
-    def get_training_runs(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get recent training runs."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT * FROM training_runs
-                ORDER BY start_time DESC
-                LIMIT ?
-            ''', (limit,))
-            
-            return [dict(row) for row in cursor.fetchall()]
-    
-    def get_run_metrics(self, run_id: int,
-                       metric_type: Optional[str] = None) -> pd.DataFrame:
-        """Get metrics for a specific run."""
-        with self._get_connection() as conn:
-            query = '''
-                SELECT timestamp, metric_type, metric_name, value
-                FROM metrics
+                SET end_time = CURRENT_TIMESTAMP,
+                    status = 'completed',
+                    final_reward = ?
                 WHERE run_id = ?
-            '''
-            params = [run_id]
+            """, (final_reward, run_id))
+    
+    def update_run_status(self, run_id: str, status: str):
+        """Update training run status."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE training_runs
+                SET status = ?
+                WHERE run_id = ?
+            """, (status, run_id))
+    
+    def record_metrics(
+        self,
+        run_id: str,
+        metrics: Dict[str, float],
+        timestamp: Optional[datetime] = None
+    ):
+        """Record performance metrics."""
+        timestamp = timestamp or datetime.now()
+        
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            for name, value in metrics.items():
+                cursor.execute("""
+                    INSERT INTO performance_metrics (
+                        run_id,
+                        timestamp,
+                        metric_name,
+                        metric_value
+                    ) VALUES (?, ?, ?, ?)
+                """, (run_id, timestamp, name, value))
+    
+    def record_system_metrics(
+        self,
+        run_id: str,
+        cpu_percent: float,
+        memory_percent: float,
+        disk_usage: float
+    ):
+        """Record system resource metrics."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO system_metrics (
+                    run_id,
+                    cpu_percent,
+                    memory_percent,
+                    disk_usage
+                ) VALUES (?, ?, ?, ?)
+            """, (run_id, cpu_percent, memory_percent, disk_usage))
+    
+    def record_game_state(
+        self,
+        run_id: str,
+        state: Dict[str, Any],
+        frame_number: Optional[int] = None
+    ):
+        """Record game state."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO game_states (
+                    run_id,
+                    frame_number,
+                    map_id,
+                    player_x,
+                    player_y,
+                    state_data
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                run_id,
+                frame_number,
+                state.get('map_id'),
+                state.get('player_x'),
+                state.get('player_y'),
+                json.dumps(state)
+            ))
+    
+    def record_step(
+        self,
+        run_id: str,
+        step: int,
+        reward: float,
+        action: str,
+        inference_time: float,
+        game_state: Dict[str, Any]
+    ):
+        """Record training step."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
             
-            if metric_type:
-                query += ' AND metric_type = ?'
-                params.append(metric_type)
+            # Record game state
+            cursor.execute("""
+                INSERT INTO game_states (
+                    run_id,
+                    map_id,
+                    player_x,
+                    player_y,
+                    state_data
+                ) VALUES (?, ?, ?, ?, ?)
+                RETURNING id
+            """, (
+                run_id,
+                game_state.get('map_id'),
+                game_state.get('player_x'),
+                game_state.get('player_y'),
+                json.dumps(game_state)
+            ))
+            state_id = cursor.fetchone()[0]
             
-            query += ' ORDER BY timestamp'
+            # Get current episode
+            cursor.execute("""
+                SELECT id
+                FROM episodes
+                WHERE run_id = ?
+                ORDER BY episode_number DESC
+                LIMIT 1
+            """, (run_id,))
+            episode_id = cursor.fetchone()[0]
             
+            # Record step
+            cursor.execute("""
+                INSERT INTO steps (
+                    run_id,
+                    episode_id,
+                    step_number,
+                    action,
+                    reward,
+                    inference_time,
+                    state_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run_id,
+                episode_id,
+                step,
+                action,
+                reward,
+                inference_time,
+                state_id
+            ))
+            
+            # Update run totals
+            cursor.execute("""
+                UPDATE training_runs
+                SET total_steps = total_steps + 1
+                WHERE run_id = ?
+            """, (run_id,))
+    
+    def record_episode(
+        self,
+        run_id: str,
+        episode: int,
+        total_reward: float,
+        steps: int,
+        success: bool,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """Record episode completion."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            
+            # Record episode
+            cursor.execute("""
+                INSERT INTO episodes (
+                    run_id,
+                    episode_number,
+                    total_steps,
+                    total_reward,
+                    success,
+                    metadata,
+                    end_time
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                run_id,
+                episode,
+                steps,
+                total_reward,
+                success,
+                json.dumps(metadata) if metadata else None
+            ))
+            
+            # Update run totals
+            cursor.execute("""
+                UPDATE training_runs
+                SET total_episodes = total_episodes + 1
+                WHERE run_id = ?
+            """, (run_id,))
+    
+    def record_event(
+        self,
+        run_id: str,
+        event_type: str,
+        event_data: Dict[str, Any],
+        timestamp: Optional[datetime] = None
+    ):
+        """Record training event."""
+        timestamp = timestamp or datetime.now()
+        
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO events (
+                    run_id,
+                    timestamp,
+                    event_type,
+                    event_data
+                ) VALUES (?, ?, ?, ?)
+            """, (
+                run_id,
+                timestamp,
+                event_type,
+                json.dumps(event_data)
+            ))
+    
+    def get_training_runs(
+        self,
+        limit: Optional[int] = None,
+        status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get list of training runs."""
+        query = "SELECT * FROM training_runs"
+        params = []
+        
+        if status:
+            query += " WHERE status = ?"
+            params.append(status)
+        
+        query += " ORDER BY start_time DESC"
+        
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+        
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    
+    def get_run_metrics(
+        self,
+        run_id: str,
+        metric_names: Optional[List[str]] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None
+    ) -> pd.DataFrame:
+        """Get metrics for a training run."""
+        query = "SELECT * FROM performance_metrics WHERE run_id = ?"
+        params = [run_id]
+        
+        if metric_names:
+            query += " AND metric_name IN ({})".format(
+                ','.join('?' * len(metric_names))
+            )
+            params.extend(metric_names)
+        
+        if start_time:
+            query += " AND timestamp >= ?"
+            params.append(start_time)
+        
+        if end_time:
+            query += " AND timestamp <= ?"
+            params.append(end_time)
+        
+        query += " ORDER BY timestamp"
+        
+        with self._connect() as conn:
             return pd.read_sql_query(query, conn, params=params)
     
-    def get_run_events(self, run_id: int,
-                      event_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get events for a specific run."""
-        with self._get_connection() as conn:
+    def get_run_system_metrics(
+        self,
+        run_id: str,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None
+    ) -> pd.DataFrame:
+        """Get system metrics for a training run."""
+        query = "SELECT * FROM system_metrics WHERE run_id = ?"
+        params = [run_id]
+        
+        if start_time:
+            query += " AND timestamp >= ?"
+            params.append(start_time)
+        
+        if end_time:
+            query += " AND timestamp <= ?"
+            params.append(end_time)
+        
+        query += " ORDER BY timestamp"
+        
+        with self._connect() as conn:
+            return pd.read_sql_query(query, conn, params=params)
+    
+    def get_run_events(
+        self,
+        run_id: str,
+        event_type: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """Get events for a training run."""
+        query = "SELECT * FROM events WHERE run_id = ?"
+        params = [run_id]
+        
+        if event_type:
+            query += " AND event_type = ?"
+            params.append(event_type)
+        
+        if start_time:
+            query += " AND timestamp >= ?"
+            params.append(start_time)
+        
+        if end_time:
+            query += " AND timestamp <= ?"
+            params.append(end_time)
+        
+        query += " ORDER BY timestamp"
+        
+        with self._connect() as conn:
             cursor = conn.cursor()
-            
-            query = 'SELECT * FROM events WHERE run_id = ?'
-            params = [run_id]
-            
-            if event_type:
-                query += ' AND event_type = ?'
-                params.append(event_type)
-            
-            query += ' ORDER BY timestamp'
-            
             cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
+            columns = [d[0] for d in cursor.description]
+            events = []
+            for row in cursor.fetchall():
+                event = dict(zip(columns, row))
+                event['event_data'] = json.loads(event['event_data'])
+                events.append(event)
+            return events
     
-    def get_run_system_metrics(self, run_id: int) -> pd.DataFrame:
-        """Get system metrics for a specific run."""
-        with self._get_connection() as conn:
-            query = '''
-                SELECT timestamp, cpu_percent, memory_percent,
-                       gpu_usage, disk_usage
-                FROM system_metrics
-                WHERE run_id = ?
-                ORDER BY timestamp
-            '''
-            
-            return pd.read_sql_query(query, conn, params=[run_id])
-    
-    def get_run_summary(self, run_id: int) -> Dict[str, Any]:
-        """Get a summary of a training run."""
-        with self._get_connection() as conn:
+    def get_run_summary(self, run_id: str) -> Dict[str, Any]:
+        """Get summary of a training run."""
+        with self._connect() as conn:
             cursor = conn.cursor()
             
             # Get run info
-            cursor.execute('SELECT * FROM training_runs WHERE id = ?', (run_id,))
-            run = dict(cursor.fetchone())
+            cursor.execute("""
+                SELECT *
+                FROM training_runs
+                WHERE run_id = ?
+            """, (run_id,))
+            columns = [d[0] for d in cursor.description]
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            summary = dict(zip(columns, row))
+            summary['config'] = json.loads(summary['config'])
             
             # Get episode stats
-            cursor.execute('''
-                SELECT COUNT(*) as episode_count,
-                       AVG(total_reward) as avg_reward,
-                       MAX(total_reward) as max_reward,
-                       SUM(total_steps) as total_steps,
-                       AVG(success) as success_rate
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total_episodes,
+                    SUM(total_steps) as total_steps,
+                    SUM(total_reward) as total_reward,
+                    AVG(total_reward) as mean_reward,
+                    SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes
                 FROM episodes
                 WHERE run_id = ?
-            ''', (run_id,))
-            stats = dict(cursor.fetchone())
+            """, (run_id,))
+            stats = dict(zip(
+                ['total_episodes', 'total_steps', 'total_reward', 'mean_reward', 'successes'],
+                cursor.fetchone()
+            ))
+            summary.update(stats)
             
-            # Merge stats
-            run.update(stats)
-            return run
+            return summary
     
-    def export_run_data(self, run_id: int, format: str = 'json') -> Dict[str, Any]:
-        """Export all data for a training run."""
-        data = {
-            'run': self.get_run_summary(run_id),
-            'metrics': self.get_run_metrics(run_id).to_dict('records'),
-            'events': self.get_run_events(run_id),
-            'system_metrics': self.get_run_system_metrics(run_id).to_dict('records')
-        }
+    def export_run_data(
+        self,
+        run_id: str,
+        output_dir: Path,
+        include_snapshots: bool = True
+    ) -> Path:
+        """Export training run data."""
+        # Create temporary export directory
+        export_dir = output_dir / f"export_{run_id}"
+        export_dir.mkdir(parents=True, exist_ok=True)
         
-        if format == 'json':
-            return data
-        elif format == 'csv':
-            # Convert to CSV format
-            csv_data = {}
-            for key, value in data.items():
-                if isinstance(value, list):
-                    csv_data[key] = pd.DataFrame(value).to_csv(index=False)
-                else:
-                    csv_data[key] = pd.DataFrame([value]).to_csv(index=False)
-            return csv_data
-        else:
-            raise ValueError(f"Unsupported export format: {format}")
+        with self._connect() as conn:
+            # Export tables to CSV
+            tables = [
+                'training_runs',
+                'episodes',
+                'steps',
+                'performance_metrics',
+                'system_metrics',
+                'game_states',
+                'events'
+            ]
+            
+            for table in tables:
+                df = pd.read_sql_query(
+                    f"SELECT * FROM {table} WHERE run_id = ?",
+                    conn,
+                    params=[run_id]
+                )
+                df.to_csv(export_dir / f"{table}.csv", index=False)
+        
+        # Export snapshots if requested
+        if include_snapshots:
+            snapshots_dir = export_dir / "snapshots"
+            snapshots_dir.mkdir(exist_ok=True)
+            
+            snapshot_files = Path(self.data_dir).glob(f"snapshot_{run_id}_*.json")
+            for snapshot in snapshot_files:
+                shutil.copy2(snapshot, snapshots_dir)
+        
+        # Create zip archive
+        output_path = output_dir / f"export_{run_id}.zip"
+        shutil.make_archive(
+            str(output_path.with_suffix("")),
+            'zip',
+            export_dir
+        )
+        
+        # Clean up temporary directory
+        shutil.rmtree(export_dir)
+        
+        return output_path
     
-    def cleanup_old_data(self, days: int = 30) -> None:
-        """Clean up data older than specified days."""
-        with self._get_connection() as conn:
+    def cleanup_old_data(
+        self,
+        older_than: datetime,
+        dry_run: bool = False
+    ) -> int:
+        """Remove old monitoring data."""
+        with self._connect() as conn:
             cursor = conn.cursor()
-            threshold = (datetime.now() - pd.Timedelta(days=days)).isoformat()
             
-            for table in ['training_runs', 'episodes', 'metrics',
-                         'game_states', 'events', 'system_metrics']:
-                cursor.execute(f'''
+            # Get old run IDs
+            cursor.execute("""
+                SELECT run_id
+                FROM training_runs
+                WHERE end_time < ?
+                    AND status = 'completed'
+            """, (older_than,))
+            run_ids = [r[0] for r in cursor.fetchall()]
+            
+            if not run_ids or dry_run:
+                return len(run_ids)
+            
+            # Delete data from all tables
+            tables = [
+                'events',
+                'game_states',
+                'system_metrics',
+                'performance_metrics',
+                'steps',
+                'episodes',
+                'training_runs'
+            ]
+            
+            for table in tables:
+                cursor.execute(f"""
                     DELETE FROM {table}
-                    WHERE timestamp < ?
-                ''', (threshold,))
+                    WHERE run_id IN ({','.join('?' * len(run_ids))})
+                """, run_ids)
             
-            conn.commit()
-            self.logger.info(f"🧹 Cleaned up data older than {days} days")
+            return len(run_ids)
+    
+    def optimize_database(self):
+        """Optimize database and reclaim space."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("VACUUM")

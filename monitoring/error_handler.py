@@ -49,6 +49,15 @@ class ErrorCategory(Enum):
     UNKNOWN = "unknown"       # Uncategorized errors
 
 
+class RecoveryStrategy(Enum):
+    """Available recovery strategies"""
+    NONE = "none"  # No recovery attempted
+    RETRY = "retry"  # Retry the operation
+    RESTART = "restart"  # Restart the component
+    RESET = "reset"  # Full system reset
+    FALLBACK = "fallback"  # Use fallback mechanism
+
+
 @dataclass
 class ErrorContext:
     """Context information for an error."""

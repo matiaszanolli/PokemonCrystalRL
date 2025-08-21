@@ -31,12 +31,10 @@ from aiohttp.web import (
     middleware, HTTPException
 )
 import jwt
-from motor.motor_asyncio import AsyncIOMotorClient
 import aiofiles
 
 from .data_bus import DataType, get_data_bus
 from .error_handler import ErrorHandler, ErrorCategory, ErrorSeverity
-from monitoring.web_server import TrainingWebServer
 
 # Types for event handlers
 EventHandler = Callable[[Dict[str, Any]], None]
