@@ -29,7 +29,7 @@ sys.path.insert(0, parent_dir)
 
 # Import with fallbacks for missing dependencies
 try:
-    from core.vision_processor import DetectedText, VisualContext
+    from vision.vision_processor import DetectedText, VisualContext
     from core.semantic_context_system import SemanticContextSystem, GameContext
     from core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
     from trainer.choice_recognition_system import ChoiceRecognitionSystem, ChoiceContext, ChoiceType

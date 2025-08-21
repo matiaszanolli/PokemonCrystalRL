@@ -18,14 +18,15 @@ import threading
 import tempfile
 from pathlib import Path
 
-from monitoring.data_bus import DataBus, DataType, init_data_bus
-from monitoring.web_server import TrainingWebServer
+from monitoring.data_bus import DataBus, DataType
+from monitoring.web_server import WebServer as TrainingWebServer
 from .mock_llm_manager import MockLLMManager
 from trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
-    LLMBackend
+    LLMBackend,
+    UnifiedPokemonTrainer
 )
 
 
@@ -56,7 +57,7 @@ def mock_config(free_port):
 @pytest.fixture
 def data_bus():
     """Create and initialize a data bus for testing"""
-    data_bus = init_data_bus()
+    data_bus = DataBus()
     yield data_bus
     data_bus.shutdown()
 

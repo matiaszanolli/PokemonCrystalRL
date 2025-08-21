@@ -32,7 +32,8 @@ from trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
-    LLMBackend
+    LLMBackend,
+    UnifiedPokemonTrainer
 )
 
 

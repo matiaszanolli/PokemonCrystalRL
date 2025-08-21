@@ -11,8 +11,8 @@ import numpy as np
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
-from monitoring.data_bus import get_data_bus, init_data_bus, DataType
-from pokemon_crystal_rl.core.monitoring.web_server import TrainingWebServer
+from monitoring.data_bus import get_data_bus, DataType
+from monitoring.web_server import WebServer as TrainingWebServer
 
 
 class GameStateDetector:
