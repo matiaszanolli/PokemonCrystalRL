@@ -21,67 +21,140 @@ class GameState(Enum):
     INTRO = auto()
     TRAINER_CARD = auto()
 
+
 class GameStateDetector:
-    """Detects game states using visual and other cues."""
-
-    def __init__(self, debug: bool = False):
-        """Initialize game state detector.
-        
-        Args:
-            debug: Enable debug logging
-        """
+    """Detects and manages game state information."""
+    
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.debug = debug
-        self.current_state = GameState.UNKNOWN
-        self.previous_state = GameState.UNKNOWN
-        self.state_duration = 0
-        self.state_history: List[GameState] = []
-        self.max_history = 100
+        self.last_screen_hash = None
+        self.consecutive_same_screens = 0
+        self.stuck_counter = 0
 
-        self.stats = {
-            'total_detections': 0,
-            'state_changes': 0,
-            'state_durations': {state.name: 0 for state in GameState},
-            'uncertain_detections': 0
-        }
-
-    def detect_state(self, screen: np.ndarray, overlay_data: Dict[str, Any] = None) -> GameState:
-        """Detect game state from screen and overlay data.
-        
-        Args:
-            screen: Screenshot as numpy array
-            overlay_data: Optional dictionary with UI info
-            
-        Returns:
-            Detected game state
-        """
-        self.stats['total_detections'] += 1
-
+    def get_screen_hash(self, screen: np.ndarray) -> Optional[int]:
+        """Get a hash value for screen content for stuck detection."""
         if screen is None:
-            return self._update_state(GameState.UNKNOWN)
+            return None
+        
+        # Handle invalid screen shapes
+        if len(screen.shape) < 2:
+            return None
+        
+        try:
+            # Compute mean values for grid cells
+            h, w = screen.shape[:2]
+            
+            # Handle screens that are too small
+            if h < 4 or w < 4:
+                return None
+                
+            cell_h = h // 4
+            cell_w = w // 4
+            grid_means = []
 
-        # Basic checks
-        if not self._is_valid_screen(screen):
-            return self._update_state(GameState.UNKNOWN)
+            for i in range(4):
+                for j in range(4):
+                    cell = screen[i*cell_h:(i+1)*cell_h, j*cell_w:(j+1)*cell_w]
+                    if cell.size > 0:  # Ensure cell is not empty
+                        mean = np.mean(cell)
+                        grid_means.append(int(mean))
+                    else:
+                        grid_means.append(0)
 
-        # State detection logic
-        if self._is_black_screen(screen):
-            return self._update_state(GameState.BLACK_SCREEN)
+            # Convert means to hash
+            hash_val = 0
+            for mean in grid_means:
+                hash_val = hash_val * 31 + mean
 
-        if self._is_loading_screen(screen):
-            return self._update_state(GameState.LOADING)
+            return hash_val
+        except Exception:
+            return None
+    
+    def is_stuck(self) -> bool:
+        """Check if the game appears to be stuck."""
+        return self.consecutive_same_screens > 20 or self.stuck_counter > 0
 
-        if self._has_battle_ui(screen, overlay_data):
-            return self._update_state(GameState.BATTLE)
+    def detect_game_state(self, screen: np.ndarray) -> str:
+        """Detect game state from screen content."""
+        if screen is None:
+            return "unknown"
 
-        if self._has_dialogue_box(screen, overlay_data):
-            return self._update_state(GameState.DIALOGUE)
+        # Convert to grayscale
+        if len(screen.shape) == 3:
+            gray = np.mean(screen, axis=2).astype(np.uint8)
+        else:
+            gray = screen
 
-        if self._has_menu_ui(screen, overlay_data):
-            return self._update_state(GameState.MENU)
+        # Store last screen hash for transition detection
+        current_hash = self.get_screen_hash(screen)
+        if current_hash == self.last_screen_hash:
+            self.consecutive_same_screens += 1
+        else:
+            self.consecutive_same_screens = 0
+            self.last_screen_hash = current_hash
+            self.stuck_counter = 0
 
-        # Default to overworld if nothing specific detected
-        return self._update_state(GameState.OVERWORLD)
+        # If screen hasn't changed in a while, we might be stuck
+        if self.consecutive_same_screens > 30:
+            self.stuck_counter += 1
+            return "stuck"
+
+        # Detect loading/black screen
+        if np.mean(gray) < 20:
+            return "loading"
+
+        # Detect intro/white screen
+        if np.mean(gray) > 240:
+            return "intro_sequence"
+
+        # Menu detection (check for brighter rectangular region)
+        menu_regions = [
+            gray[20:60, 20:140],  # Standard menu
+            gray[30:90, 30:130],  # Battle menu
+            gray[100:140, 10:150]  # Options menu
+        ]
+        for region in menu_regions:
+            region_mean = np.mean(region)
+            region_std = np.std(region)
+            # Menu regions are bright and uniform
+            if region_mean > 180 and region_std < 40:
+                return "menu"
+
+        # Dialogue detection (check for bright box at bottom with text-like variance)
+        bottom = gray[100:, :]
+        bottom_mean = np.mean(bottom)
+        bottom_std = np.std(bottom)
+        
+        # Dialogue boxes are bright and have text-like variance
+        if bottom_mean > 200 and 30 < bottom_std < 70:
+            # Validate with text-like pattern check
+            text_rows = np.mean(bottom[::2], axis=1)  # Sample alternate rows
+            text_variance = np.std(text_rows)
+            if text_variance > 20:  # Text creates consistent variance pattern
+                return "dialogue"
+
+        # Check for battle screen characteristics
+        if self._detect_battle_screen(gray):
+            return "battle"
+
+        return "overworld"
+
+    def _detect_battle_screen(self, gray: np.ndarray) -> bool:
+        """Helper method to detect battle screen state."""
+        # Battle screens have distinctive layout with HP bars
+        hp_regions = [
+            gray[30:45, 170:220],   # Player HP region
+            gray[100:115, 50:100]    # Enemy HP region
+        ]
+        
+        for region in hp_regions:
+            region_mean = np.mean(region)
+            region_std = np.std(region)
+            # HP bars have high contrast
+            if region_mean > 150 and region_std > 50:
+                return True
+                
+        return False
 
     def get_state_duration(self) -> int:
         """Get duration of current state in frames."""

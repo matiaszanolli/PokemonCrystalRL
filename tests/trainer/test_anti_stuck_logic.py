@@ -105,18 +105,18 @@ class TestScreenHashDetection:
         trainer.game_state_detector.consecutive_same_screens = 0
         trainer.game_state_detector.stuck_counter = 0
         
-        # Simulate same screen repeatedly
-        test_hash = 12345
+        # Create a consistent test screen
+        test_screen = np.ones((144, 160, 3), dtype=np.uint8) * 128
         
-        with patch.object(trainer.game_state_detector, 'get_screen_hash', return_value=test_hash):
-            with patch.object(trainer, '_simple_screenshot_capture', return_value=np.zeros((144, 160, 3))):
-                # Call rule-based action multiple times with same hash
-                for i in range(25):
-                    trainer._get_rule_based_action(i)
-                
-                # Should detect being stuck
-                assert trainer.game_state_detector.consecutive_same_screens >= 20
-                assert trainer.game_state_detector.stuck_counter > 0
+        # Simulate same screen repeatedly
+        with patch.object(trainer, '_simple_screenshot_capture', return_value=test_screen):
+            # Call rule-based action multiple times with same screen
+            for i in range(25):
+                trainer._get_rule_based_action(i)
+            
+            # Should detect being stuck
+            assert trainer.game_state_detector.consecutive_same_screens >= 20
+            assert trainer.game_state_detector.stuck_counter > 0
     
     def test_stuck_counter_reset_on_different_screen(self, trainer):
         """Test that stuck counter resets when screen changes"""
@@ -494,7 +494,7 @@ class TestAntiStuckIntegration:
             mock_capture.return_value = stuck_screen
             
             for step in range(50):
-                trainer._get_rule_based_action(step)
+                action = trainer._get_rule_based_action(step)
                 
                 # Simulate getting unstuck after recovery actions
                 if step >= 30 and trainer.game_state_detector.stuck_counter > 0:
