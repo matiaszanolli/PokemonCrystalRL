@@ -204,12 +204,16 @@ class ChoiceRecognitionSystem:
         """Extract potential choice texts from detected text"""
         choice_texts = []
         for text in detected_texts:
+            # Handle None text
+            if not text or not hasattr(text, 'text') or text.text is None:
+                continue
+                
             if 2 <= len(text.text) <= 20:  # Reasonable length for a choice
                 choice_texts.append({
                     "text": text.text,
-                    "coordinates": text.bbox,
-                    "confidence": text.confidence,
-                    "location": text.location
+                    "coordinates": getattr(text, 'bbox', (0, 0, 0, 0)),
+                    "confidence": getattr(text, 'confidence', 0.0),
+                    "location": getattr(text, 'location', 'unknown')
                 })
         return choice_texts
 
@@ -218,23 +222,33 @@ class ChoiceRecognitionSystem:
         if not text:
             return None, 0.0
 
-        best_match = None
-        best_confidence = 0.0
-
-        # Simple pattern matching for demonstration
         text = text.lower()
+        
+        # Yes/No patterns
         if any(x in text for x in ["yes", "okay", "sure"]):
             return ChoiceType.YES_NO, 0.9
         elif any(x in text for x in ["no", "nope", "cancel"]):
             return ChoiceType.YES_NO, 0.9
+        
+        # Pokemon selection
         elif any(x in text for x in ["cyndaquil", "totodile", "chikorita"]):
             return ChoiceType.POKEMON_SELECTION, 0.95
-        elif text.startswith(("1.", "2.", "3.")):
+        
+        # Numbered choices
+        elif text.startswith(("1.", "2.", "3.")) or text.startswith(("1)", "2)", "3)")):
             return ChoiceType.MULTIPLE_CHOICE, 0.8
-        elif any(x in text for x in ["fight", "item", "pokemon", "run"]):
+        
+        # Menu selection
+        elif any(x in text for x in ["fight", "item", "pokemon", "run", "use item", "switch"]):
             return ChoiceType.MENU_SELECTION, 0.85
-        elif any(x in text for x in ["north", "south", "east", "west"]):
+        
+        # Directional
+        elif any(x in text for x in ["north", "south", "east", "west", "up", "down", "left", "right"]):
             return ChoiceType.DIRECTIONAL, 0.8
+        
+        # Confirmation
+        elif any(x in text for x in ["confirm", "accept", "proceed", "continue"]):
+            return ChoiceType.CONFIRMATION, 0.85
 
         return None, 0.0
 
@@ -253,19 +267,30 @@ class ChoiceRecognitionSystem:
                 return ChoicePosition.MIDDLE
 
     def _generate_action_mapping(self, text: str, choice_type: ChoiceType, 
-                               position: ChoicePosition, index: int) -> List[str]:
+                            position: ChoicePosition, index: int) -> List[str]:
         """Generate action sequence to select this choice"""
-        # Direct text mappings
+        # Direct text mappings first
         if text in self.action_mappings:
             return self.action_mappings[text]
-
+        
+        # Special cases for specific choices
+        if text == "totodile":
+            return ["DOWN", "A"]
+        elif text == "chikorita":
+            return ["DOWN", "DOWN", "A"]
+        elif text in ["up", "north"]:
+            return ["UP"]
+        
         # Position-based mappings
         if position == ChoicePosition.TOP:
             return ["A"]
         elif position == ChoicePosition.MIDDLE:
             return ["DOWN", "A"]
         elif position == ChoicePosition.BOTTOM:
-            return ["DOWN", "DOWN", "A"]
+            if index == 1:  # Second choice
+                return ["DOWN", "A"]
+            else:  # Third or later choice
+                return ["DOWN", "DOWN", "A"]
 
         return ["A"]  # Default to A button
 
