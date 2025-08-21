@@ -19,15 +19,19 @@ import shutil
 from monitoring import (
     UnifiedMonitor,
     MonitorConfig,
-    DatabaseManager,
-    ErrorHandler, 
-    ErrorSeverity,
-    RecoveryStrategy
+    ErrorHandler,
 )
 from monitoring.error_handler import (
     ErrorHandler,
     ErrorCategory,
-    ErrorSeverity
+    ErrorSeverity,
+    RecoveryStrategy
+)
+from monitoring.migrations import (
+    ConfigMigrator,
+    DataMigrator,
+    DatabaseMigrator,
+    MigrationError
 )
 
 

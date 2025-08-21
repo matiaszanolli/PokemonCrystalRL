@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, Union
 from PIL import Image
 import numpy as np
 
-from data_bus import get_data_bus, DataType
+from monitoring.data_bus import get_data_bus, DataType
 
 
 class GameStreamComponent:
