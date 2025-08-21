@@ -930,9 +930,12 @@ class TestUILayoutHandling:
         ]
         
         for total, index, expected_position in test_cases:
+            # Use simple choice_info without relying on coordinates
+            # since the trainer implementation doesn't use coordinates
             choice_info = {"coordinates": (20, 50 + index * 30, 100, 70 + index * 30)}
             position = choice_system._determine_choice_position(choice_info, index, total)
             assert position == expected_position
+
     
     @pytest.mark.unit
     @pytest.mark.choice

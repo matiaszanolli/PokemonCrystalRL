@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
+from core.semantic_context_system import SemanticContextSystem, GameContext
 from trainer.choice_recognition_system import (
     ChoiceRecognitionSystem, 
     RecognizedChoice, 
@@ -241,4 +242,61 @@ def temperature_responses():
     return {
         'low_temp': [{'response': '5'}, {'response': '5'}, {'response': '5'}, {'response': '5'}, {'response': '5'}],
         'high_temp': [{'response': '5'}, {'response': '1'}, {'response': '3'}, {'response': '2'}, {'response': '7'}]
+    }
+
+@pytest.fixture
+def semantic_system():
+    """Create a semantic context system for testing."""
+    # Use a temporary database for testing
+    with tempfile.TemporaryDirectory() as temp_dir:
+        db_path = Path(temp_dir) / "test_semantic.db"
+        system = SemanticContextSystem(str(db_path))
+        yield system
+
+@pytest.fixture
+def sample_game_context():
+    """Sample game context for testing."""
+    return GameContext(
+        current_objective="get_starter_pokemon",
+        player_progress={"badges": 0, "pokemon_count": 0, "story_flags": []},
+        location_info={"current_map": "new_bark_town", "region": "johto"},
+        recent_events=["game_start"],
+        active_quests=["meet_professor_elm"]
+    )
+
+@pytest.fixture
+def advanced_game_context():
+    """Advanced game context for testing."""
+    return GameContext(
+        current_objective="beat_elite_four",
+        player_progress={
+            "badges": 2, 
+            "pokemon_count": 4, 
+            "story_flags": ["got_starter", "beat_falkner", "beat_bugsy"]
+        },
+        location_info={"current_map": "ecruteak_city", "region": "johto"},
+        recent_events=["entered_gym", "won_battle", "healed_pokemon"],
+        active_quests=["beat_morty", "find_surf_hm"]
+    )
+
+@pytest.fixture
+def dialogue_scenarios():
+    """Sample dialogue scenarios for testing."""
+    return {
+        "professor_elm_intro": {
+            "dialogue_text": "Hello! I'm Professor Elm! Would you like a Pokemon?",
+            "expected_intent": "starter_selection"
+        },
+        "nurse_healing": {
+            "dialogue_text": "Welcome to the Pokemon Center! Would you like me to heal your Pokemon?",
+            "expected_intent": "healing_request"
+        },
+        "gym_leader_challenge": {
+            "dialogue_text": "I'm Falkner! Are you ready for a Pokemon battle?",
+            "expected_intent": "gym_challenge"
+        },
+        "shop_keeper": {
+            "dialogue_text": "Welcome to the Pokemart! What would you like to buy?",
+            "expected_intent": "shop_interaction"
+        }
     }
