@@ -141,28 +141,29 @@ class LLMManager:
                 )
                 
     def _parse_action(self, response: str) -> Optional[int]:
-        """Parse action from LLM response.
+        """Parse action from LLM response with enhanced robustness."""
+        if not response or not isinstance(response, str):
+            return None
         
-        Args:
-            response: LLM response text
-            
-        Returns:
-            Parsed action number or None if invalid
-        """
-        # First try to find a single digit
-        matches = re.findall(r'\b[1-8]\b', response)
-        if matches:
-            action = int(matches[0])
-            if 1 <= action <= 8:
-                return action
+        response = response.strip()
         
-        # Try more complex patterns
+        # First try to find a single digit 1-8
+        import re
+        
+        # Look for standalone digits
+        digit_matches = re.findall(r'\b([1-8])\b', response)
+        if digit_matches:
+            return int(digit_matches[0])
+        
+        # Look for digits in common patterns
         patterns = [
-            r'press\s+([1-8])',
-            r'action[:\s]+([1-8])',
-            r'([1-8])\s*[-=]',
-            r'key\s+([1-8])',
-            r'button\s+([1-8])'
+            r'(?:action|press|key|button)[\s:]*([1-8])',
+            r'([1-8])[\s]*[-=]',
+            r'([1-8])[\s]*\(',
+            r'([1-8])[\s]*because',
+            r'([1-8])[\s]*is',
+            r'([1-8])[\s]*\n',
+            r'^([1-8])[\s]*$',  # Just the number
         ]
         
         for pattern in patterns:
@@ -171,6 +172,11 @@ class LLMManager:
                 action = int(match.group(1))
                 if 1 <= action <= 8:
                     return action
+        
+        # Last resort: find any digit 1-8 in the response
+        all_digits = re.findall(r'([1-8])', response)
+        if all_digits:
+            return int(all_digits[0])
         
         return None
         
