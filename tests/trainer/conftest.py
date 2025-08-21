@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
-from core.choice_recognition_system import (
+from trainer.choice_recognition_system import (
     ChoiceRecognitionSystem, 
     RecognizedChoice, 
     ChoiceContext,

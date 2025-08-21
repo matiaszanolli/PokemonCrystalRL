@@ -6,7 +6,9 @@ This module provides the system for recognizing and handling different types of
 choices presented in the game, including binary choices, menu selections,
 Pokemon choices, etc.
 """
-
+import json
+import sqlite3
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
 from enum import Enum
@@ -251,6 +253,38 @@ class ChoiceRecognitionSystem:
             return ChoiceType.CONFIRMATION, 0.85
 
         return None, 0.0
+    
+    def _apply_context_prioritization(self, choices: List[Dict], context: Dict) -> List[Dict]:
+        """Apply context-based prioritization to choices."""
+        for choice in choices:
+            # Apply context-based priority adjustments
+            base_priority = choice.get('priority', 50.0)
+            
+            # Adjust based on context tags
+            context_tags = context.get('tags', [])
+            if 'battle_context' in context_tags and 'battle' in choice.get('text', '').lower():
+                choice['priority'] = base_priority + 10.0
+            elif 'dialogue_context' in context_tags and choice.get('type') == ChoiceType.YES_NO:
+                choice['priority'] = base_priority + 5.0
+        
+        return sorted(choices, key=lambda x: x.get('priority', 0), reverse=True)
+
+    def _store_choice_recognition(self, dialogue_text: str, choices: List[Dict]):
+        """Store choice recognition data in database."""
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                
+                # Store the recognition event
+                cursor.execute("""
+                    INSERT INTO choice_recognitions (dialogue_text, choices_json, timestamp)
+                    VALUES (?, ?, ?)
+                """, (dialogue_text, json.dumps(choices), time.time()))
+                
+                conn.commit()
+        except Exception as e:
+            print(f"Error storing choice recognition: {e}")
+
 
     def _determine_choice_position(self, choice_info: Dict, index: int, total: int) -> ChoicePosition:
         """Determine UI position of a choice"""

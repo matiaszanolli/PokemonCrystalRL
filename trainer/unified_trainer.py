@@ -257,24 +257,25 @@ class UnifiedPokemonTrainer(PokemonTrainer):
                 self.logger.error(f"Error queueing screen: {str(e)}")
     
     def _track_llm_performance(self, response_time: float):
-        """Track LLM performance metrics"""
+        """Track LLM performance and adjust interval if needed."""
         self.llm_response_times.append(response_time)
-        if len(self.llm_response_times) > 20:  # Keep recent window
+        if len(self.llm_response_times) > 20:
             self.llm_response_times.pop(0)
-            
-        # Update statistics
+        
+        # Update stats
         self.stats['llm_total_time'] = sum(self.llm_response_times)
         self.stats['llm_avg_time'] = self.stats['llm_total_time'] / len(self.llm_response_times)
         
-        # Adjust interval based on performance
-        avg_time = self.stats['llm_avg_time']
-        if avg_time > 3.0 and self.adaptive_llm_interval < 50:
-            self.adaptive_llm_interval = min(50, self.adaptive_llm_interval + 5)
-        elif avg_time < 1.5 and self.adaptive_llm_interval > self.config.llm_interval:
-            self.adaptive_llm_interval = max(
-                self.config.llm_interval,
-                self.adaptive_llm_interval - 2
-            )
+        # Only adjust interval after collecting enough samples
+        if len(self.llm_response_times) >= 10:
+            avg_time = sum(self.llm_response_times[-10:]) / 10
+            if avg_time > 3.0 and self.adaptive_llm_interval < 50:
+                self.adaptive_llm_interval = min(50, self.adaptive_llm_interval + 5)
+            elif avg_time < 1.5 and self.adaptive_llm_interval > self.config.llm_interval:
+                self.adaptive_llm_interval = max(
+                    self.config.llm_interval,
+                    self.adaptive_llm_interval - 2
+                )
 
     def _handle_title_screen(self, step: int) -> int:
         """Handle title screen state"""

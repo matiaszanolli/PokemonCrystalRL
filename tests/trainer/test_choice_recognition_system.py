@@ -26,7 +26,7 @@ sys.path.insert(0, parent_dir)
 
 # Import with fallbacks for missing dependencies
 try:
-    from core.choice_recognition_system import (
+    from trainer.choice_recognition_system import (
         ChoiceRecognitionSystem, 
         RecognizedChoice, 
         ChoiceContext,

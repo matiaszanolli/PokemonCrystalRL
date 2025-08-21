@@ -32,7 +32,7 @@ try:
     from core.vision_processor import DetectedText, VisualContext
     from core.semantic_context_system import SemanticContextSystem, GameContext
     from core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
-    from core.choice_recognition_system import ChoiceRecognitionSystem, ChoiceContext, ChoiceType
+    from trainer.choice_recognition_system import ChoiceRecognitionSystem, ChoiceContext, ChoiceType
 except ImportError:
     # Skip these tests if dependencies aren't available
     pytest.skip("Missing dependencies for integration and performance tests", allow_module_level=True)
