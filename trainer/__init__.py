@@ -10,7 +10,6 @@ from .unified_trainer import UnifiedPokemonTrainer
 from .dialogue_state_machine import DialogueStateMachine, DialogueState
 from .game_state_detection import GameStateDetector
 from .llm_manager import LLMManager
-from .semantic_context_system import SemanticContextSystem
 from .training_strategies import TrainingStrategy, CurriculumStrategy
 from .game_state_detection import GameStateDetector
 
@@ -24,7 +23,6 @@ __all__ = [
     'LLMManager',
     'LLMBackend',
     'PokemonTrainer',
-    'SemanticContextSystem',
     'TrainingStrategy',
     'CurriculumStrategy'
 ]

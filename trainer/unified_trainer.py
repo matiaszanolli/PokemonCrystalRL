@@ -15,9 +15,9 @@ import logging
 import threading
 import queue
 import numpy as np
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict
 from pathlib import Path
-from trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
+from trainer.trainer import PokemonTrainer, TrainingConfig
 from monitoring.web_server import WebServer as TrainingWebServer
 
 class UnifiedPokemonTrainer(PokemonTrainer):
@@ -288,10 +288,6 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         """Get action to try to escape stuck state"""
         actions = [1, 2, 3, 4, 5, 6]  # UP, DOWN, LEFT, RIGHT, A, B
         return actions[step % len(actions)]
-
-    def _get_rule_based_action(self, step: int) -> int:
-        """Get action using rule-based system"""
-        return 5  # Default to A button
 
     def _get_llm_action(self) -> Optional[int]:
         """Get action from LLM manager"""

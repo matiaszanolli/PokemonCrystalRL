@@ -306,8 +306,17 @@ class PokemonTrainer:
             return None
 
     def _get_rule_based_action(self, step: int) -> int:
-        """Get action using rule-based system."""
-        return 5  # Default to A button
+        """Get action using rule-based system with stuck detection."""
+        # Capture screen for stuck detection
+        screen = self._simple_screenshot_capture()
+        if screen is not None:
+            # Detect game state (this updates stuck detection counters)
+            game_state = self._detect_game_state(screen)
+            
+            # Check if stuck and return unstuck action
+            if self.game_state_detector.is_stuck():
+                from trainer.game_state_detection import get_unstuck_action
+                return get_unstuck_action(step, self.game_state_detector.stuck_counter)
 
     def _track_llm_performance(self, response_time: float):
         """Track LLM performance for adaptive intervals."""
