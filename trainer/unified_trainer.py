@@ -94,6 +94,24 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         except Exception:
             return False
     
+    def _get_rule_based_action(self, step: int) -> int:
+        """Get action using rule-based system with stuck detection."""
+        # Capture screen for stuck detection
+        screen = self._simple_screenshot_capture()
+        if screen is not None:
+            # Detect game state (this updates stuck detection counters)
+            game_state = self.game_state_detector.detect_game_state(screen)
+            
+            # If we're stuck, return an unstuck action
+            if game_state == "stuck":
+                # Use step and stuck_counter to determine action
+                actions = [1, 2, 3, 4]  # Movement actions
+                action_idx = (step + self.game_state_detector.stuck_counter) % len(actions)
+                return actions[action_idx]
+        
+        # Default rule-based action
+        return 5  # A button
+
     def _attempt_pyboy_recovery(self) -> bool:
         """Attempt to recover from PyBoy crash"""
         try:
