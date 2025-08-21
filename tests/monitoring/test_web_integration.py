@@ -15,8 +15,8 @@ from unittest.mock import Mock, patch
 from monitoring import (
     UnifiedMonitor,
     MonitorConfig,
-    TrainingState
 )
+from monitoring.trainer_monitor_bridge import TrainingState
 
 @pytest.fixture
 def temp_dir():

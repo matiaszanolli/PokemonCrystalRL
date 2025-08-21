@@ -14,13 +14,10 @@ import json
 import hashlib
 from collections import OrderedDict
 
-from .rom_font_extractor import PokemonCrystalFontExtractor
-try:
-    from .gameboy_color_palette import GameBoyColorPalette
-    GBC_PALETTE_AVAILABLE = True
-except ImportError:
-    GBC_PALETTE_AVAILABLE = False
-    print("⚠️ Game Boy Color palette support not available")
+from tests.vision.rom_font_extractor import PokemonCrystalFontExtractor
+from vision.gameboy_color_palette import GameBoyColorPalette
+
+GBC_PALETTE_AVAILABLE = True
 
 
 class ROMFontDecoder:

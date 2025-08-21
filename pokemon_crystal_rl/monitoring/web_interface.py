@@ -21,23 +21,13 @@ from fastapi.websockets import WebSocket
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+from monitoring.data_bus import get_data_bus, DataType, DataMessage
+from .stats_collector import StatsCollector
+from ...monitoring.game_streamer import GameStreamComponent
 
-try:
-    import websockets
-    from websockets.server import WebSocketServerProtocol
-    WEBSOCKETS_AVAILABLE = True
-except ImportError:
-    WEBSOCKETS_AVAILABLE = False
-    WebSocketServerProtocol = None
-
-try:
-    from .data_bus import get_data_bus, DataType, DataMessage
-    from .stats_collector import StatsCollector
-    from .game_streamer import GameStreamComponent
-except ImportError:
-    from data_bus import get_data_bus, DataType, DataMessage
-    from stats_collector import StatsCollector
-    from game_streamer import GameStreamComponent
+import websockets
+from websockets.server import WebSocketServerProtocol
+WEBSOCKETS_AVAILABLE = True
 
 
 __all__ = ['TrainingWebServer', 'WebInterface']
