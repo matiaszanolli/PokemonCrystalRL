@@ -12,16 +12,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import ollama
 import numpy as np
-
-try:
-    from ...core.pyboy_env import PyBoyPokemonCrystalEnv
-except ImportError:
-    try:
-        from ..core.pyboy_env import PyBoyPokemonCrystalEnv
-    except ImportError:
-        # Create a stub if PyBoyPokemonCrystalEnv is not available
-        class PyBoyPokemonCrystalEnv:
-            pass
+from ...core.pyboy_env import PyBoyPokemonCrystalEnv
 
 
 class LocalLLMPokemonAgent:

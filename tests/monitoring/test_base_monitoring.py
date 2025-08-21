@@ -8,7 +8,7 @@ import numpy as np
 import subprocess
 import sys
 import signal
-from monitoring_client import MonitoringClient
+from monitoring.monitoring_client import MonitoringClient
 
 def test_monitoring_integration():
     """Test the monitoring client integration"""

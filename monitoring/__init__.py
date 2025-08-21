@@ -10,7 +10,7 @@ This package provides comprehensive monitoring tools:
 
 from .data_bus import DataBus, DataType, get_data_bus
 from .unified_monitor import UnifiedMonitor
-from .game_streamer import GameStreamer
+from .game_streamer import GameStreamComponent as GameStreamer
 from .monitoring_client import MonitoringClient
 from .stats_collector import StatsCollector
 from .text_logger import TextLogger

@@ -1,344 +1,427 @@
 """
-Text logger module for Pokemon Crystal RL.
+text_logger.py - Text Transcription Logger for Pokemon Crystal
 
-This module provides structured logging capabilities for game events, training progress,
-and system status. It includes features like:
-- Categorized logging with custom formatters
-- Event history tracking
-- Log event filtering and search
-- Data bus integration for real-time log streaming
-- Log file rotation and management
+This module logs all detected text from the game for analysis,
+debugging, and creating a transcript of gameplay sessions.
 """
 
-import logging
-import sys
-import os
-from typing import Optional, Dict, List, Any, Union
-from dataclasses import dataclass
-from datetime import datetime
 import json
-import threading
-from logging.handlers import RotatingFileHandler
+import sqlite3
 import time
-from enum import Enum, auto
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, asdict
 from pathlib import Path
-import re
-from queue import Queue
+import hashlib
 
-from .data_bus import DataType, get_data_bus
+from vision.vision_processor import DetectedText, VisualContext
 
-
-class LogLevel(Enum):
-    """Custom log levels for game-specific events."""
-    GAME_ACTION = auto()      # In-game actions (moves, items, etc.)
-    GAME_STATE = auto()       # Game state changes
-    GAME_PROGRESS = auto()    # Progress markers (badges, story events)
-    TRAINING = auto()         # Training-related events
-    REWARD = auto()           # Reward signals
-    PERFORMANCE = auto()      # Performance metrics
-    SYSTEM = auto()           # System events
-    DEBUG = auto()            # Debug information
 
 
 @dataclass
-class LogEvent:
-    """Structured log event with metadata."""
-    timestamp: float
-    level: Union[LogLevel, str]
-    category: str
-    message: str
-    data: Optional[Dict[str, Any]] = None
-    source: Optional[str] = None
-    event_id: Optional[str] = None
+class TextLogEntry:
+    """Single text detection log entry"""
+    timestamp: str
+    frame_number: int
+    screen_type: str
+    text_content: str
+    text_location: str  # 'dialogue', 'menu', 'ui', 'world'
+    confidence: float
+    bbox: tuple  # (x1, y1, x2, y2)
+    session_id: str
+    text_hash: str  # For deduplication
 
 
-class ColorFormatter(logging.Formatter):
-    """Custom formatter with color support for different log levels."""
+@dataclass
+class GameplaySession:
+    """Represents a single gameplay session"""
+    session_id: str
+    start_time: str
+    end_time: Optional[str]
+    total_frames: int
+    total_text_detections: int
+    unique_text_count: int
+    session_summary: str
+
+
+class PokemonTextLogger:
+    """
+    Logs and manages all text transcriptions from Pokemon Crystal gameplay
+    """
     
-    COLORS = {
-        'GAME_ACTION': '\033[36m',    # Cyan
-        'GAME_STATE': '\033[34m',     # Blue
-        'GAME_PROGRESS': '\033[32m',  # Green
-        'TRAINING': '\033[35m',       # Magenta
-        'REWARD': '\033[33m',         # Yellow
-        'PERFORMANCE': '\033[36m',    # Cyan
-        'SYSTEM': '\033[37m',         # White
-        'DEBUG': '\033[90m',          # Gray
-        'INFO': '\033[37m',           # White
-        'WARNING': '\033[33m',        # Yellow
-        'ERROR': '\033[31m',          # Red
-        'CRITICAL': '\033[41m',       # Red background
-    }
-    RESET = '\033[0m'
-    
-    def format(self, record: logging.LogRecord) -> str:
-        # Add color if terminal supports it and it's not being redirected
-        if sys.stdout.isatty():
-            level_name = record.levelname
-            if level_name in self.COLORS:
-                record.levelname = f"{self.COLORS[level_name]}{level_name}{self.RESET}"
-                record.msg = f"{self.COLORS[level_name]}{record.msg}{self.RESET}"
-        return super().format(record)
-
-
-class TextLogger:
-    """Structured logger for game and training events."""
-    
-    def __init__(self, 
-                 log_dir: str = "logs",
-                 max_history: int = 1000,
-                 file_max_bytes: int = 10 * 1024 * 1024,  # 10MB
-                 file_backup_count: int = 5):
-        
+    def __init__(self, log_dir: str = "text_logs"):
+        """Initialize the text logger"""
         self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(exist_ok=True)
         
-        # Configure logging
-        self.logger = logging.getLogger("pokemon_crystal_rl")
-        self.logger.setLevel(logging.DEBUG)
+        # Database for structured storage
+        self.db_path = self.log_dir / "text_transcriptions.db"
+        self.session_id = self._generate_session_id()
+        self.frame_number = 0
         
-        # Console handler with color formatting
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(ColorFormatter(
-            '%(asctime)s [%(levelname)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        ))
-        self.logger.addHandler(console_handler)
+        # In-memory caches
+        self.recent_text = []  # Last 10 text detections
+        self.text_frequency = {}  # Count of each unique text
+        self.dialogue_history = []  # Chronological dialogue
         
-        # File handlers for different log types
-        self._setup_file_handlers(file_max_bytes, file_backup_count)
+        # Initialize database
+        self._init_database()
         
-        # Event history
-        self.max_history = max_history
-        self.event_history: List[LogEvent] = []
-        self._history_lock = threading.Lock()
+        # Start new session
+        self._start_session()
         
-        # Event queue for real-time streaming
-        self.event_queue = Queue(maxsize=1000)
-        self.is_streaming = False
-        self._stream_thread: Optional[threading.Thread] = None
-        
-        # Data bus connection
-        self.data_bus = get_data_bus()
-        
-        # Register custom log levels
-        for level in LogLevel:
-            logging.addLevelName(level.value, level.name)
-        
-        self.logger.info("📝 Text logger initialized")
+        print(f"📝 Text logger initialized - Session: {self.session_id}")
     
-    def _setup_file_handlers(self, max_bytes: int, backup_count: int) -> None:
-        """Setup rotating file handlers for different log categories."""
-        handlers = {
-            'game': RotatingFileHandler(
-                self.log_dir / 'game.log',
-                maxBytes=max_bytes,
-                backupCount=backup_count
-            ),
-            'training': RotatingFileHandler(
-                self.log_dir / 'training.log',
-                maxBytes=max_bytes,
-                backupCount=backup_count
-            ),
-            'system': RotatingFileHandler(
-                self.log_dir / 'system.log',
-                maxBytes=max_bytes,
-                backupCount=backup_count
-            )
-        }
-        
-        formatter = logging.Formatter(
-            '%(asctime)s [%(levelname)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        
-        for handler in handlers.values():
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+    def _generate_session_id(self) -> str:
+        """Generate unique session ID"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"session_{timestamp}"
     
-    def log_event(self, 
-                  level: Union[LogLevel, str],
-                  message: str,
-                  category: str = "general",
-                  data: Optional[Dict[str, Any]] = None,
-                  source: Optional[str] = None) -> None:
-        """Log a structured event with metadata."""
-        try:
-            # Create event object
-            event = LogEvent(
-                timestamp=time.time(),
-                level=level,
-                category=category,
-                message=message,
-                data=data or {},
-                source=source,
-                event_id=f"{int(time.time() * 1000)}_{threading.get_ident()}"
-            )
+    def _init_database(self):
+        """Initialize SQLite database for text logging"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
             
-            # Add to history
-            with self._history_lock:
-                self.event_history.append(event)
-                if len(self.event_history) > self.max_history:
-                    self.event_history.pop(0)
-            
-            # Add to streaming queue
-            if self.is_streaming:
-                try:
-                    self.event_queue.put_nowait(event)
-                except:
-                    pass  # Queue full
-            
-            # Log using standard logging
-            log_level = (
-                level.value if isinstance(level, LogLevel)
-                else getattr(logging, level.upper(), logging.INFO)
-            )
-            self.logger.log(log_level, message)
-            
-            # Publish to data bus
-            if self.data_bus:
-                self.data_bus.publish(
-                    DataType.LOG_EVENT,
-                    {
-                        'timestamp': event.timestamp,
-                        'level': event.level.name if isinstance(event.level, LogLevel) else event.level,
-                        'category': event.category,
-                        'message': event.message,
-                        'data': event.data,
-                        'source': event.source,
-                        'event_id': event.event_id
-                    },
-                    'text_logger'
+            # Text entries table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS text_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    frame_number INTEGER NOT NULL,
+                    session_id TEXT NOT NULL,
+                    screen_type TEXT NOT NULL,
+                    text_content TEXT NOT NULL,
+                    text_location TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    bbox_x1 INTEGER,
+                    bbox_y1 INTEGER,
+                    bbox_x2 INTEGER,
+                    bbox_y2 INTEGER,
+                    text_hash TEXT NOT NULL,
+                    UNIQUE(session_id, frame_number, text_hash)
                 )
-                
-        except Exception as e:
-            self.logger.error(f"Failed to log event: {e}")
-    
-    def start_streaming(self) -> None:
-        """Start real-time event streaming."""
-        if self.is_streaming:
-            return
+            """)
             
-        self.is_streaming = True
-        self._stream_thread = threading.Thread(
-            target=self._stream_loop,
-            daemon=True
+            # Sessions table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+                    total_frames INTEGER DEFAULT 0,
+                    total_text_detections INTEGER DEFAULT 0,
+                    unique_text_count INTEGER DEFAULT 0,
+                    session_summary TEXT
+                )
+            """)
+            
+            # Create indexes for better performance
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_frame ON text_entries(session_id, frame_number)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_text_location ON text_entries(text_location)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_screen_type ON text_entries(screen_type)")
+            
+            conn.commit()
+    
+    def _start_session(self):
+        """Start a new logging session"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO sessions (session_id, start_time)
+                VALUES (?, ?)
+            """, (self.session_id, datetime.now().isoformat()))
+            conn.commit()
+    
+    def log_visual_context(self, context: VisualContext):
+        """Log all text from a visual context"""
+        self.frame_number += 1
+        
+        for detected_text in context.detected_text:
+            self._log_text_entry(
+                text_content=detected_text.text,
+                text_location=detected_text.location,
+                confidence=detected_text.confidence,
+                bbox=detected_text.bbox,
+                screen_type=context.screen_type
+            )
+    
+    def _log_text_entry(self, text_content: str, text_location: str, 
+                       confidence: float, bbox: tuple, screen_type: str):
+        """Log a single text detection entry"""
+        
+        # Generate hash for deduplication
+        text_hash = hashlib.md5(
+            f"{text_content}_{text_location}_{screen_type}".encode()
+        ).hexdigest()[:12]
+        
+        # Create log entry
+        entry = TextLogEntry(
+            timestamp=datetime.now().isoformat(),
+            frame_number=self.frame_number,
+            screen_type=screen_type,
+            text_content=text_content,
+            text_location=text_location,
+            confidence=confidence,
+            bbox=bbox,
+            session_id=self.session_id,
+            text_hash=text_hash
         )
-        self._stream_thread.start()
         
-        self.logger.info("📡 Log streaming started")
-    
-    def stop_streaming(self) -> None:
-        """Stop real-time event streaming."""
-        self.is_streaming = False
-        if self._stream_thread and self._stream_thread.is_alive():
-            self._stream_thread.join(timeout=5.0)
+        # Store in database
+        self._store_entry(entry)
         
-        self.logger.info("⏹️ Log streaming stopped")
+        # Update in-memory caches
+        self._update_caches(entry)
     
-    def _stream_loop(self) -> None:
-        """Main streaming loop."""
-        while self.is_streaming:
-            try:
-                event = self.event_queue.get(timeout=1.0)
-                if event and self.data_bus:
-                    self.data_bus.publish(
-                        DataType.LOG_STREAM,
-                        {
-                            'timestamp': event.timestamp,
-                            'level': event.level.name if isinstance(event.level, LogLevel) else event.level,
-                            'category': event.category,
-                            'message': event.message,
-                            'data': event.data,
-                            'source': event.source,
-                            'event_id': event.event_id
-                        },
-                        'text_logger'
-                    )
-            except:
-                continue
-    
-    def get_events(self,
-                   start_time: Optional[float] = None,
-                   end_time: Optional[float] = None,
-                   levels: Optional[List[Union[LogLevel, str]]] = None,
-                   categories: Optional[List[str]] = None,
-                   search_text: Optional[str] = None) -> List[LogEvent]:
-        """Get filtered log events from history."""
-        with self._history_lock:
-            events = self.event_history.copy()
-        
-        # Apply filters
-        if start_time is not None:
-            events = [e for e in events if e.timestamp >= start_time]
-        if end_time is not None:
-            events = [e for e in events if e.timestamp <= end_time]
-        if levels:
-            events = [e for e in events if e.level in levels]
-        if categories:
-            events = [e for e in events if e.category in categories]
-        if search_text:
-            pattern = re.compile(search_text, re.IGNORECASE)
-            events = [e for e in events if pattern.search(e.message)]
-        
-        return events
-    
-    def save_events(self, filepath: str,
-                   start_time: Optional[float] = None,
-                   end_time: Optional[float] = None) -> None:
-        """Save log events to a JSON file."""
+    def _store_entry(self, entry: TextLogEntry):
+        """Store entry in database"""
         try:
-            events = self.get_events(start_time, end_time)
-            event_data = [
-                {
-                    'timestamp': e.timestamp,
-                    'level': e.level.name if isinstance(e.level, LogLevel) else e.level,
-                    'category': e.category,
-                    'message': e.message,
-                    'data': e.data,
-                    'source': e.source,
-                    'event_id': e.event_id
-                }
-                for e in events
-            ]
-            
-            with open(filepath, 'w') as f:
-                json.dump(event_data, f, indent=2)
-            
-            self.logger.info(f"💾 Events saved to {filepath}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to save events: {e}")
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR IGNORE INTO text_entries 
+                    (timestamp, frame_number, session_id, screen_type, text_content,
+                     text_location, confidence, bbox_x1, bbox_y1, bbox_x2, bbox_y2, text_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    entry.timestamp, entry.frame_number, entry.session_id,
+                    entry.screen_type, entry.text_content, entry.text_location,
+                    entry.confidence, entry.bbox[0], entry.bbox[1], 
+                    entry.bbox[2], entry.bbox[3], entry.text_hash
+                ))
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"⚠️ Database error logging text: {e}")
     
-    def clear_history(self) -> None:
-        """Clear the event history."""
-        with self._history_lock:
-            self.event_history.clear()
+    def _update_caches(self, entry: TextLogEntry):
+        """Update in-memory caches"""
+        # Recent text (keep last 10)
+        self.recent_text.append(entry)
+        if len(self.recent_text) > 10:
+            self.recent_text.pop(0)
         
-        self.logger.info("🧹 Event history cleared")
+        # Text frequency
+        self.text_frequency[entry.text_content] = self.text_frequency.get(entry.text_content, 0) + 1
+        
+        # Dialogue history (only dialogue location)
+        if entry.text_location == 'dialogue':
+            self.dialogue_history.append({
+                'timestamp': entry.timestamp,
+                'frame': entry.frame_number,
+                'text': entry.text_content,
+                'screen_type': entry.screen_type
+            })
     
-    # Convenience methods for common log levels
-    def game_action(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.GAME_ACTION, message, "game", **kwargs)
+    def get_recent_text(self, count: int = 5) -> List[Dict]:
+        """Get most recent text detections"""
+        return [asdict(entry) for entry in self.recent_text[-count:]]
     
-    def game_state(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.GAME_STATE, message, "game", **kwargs)
+    def get_dialogue_history(self, count: int = 10) -> List[Dict]:
+        """Get recent dialogue entries"""
+        return self.dialogue_history[-count:]
     
-    def game_progress(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.GAME_PROGRESS, message, "game", **kwargs)
+    def get_text_frequency(self, min_count: int = 2) -> Dict[str, int]:
+        """Get frequently appearing text"""
+        return {text: count for text, count in self.text_frequency.items() 
+                if count >= min_count}
     
-    def training(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.TRAINING, message, "training", **kwargs)
+    def get_session_stats(self) -> Dict[str, Any]:
+        """Get current session statistics"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Total detections
+            cursor.execute("""
+                SELECT COUNT(*) FROM text_entries WHERE session_id = ?
+            """, (self.session_id,))
+            total_detections = cursor.fetchone()[0]
+            
+            # Unique text count
+            cursor.execute("""
+                SELECT COUNT(DISTINCT text_hash) FROM text_entries WHERE session_id = ?
+            """, (self.session_id,))
+            unique_text = cursor.fetchone()[0]
+            
+            # By location
+            cursor.execute("""
+                SELECT text_location, COUNT(*) FROM text_entries 
+                WHERE session_id = ? GROUP BY text_location
+            """, (self.session_id,))
+            by_location = dict(cursor.fetchall())
+            
+            # By screen type
+            cursor.execute("""
+                SELECT screen_type, COUNT(*) FROM text_entries 
+                WHERE session_id = ? GROUP BY screen_type
+            """, (self.session_id,))
+            by_screen_type = dict(cursor.fetchall())
+        
+        return {
+            'session_id': self.session_id,
+            'total_frames': self.frame_number,
+            'total_detections': total_detections,
+            'unique_text': unique_text,
+            'by_location': by_location,
+            'by_screen_type': by_screen_type,
+            'dialogue_count': len(self.dialogue_history)
+        }
     
-    def reward(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.REWARD, message, "training", **kwargs)
+    def export_session_transcript(self, output_file: Optional[str] = None) -> str:
+        """Export session as readable transcript"""
+        if output_file is None:
+            output_file = self.log_dir / f"{self.session_id}_transcript.txt"
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT timestamp, frame_number, screen_type, text_location, text_content
+                FROM text_entries 
+                WHERE session_id = ?
+                ORDER BY frame_number
+            """, (self.session_id,))
+            
+            entries = cursor.fetchall()
+        
+        # Generate readable transcript
+        transcript_lines = [
+            f"Pokemon Crystal Gameplay Transcript",
+            f"Session: {self.session_id}",
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Total Frames: {self.frame_number}",
+            f"Total Text Detections: {len(entries)}",
+            "=" * 60,
+            ""
+        ]
+        
+        current_screen = None
+        current_frame = None
+        
+        for timestamp, frame, screen_type, location, text in entries:
+            # Add frame/screen separator
+            if frame != current_frame:
+                if current_frame is not None:
+                    transcript_lines.append("")
+                transcript_lines.append(f"Frame {frame} ({screen_type}):")
+                current_frame = frame
+                current_screen = screen_type
+            
+            # Format text by location
+            location_prefix = {
+                'dialogue': '💬',
+                'menu': '📋',
+                'ui': '🔧',
+                'world': '🌍'
+            }.get(location, '📝')
+            
+            transcript_lines.append(f"  {location_prefix} {location.upper()}: {text}")
+        
+        # Write to file
+        transcript_content = '\n'.join(transcript_lines)
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(transcript_content)
+        
+        print(f"📄 Transcript exported: {output_file}")
+        return str(output_file)
     
-    def performance(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.PERFORMANCE, message, "system", **kwargs)
+    def search_text(self, query: str, location: Optional[str] = None) -> List[Dict]:
+        """Search for specific text content"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            sql = """
+                SELECT timestamp, frame_number, screen_type, text_location, text_content
+                FROM text_entries 
+                WHERE session_id = ? AND text_content LIKE ?
+            """
+            params = [self.session_id, f"%{query}%"]
+            
+            if location:
+                sql += " AND text_location = ?"
+                params.append(location)
+            
+            sql += " ORDER BY frame_number"
+            
+            cursor.execute(sql, params)
+            results = cursor.fetchall()
+        
+        return [
+            {
+                'timestamp': row[0],
+                'frame': row[1],
+                'screen_type': row[2],
+                'location': row[3],
+                'text': row[4]
+            }
+            for row in results
+        ]
     
-    def system(self, message: str, **kwargs) -> None:
-        self.log_event(LogLevel.SYSTEM, message, "system", **kwargs)
+    def close_session(self):
+        """Close current session and update statistics"""
+        stats = self.get_session_stats()
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE sessions 
+                SET end_time = ?, total_frames = ?, total_text_detections = ?, 
+                    unique_text_count = ?, session_summary = ?
+                WHERE session_id = ?
+            """, (
+                datetime.now().isoformat(),
+                stats['total_frames'],
+                stats['total_detections'],
+                stats['unique_text'],
+                f"Frames: {stats['total_frames']}, Detections: {stats['total_detections']}, Dialogue: {stats['dialogue_count']}",
+                self.session_id
+            ))
+            conn.commit()
+        
+        # Export final transcript
+        transcript_file = self.export_session_transcript()
+        
+        print(f"📝 Session {self.session_id} closed")
+        print(f"📊 Final stats: {stats}")
+        return transcript_file
+
+
+def test_text_logger():
+    """Test the text logger with sample data"""
+    from vision.vision_processor import DetectedText, VisualContext
     
-    def __del__(self):
-        """Cleanup on deletion."""
-        self.stop_streaming()
+    # Create logger
+    logger = PokemonTextLogger("test_text_logs")
+    
+    # Create sample visual context
+    sample_texts = [
+        DetectedText("DIALOGUE", 0.8, (10, 100, 150, 130), "dialogue"),
+        DetectedText("MENU", 0.7, (120, 20, 160, 40), "menu"),
+        DetectedText("HP", 0.9, (5, 5, 25, 15), "ui")
+    ]
+    
+    context = VisualContext(
+        screen_type="dialogue",
+        detected_text=sample_texts,
+        ui_elements=[],
+        dominant_colors=[(255, 255, 255)],
+        game_phase="dialogue_interaction",
+        visual_summary="Test context"
+    )
+    
+    # Log several frames
+    for i in range(5):
+        logger.log_visual_context(context)
+        time.sleep(0.1)  # Simulate frame delay
+    
+    # Print stats
+    stats = logger.get_session_stats()
+    print("📊 Test session stats:")
+    for key, value in stats.items():
+        print(f"  {key}: {value}")
+    
+    # Export transcript
+    transcript_file = logger.close_session()
+    print(f"📄 Test transcript: {transcript_file}")
+
+
+if __name__ == "__main__":
+    test_text_logger()
