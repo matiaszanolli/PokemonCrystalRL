@@ -10,6 +10,7 @@ import threading
 import numpy as np
 from enum import Enum
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from monitoring.data_bus import get_data_bus, DataType
 from monitoring.web_server import WebServer as TrainingWebServer
@@ -36,18 +37,17 @@ class LLMBackend(Enum):
 
 @dataclass
 class TrainingConfig:
-    """Configuration for the Pokemon Crystal trainer."""
-    rom_path: str = ""
+    rom_path: str = ""  # Make rom_path optional with empty string default
     mode: TrainingMode = TrainingMode.FAST_MONITORED
-    llm_backend: Optional[LLMBackend] = LLMBackend.SMOLLM2
-    max_actions: int = 1000
+    llm_backend: Optional[LLMBackend] = LLMBackend.NONE  # Changed from SMOLLM2 to NONE
+    max_actions: int = 10000  # Changed from 1000 to 10000
     max_episodes: int = 10
     llm_interval: int = 10
     frames_per_action: int = 24
     headless: bool = True
     debug_mode: bool = False
     save_state_path: Optional[str] = None
-    enable_web: bool = False
+    enable_web: bool = True  # Changed from False to True
     web_port: int = 8080
     web_host: str = "localhost"
     capture_screens: bool = True
@@ -348,29 +348,32 @@ class PokemonTrainer:
         """Detect game state from screen content."""
         return self.game_state_detector.detect_game_state(screen)
 
-    def _get_screen_hash(self, screen: Optional[np.ndarray] = None) -> str:
-        """Get a hash value for screen content for stuck detection."""
-        return self.game_state_detector.get_screen_hash(screen)
-
-    def _convert_screen_format(self, screen: np.ndarray) -> np.ndarray:
-        """Convert screen to RGB format."""
+    def _get_screen_hash(self, screen: Optional[np.ndarray]) -> int:
+        """Calculate hash of screen for change detection"""
         if screen is None:
-            return None
+            return 0
+        try:
+            return hash(screen.tobytes())
+        except Exception:
+            return 0
 
-        # Handle different input formats
-        if len(screen.shape) == 2:  # Grayscale
-            rgb = np.dstack([screen] * 3)
-        elif len(screen.shape) == 3:
-            if screen.shape[2] == 4:  # RGBA
-                rgb = screen[:, :, :3]
-            elif screen.shape[2] == 3:  # RGB
-                rgb = screen
-            else:
-                return None
-        else:
+    def _convert_screen_format(self, screen_data: np.ndarray) -> Optional[np.ndarray]:
+        """Convert screen data to consistent RGB format"""
+        if screen_data is None:
             return None
-
-        return rgb
+            
+        try:
+            # Handle different input formats
+            if len(screen_data.shape) == 2:  # Grayscale
+                return np.stack([screen_data] * 3, axis=2)
+            elif len(screen_data.shape) == 3:
+                if screen_data.shape[2] == 4:  # RGBA
+                    return screen_data[:, :, :3]
+                elif screen_data.shape[2] == 3:  # RGB
+                    return screen_data
+            return None
+        except Exception:
+            return None
 
     def _handle_dialogue(self, step: int) -> int:
         """Handle dialogue state."""
@@ -389,7 +392,7 @@ class PokemonTrainer:
         return actions[step % len(actions)]
 
     class _ErrorHandler:
-        def __init__(self, trainer, operation: str, error_type: str = 'total_errors'):
+        def __init__(self, trainer: 'PokemonTrainer', operation: str, error_type: str = 'total_errors'):
             self.trainer = trainer
             self.operation = operation
             self.error_type = error_type
@@ -482,40 +485,30 @@ class PokemonTrainer:
             return False
 
     def _attempt_pyboy_recovery(self) -> bool:
-        """Attempt to recover crashed PyBoy instance.
-        
-        Returns:
-            bool: True if recovery successful, False otherwise
-        """
+        """Attempt to recover from PyBoy crash"""
         try:
-            # Stop the old instance
+            # Clean up old instance
             if self.pyboy:
                 try:
                     self.pyboy.stop()
                 except Exception:
                     pass
-
+            
             # Create new instance
-            new_pyboy = PyBoy(
-                self.config.rom_path,
-                window_type="headless" if self.config.headless else "SDL2",
-                debug=self.config.debug_mode
-            )
-
-            # Try to load save state if available
-            if self.config.save_state_path and os.path.exists(self.config.save_state_path):
+            from pyboy import PyBoy
+            self.pyboy = PyBoy(str(Path(self.config.rom_path).resolve()))
+            
+            # Load save state if configured
+            if self.config.save_state_path and Path(self.config.save_state_path).exists():
                 with open(self.config.save_state_path, 'rb') as f:
-                    new_pyboy.load_state(f)
-
-            # Recovery success, update instance
-            self.pyboy = new_pyboy
-            self.recovery_attempts += 1
+                    self.pyboy.load_state(f)
+            
             return True
-
         except Exception as e:
-            self.logger.error(f"PyBoy recovery failed: {e}")
+            self.logger.error(f"PyBoy recovery failed: {str(e)}")
             self.pyboy = None
             return False
+
     def _execute_synchronized_action(self, action: int) -> None:
         """Execute action with screen monitoring and error handling."""
         # Execute action with configurable frames per step
@@ -558,14 +551,15 @@ class PokemonTrainer:
                 self.error_count['total_errors'] += 1
                 break
     
-    def _simple_screenshot_capture(self) -> np.ndarray:
-        """Capture a simple screenshot without any processing."""
+    def _simple_screenshot_capture(self) -> Optional[np.ndarray]:
+        """Capture screenshot without additional processing"""
         try:
-            screen = np.array(self.pyboy.screen_image())
-            return screen
+            if not self.pyboy or not hasattr(self.pyboy, 'screen'):
+                return None
+            screen = self.pyboy.screen.ndarray
+            return self._convert_screen_format(screen)
         except Exception as e:
-            self.logger.error(f"Simple screenshot capture failed: {e}")
-            self.error_count['capture_errors'] += 1
+            self.logger.error(f"Screenshot capture failed: {str(e)}")
             return None
     
     def _capture_and_queue_screen(self) -> None:

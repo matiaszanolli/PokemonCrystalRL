@@ -21,20 +21,22 @@ from trainer.trainer import PokemonTrainer, TrainingConfig
 from monitoring.web_server import WebServer as TrainingWebServer
 
 class UnifiedPokemonTrainer(PokemonTrainer):
-    """Enhanced Pokemon trainer with integrated features"""
-    
     def __init__(self, config: TrainingConfig):
         """Initialize the unified trainer with enhanced features"""
         # Initialize base trainer
         super().__init__(config)
         
-        # Initialize error tracking
-        self.error_count: Dict[str, int] = {
+        # Initialize error tracking - CHANGED TO PLURAL
+        self.error_counts: Dict[str, int] = {  # Changed from error_count to error_counts
             'pyboy_crashes': 0,
             'llm_failures': 0,
             'capture_errors': 0,
-            'total_errors': 0
+            'total_errors': 0,
+            'general': 0  # Added for test compatibility
         }
+        # Keep backward compatibility
+        self.error_count = self.error_counts  # Alias for backward compatibility
+    
         self.last_error_time = None
         self.recovery_attempts = 0
         
@@ -90,10 +92,15 @@ class UnifiedPokemonTrainer(PokemonTrainer):
             
         try:
             frame_count = self.pyboy.frame_count
-            return isinstance(frame_count, int)
+            # FIXED: Check if frame_count is valid integer
+            return isinstance(frame_count, int) and frame_count >= 0
         except Exception:
             return False
-    
+
+    def _get_screen(self) -> Optional[np.ndarray]:
+        """Get screen data - alias for _simple_screenshot_capture for test compatibility"""
+        return self._simple_screenshot_capture()
+
     def _get_rule_based_action(self, step: int) -> int:
         """Get action using rule-based system with stuck detection."""
         # Capture screen for stuck detection
