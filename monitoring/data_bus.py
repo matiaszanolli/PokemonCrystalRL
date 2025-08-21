@@ -178,26 +178,30 @@ class DataBus:
         self._subscribers = {}
         # Clear components
         self._components = {}
-        
 
-# Global data bus instance
-_DATA_BUS = None
 
-def get_data_bus() -> Optional[DataBus]:
-    """Get the global data bus instance.
+# Global data bus instance (singleton pattern)
+_global_data_bus: Optional[DataBus] = None
+_data_bus_lock = threading.Lock()
+
+
+def get_data_bus() -> DataBus:
+    """Get the global data bus instance (thread-safe singleton)"""
+    global _global_data_bus
     
-    Returns:
-        Global DataBus instance or None if not initialized
-    """
-    return _DATA_BUS
-
-def init_data_bus() -> DataBus:
-    """Initialize the global data bus.
+    if _global_data_bus is None:
+        with _data_bus_lock:
+            if _global_data_bus is None:
+                _global_data_bus = DataBus()
     
-    Returns:
-        Initialized DataBus instance
-    """
-    global _DATA_BUS
-    if _DATA_BUS is None:
-        _DATA_BUS = DataBus()
-    return _DATA_BUS
+    return _global_data_bus
+
+
+def shutdown_data_bus() -> None:
+    """Shutdown the global data bus"""
+    global _global_data_bus
+    
+    with _data_bus_lock:
+        if _global_data_bus is not None:
+            _global_data_bus.shutdown()
+            _global_data_bus = None

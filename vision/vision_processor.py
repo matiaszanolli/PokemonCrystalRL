@@ -19,7 +19,7 @@ import logging
 import json
 import hashlib
 
-from pokemon_crystal_rl.core import PyBoyGameState
+from core import PyBoyGameState
 
 # Visual context classes
 @dataclass

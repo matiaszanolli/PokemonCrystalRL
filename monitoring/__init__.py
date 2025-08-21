@@ -16,7 +16,7 @@ from .stats_collector import StatsCollector
 from .text_logger import TextLogger
 from .trainer_monitor_bridge import TrainerMonitorBridge
 from .web_interface import WebInterface
-from .web_monitor import WebMonitor
+from .web_monitor import WebMonitor, ServerConfig, MonitorConfig
 from .web_server import WebServer
 from .error_handler import ErrorHandler
 
@@ -32,6 +32,8 @@ __all__ = [
     'TrainerMonitorBridge',
     'WebInterface',
     'WebMonitor',
+    'ServerConfig',
+    'MonitorConfig',
     'WebServer',
     'ErrorHandler'
 ]
