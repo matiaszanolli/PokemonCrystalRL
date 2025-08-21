@@ -31,7 +31,7 @@ class TestAdaptiveLLMIntervals:
     @pytest.fixture
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('pokemon_crystal_rl.llm.local_llm_agent.LLMManager')
+    @patch('trainer.llm_manager.LLMManager')
     def trainer_with_llm(self, mock_llm_manager_class, mock_pyboy_class):
         """Create trainer with LLM backend for interval testing"""
         # Mock PyBoy
@@ -215,19 +215,28 @@ class TestAdaptiveLLMIntervals:
         # Test maximum bound (should not exceed 50)
         trainer.adaptive_llm_interval = 40  # Start close to max
         
-        # Add very slow calls
+        # Add very slow calls - need multiple rounds to reach max
+        # Each adjustment increases by 5, so need 2 adjustments: 40 -> 45 -> 50
         for i in range(10):
-            trainer._track_llm_performance(10.0)  # Extremely slow
+            trainer._track_llm_performance(10.0)  # First round: 40 -> 45
+        
+        # Add another round to reach maximum
+        for i in range(10):
+            trainer._track_llm_performance(10.0)  # Second round: 45 -> 50
         
         # Should be capped at 50
         assert trainer.adaptive_llm_interval == 50
         
         # Test minimum bound (should not go below original config)
-        trainer.adaptive_llm_interval = trainer.config.llm_interval + 2  # Start slightly above
+        trainer.adaptive_llm_interval = trainer.config.llm_interval + 4  # Start slightly above
         
-        # Add very fast calls
+        # Add very fast calls - need multiple rounds to test minimum bound
+        # Each adjustment decreases by 2, so: (config + 4) -> (config + 2) -> config
         for i in range(10):
-            trainer._track_llm_performance(0.5)  # Extremely fast
+            trainer._track_llm_performance(0.5)  # First round: decrease by 2
+        
+        for i in range(10):
+            trainer._track_llm_performance(0.5)  # Second round: decrease by 2
         
         # Should not go below original config value
         assert trainer.adaptive_llm_interval >= trainer.config.llm_interval

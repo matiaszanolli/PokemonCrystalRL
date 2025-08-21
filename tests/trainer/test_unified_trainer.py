@@ -14,7 +14,7 @@ This test file covers all aspects of the UnifiedPokemonTrainer including:
 
 import pytest
 import time
-import threading
+import queue
 import numpy as np
 from unittest.mock import Mock, patch, MagicMock, call
 import logging
@@ -640,12 +640,46 @@ class TestTrainingModes:
     
     def test_fast_monitored_training_execution(self, trainer_fast_monitored):
         """Test fast monitored training execution"""
-        # Run training for a few steps
-        trainer_fast_monitored._run_synchronized_training()
+        trainer = trainer_fast_monitored
         
-        # Should have executed actions
-        assert trainer_fast_monitored.stats['total_actions'] > 0
-        assert trainer_fast_monitored.pyboy.send_input.call_count > 0
+        # Initialize required attributes for stuck detection
+        trainer.consecutive_same_screens = 0
+        trainer.last_screen_hash = None
+        
+        # Mock the screenshot capture to return a valid screen
+        test_screen = np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
+        
+        # Mock the methods that could cause infinite loops
+        with patch.object(trainer, '_simple_screenshot_capture', return_value=test_screen), \
+            patch.object(trainer, '_get_screen_hash', return_value=12345), \
+            patch.object(trainer, '_is_pyboy_alive', return_value=True):
+            
+            # Add a safety timeout to prevent infinite loops in tests
+            import signal
+            
+            def timeout_handler(signum, frame):
+                trainer._training_active = False
+                raise TimeoutError("Training loop timeout - test safety mechanism")
+            
+            # Set a 5-second timeout
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(5)
+            
+            try:
+                # Run training for a few steps
+                trainer._run_synchronized_training()
+                
+                # Should have executed actions
+                assert trainer.stats['total_actions'] > 0
+                assert trainer.pyboy.send_input.call_count > 0
+                
+            except TimeoutError:
+                # If we hit the timeout, the test failed due to infinite loop
+                pytest.fail("Training loop got stuck - infinite loop detected")
+            finally:
+                # Always disable the alarm
+                signal.alarm(0)
+                trainer._training_active = False
     
     def test_ultra_fast_training_execution(self, trainer_ultra_fast):
         """Test ultra fast training execution"""

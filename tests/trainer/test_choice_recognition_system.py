@@ -614,10 +614,13 @@ class TestContextualProcessing:
             ui_coordinates=(20, 60, 90, 80)
         )
         
+        # Store original priority before modification
+        original_priority = pokemon_choice.priority
+        
         prioritized = choice_system._apply_context_prioritization([pokemon_choice], starter_context)
         
         # Priority should be boosted due to conversation history
-        assert prioritized[0].priority > pokemon_choice.priority
+        assert prioritized[0].priority > original_priority
     
     @pytest.mark.unit
     @pytest.mark.choice
@@ -937,9 +940,9 @@ class TestUILayoutHandling:
         """Test coordinate-based position determination for many choices"""
         # For more than 3 choices, should use coordinates
         choice_infos = [
-            {"coordinates": (20, 50, 100, 70)},   # Y=50, should be TOP
-            {"coordinates": (20, 150, 100, 170)}, # Y=150, should be MIDDLE
-            {"coordinates": (20, 250, 100, 270)}, # Y=250, should be BOTTOM
+            {"coordinates": (20, 30, 100, 50)},   # Y=30, should be TOP (< 48)
+            {"coordinates": (20, 72, 100, 92)},   # Y=72, should be MIDDLE (48-96)
+            {"coordinates": (20, 120, 100, 140)}, # Y=120, should be BOTTOM (> 96)
         ]
         
         expected_positions = [ChoicePosition.TOP, ChoicePosition.MIDDLE, ChoicePosition.BOTTOM]
