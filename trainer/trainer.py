@@ -37,7 +37,7 @@ class LLMBackend(Enum):
 @dataclass
 class TrainingConfig:
     """Configuration for the Pokemon Crystal trainer."""
-    rom_path: str
+    rom_path: str = ""
     mode: TrainingMode = TrainingMode.FAST_MONITORED
     llm_backend: Optional[LLMBackend] = LLMBackend.SMOLLM2
     max_actions: int = 1000
@@ -344,11 +344,11 @@ class PokemonTrainer:
                     int(self.adaptive_llm_interval * 0.8)
                 )
 
-    def _detect_game_state(self, screen: np.ndarray) -> str:
+    def _detect_game_state(self, screen: Optional[np.ndarray] = None) -> str:
         """Detect game state from screen content."""
         return self.game_state_detector.detect_game_state(screen)
 
-    def _get_screen_hash(self, screen: np.ndarray) -> int:
+    def _get_screen_hash(self, screen: Optional[np.ndarray] = None) -> str:
         """Get a hash value for screen content for stuck detection."""
         return self.game_state_detector.get_screen_hash(screen)
 
@@ -389,7 +389,7 @@ class PokemonTrainer:
         return actions[step % len(actions)]
 
     class _ErrorHandler:
-        def __init__(self, trainer, operation: str, error_type: str = "total_errors"):
+        def __init__(self, trainer, operation: str, error_type: str = 'total_errors'):
             self.trainer = trainer
             self.operation = operation
             self.error_type = error_type
@@ -400,25 +400,28 @@ class PokemonTrainer:
         def __exit__(self, exc_type, exc_value, traceback):
             if exc_type is None:
                 return True
-            
+
             if exc_type == KeyboardInterrupt:
                 return False
 
             # Count error first regardless of type
-            self.trainer.error_count[self.error_type] = self.trainer.error_count.get(self.error_type, 0) + 1
+            if self.error_type not in self.trainer.error_counts:
+                self.trainer.error_counts[self.error_type] = 0
+            
+            self.trainer.error_counts[self.error_type] += 1
+            self.trainer.error_counts['total_errors'] += 1
+            
+            # Also update error_count for compatibility
+            self.trainer.error_count[self.error_type] += 1
             self.trainer.error_count['total_errors'] += 1
+            
             self.trainer.last_error_time = time.time()
+
+            # Attempt PyBoy recovery for crashes
+            if self.error_type == 'pyboy_crashes' and not self.trainer._is_pyboy_alive():
+                self.trainer._attempt_pyboy_recovery()
             
-            # Then attempt recovery for PyBoy crashes
-            if self.error_type == "pyboy_crashes":
-                try:
-                    if self.trainer._attempt_pyboy_recovery():
-                        return True
-                except Exception:
-                    pass
-            
-            # Re-raise original exception
-            return None  # This ensures the exception is propagated
+            return None  # Re-raise the exception
 
     def _handle_errors(self, operation: str, error_type: str = "total_errors"):
         """Context manager for error handling."""

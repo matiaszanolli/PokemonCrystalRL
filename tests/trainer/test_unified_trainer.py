@@ -438,6 +438,11 @@ class TestRuleBasedActionSystem:
         mock_pyboy_instance.screen_image.return_value = np.random.randint(
             0, 256, (144, 160, 3), dtype=np.uint8
         )
+        # Fix: Add proper screen.ndarray mock for screenshot capture
+        mock_pyboy_instance.screen = Mock()
+        mock_pyboy_instance.screen.ndarray = np.random.randint(
+            0, 256, (144, 160, 3), dtype=np.uint8
+        )
         mock_pyboy_instance.send_input = Mock()
         mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -450,36 +455,40 @@ class TestRuleBasedActionSystem:
             capture_screens=False
         )
         
-        return UnifiedPokemonTrainer(config)
+        trainer = UnifiedPokemonTrainer(config)
+        # Initialize stuck detection attributes
+        trainer.consecutive_same_screens = 0
+        trainer.last_screen_hash = None
+        return trainer
     
     def test_game_state_detection_unknown(self, trainer):
         """Test game state detection for unknown state"""
         # Create screen that doesn't match any known patterns
         screen = np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
-        trainer.pyboy.screen_image.return_value = screen
         
-        state = trainer._detect_game_state()
-        assert state in ['unknown', 'overworld', 'dialogue', 'menu', 'battle', 'loading', 'intro']
+        # Fix: Pass screen parameter to _detect_game_state
+        state = trainer._detect_game_state(screen)
+        assert state in ['unknown', 'overworld', 'dialogue', 'loading', 'intro_sequence']
     
     def test_game_state_detection_loading(self, trainer):
         """Test game state detection for loading state"""
         # Create mostly black screen (loading indicator)
         screen = np.zeros((144, 160, 3), dtype=np.uint8)
-        trainer.pyboy.screen_image.return_value = screen
         
-        state = trainer._detect_game_state()
-        # Should detect as loading or unknown
-        assert state in ['loading', 'unknown']
+        # Fix: Pass screen parameter to _detect_game_state
+        state = trainer._detect_game_state(screen)
+        # Should detect as loading
+        assert state == 'loading'
     
     def test_game_state_detection_intro(self, trainer):
         """Test game state detection for intro state"""
         # Create bright screen (intro indicator)
         screen = np.full((144, 160, 3), 255, dtype=np.uint8)
-        trainer.pyboy.screen_image.return_value = screen
         
-        state = trainer._detect_game_state()
-        # Should detect as intro or unknown
-        assert state in ['intro', 'unknown']
+        # Fix: Pass screen parameter to _detect_game_state
+        state = trainer._detect_game_state(screen)
+        # Should detect as intro_sequence
+        assert state == 'intro_sequence'
     
     def test_game_state_detection_dialogue(self, trainer):
         """Test game state detection for dialogue state"""
@@ -487,35 +496,32 @@ class TestRuleBasedActionSystem:
         screen = np.random.randint(50, 200, (144, 160, 3), dtype=np.uint8)
         # Add dialogue box area (bottom portion)
         screen[100:140, 10:150, :] = 255  # White dialogue box
-        trainer.pyboy.screen_image.return_value = screen
         
-        state = trainer._detect_game_state()
-        # Should detect as dialogue or unknown
-        assert state in ['dialogue', 'unknown']
+        # Fix: Pass screen parameter to _detect_game_state
+        state = trainer._detect_game_state(screen)
+        # Should detect as dialogue
+        assert state == 'dialogue'
     
     def test_screen_hash_calculation(self, trainer):
         """Test screen hash calculation"""
         screen = np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
-        trainer.pyboy.screen_image.return_value = screen
         
-        hash1 = trainer._get_screen_hash()
-        hash2 = trainer._get_screen_hash()
+        # Fix: Pass screen parameter to _get_screen_hash
+        hash1 = trainer._get_screen_hash(screen)
+        hash2 = trainer._get_screen_hash(screen)
         
         # Same screen should produce same hash
         assert hash1 == hash2
-        assert isinstance(hash1, str)
-        assert len(hash1) > 0
+        assert isinstance(hash1, int)
     
     def test_screen_hash_different_screens(self, trainer):
         """Test screen hash for different screens"""
         screen1 = np.zeros((144, 160, 3), dtype=np.uint8)
         screen2 = np.ones((144, 160, 3), dtype=np.uint8) * 255
         
-        trainer.pyboy.screen_image.return_value = screen1
-        hash1 = trainer._get_screen_hash()
-        
-        trainer.pyboy.screen_image.return_value = screen2
-        hash2 = trainer._get_screen_hash()
+        # Fix: Pass screen parameters to _get_screen_hash
+        hash1 = trainer._get_screen_hash(screen1)
+        hash2 = trainer._get_screen_hash(screen2)
         
         # Different screens should produce different hashes
         assert hash1 != hash2
@@ -528,11 +534,14 @@ class TestRuleBasedActionSystem:
         new_mock_instance.frame_count = 2000
         new_mock_instance.send_input = Mock()
         new_mock_instance.tick = Mock()
+        # Fix: Add proper screen.ndarray mock
+        new_mock_instance.screen = Mock()
+        new_mock_instance.screen.ndarray = np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
         mock_pyboy_class.return_value = new_mock_instance
         
         # Simulate same screen hash multiple times (stuck condition)
         same_screen = np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
-        trainer.pyboy.screen_image.return_value = same_screen
+        trainer.pyboy.screen.ndarray = same_screen
         
         # Execute multiple actions with same screen
         for _ in range(5):
@@ -547,18 +556,18 @@ class TestRuleBasedActionSystem:
         screen = np.random.randint(0, 100, (144, 160, 3), dtype=np.uint8)
         # Add title elements
         screen[20:40, 40:120, :] = 200  # Title text area
-        trainer.pyboy.screen_image.return_value = screen
         
-        state = trainer._detect_game_state()
+        # Fix: Pass screen parameter to _detect_game_state
+        state = trainer._detect_game_state(screen)
         # Should handle title screen appropriately
-        assert state in ['intro', 'menu', 'unknown']
+        assert state in ['overworld', 'dialogue', 'loading', 'intro_sequence']
     
     def test_dialogue_handling(self, trainer):
         """Test dialogue state handling"""
         # Create dialogue screen
         screen = np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
         screen[100:140, 10:150, :] = 255  # Dialogue box
-        trainer.pyboy.screen_image.return_value = screen
+        trainer.pyboy.screen.ndarray = screen
         
         # Execute action in dialogue state
         trainer._execute_synchronized_action(1)  # A button (advance dialogue)
@@ -569,9 +578,10 @@ class TestRuleBasedActionSystem:
     def test_unstuck_action_patterns(self, trainer):
         """Test unstuck action patterns"""
         # Test that unstuck actions are valid
-        for _ in range(10):
-            action = trainer._get_unstuck_action()
-            assert 1 <= action <= 8  # Valid action range
+        for step in range(10):
+            # Fix: Pass step parameter to _get_unstuck_action
+            action = trainer._get_unstuck_action(step)
+            assert 1 <= action <= 6  # Valid action range (UP, DOWN, LEFT, RIGHT, A, B)
 
 
 @pytest.mark.unified_trainer

@@ -152,42 +152,6 @@ class UnifiedPokemonTrainer(PokemonTrainer):
                 return screen_data
             
         return None
-    
-    class _ErrorHandler:
-        def __init__(self, trainer, operation: str, error_type: str = 'total_errors'):
-            self.trainer = trainer
-            self.operation = operation
-            self.error_type = error_type
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            if exc_type is None:
-                return True
-
-            if exc_type == KeyboardInterrupt:
-                return False
-
-            # Count error first regardless of type
-            if self.error_type not in self.trainer.error_count:
-                self.trainer.error_count[self.error_type] = 0
-            
-            self.trainer.error_count[self.error_type] += 1
-            self.trainer.error_count['total_errors'] += 1
-            self.trainer.last_error_time = time.time()
-
-            if self.error_type == 'pyboy_crashes':
-                self.trainer.recovery_attempts += 1
-                # Don't try recovery during property access errors
-                if exc_value and 'property' not in str(exc_value):
-                    self.trainer._attempt_pyboy_recovery()
-            
-            # For property access errors during frame count checks, don't log
-            if exc_value and not isinstance(exc_value, AttributeError):
-                self.trainer.logger.error(f"Error in {self.operation}: {str(exc_value)}")
-            
-            return None  # Re-raise the exception
 
     def _handle_errors(self, operation: str, error_type: str = 'total_errors'):
         """Enhanced error handling with operation tracking"""
