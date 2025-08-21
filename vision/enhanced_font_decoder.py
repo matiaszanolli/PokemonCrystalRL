@@ -204,19 +204,65 @@ class ROMFontDecoder:
         Normalize a tile for template matching
         
         Args:
-            tile: 8x8 pixel tile
+            tile: Input tile (should be 8x8 pixels)
             
         Returns:
-            Normalized binary tile
+            Normalized binary tile (8x8, uint8)
         """
+        # Handle None input
+        if tile is None:
+            return np.zeros((8, 8), dtype=np.uint8)
+        
+        # Handle non-numpy arrays
+        if not isinstance(tile, np.ndarray):
+            return np.zeros((8, 8), dtype=np.uint8)
+        
+        # Handle empty arrays
+        if tile.size == 0:
+            return np.zeros((8, 8), dtype=np.uint8)
+        
+        # Handle invalid dimensions
+        if len(tile.shape) not in [2, 3]:
+            return np.zeros((8, 8), dtype=np.uint8)
+        
+        # Ensure proper data type for OpenCV operations
+        if tile.dtype not in [np.uint8, np.float32, np.float64]:
+            tile = tile.astype(np.uint8)
+        
+        # Convert to uint8 if it's float
+        if tile.dtype in [np.float32, np.float64]:
+            if tile.max() <= 1.0:
+                tile = (tile * 255).astype(np.uint8)
+            else:
+                tile = tile.astype(np.uint8)
+        
+        # Convert to grayscale if needed
+        if len(tile.shape) == 3:
+            try:
+                if tile.shape[2] == 3:
+                    tile = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY)
+                elif tile.shape[2] == 4:
+                    tile = cv2.cvtColor(tile, cv2.COLOR_BGRA2GRAY)
+                else:
+                    return np.zeros((8, 8), dtype=np.uint8)
+            except cv2.error:
+                return np.zeros((8, 8), dtype=np.uint8)
+        
+        # Resize if needed
         if tile.shape != (8, 8):
-            tile = cv2.resize(tile, (8, 8), interpolation=cv2.INTER_NEAREST)
+            try:
+                tile = cv2.resize(tile, (8, 8), interpolation=cv2.INTER_NEAREST)
+            except cv2.error:
+                return np.zeros((8, 8), dtype=np.uint8)
         
         # Convert to binary
-        if tile.max() > 1:
-            binary = np.where(tile > 128, 255, 0).astype(np.uint8)
-        else:
-            binary = (tile * 255).astype(np.uint8)
+        try:
+            if tile.max() > 1:
+                binary = np.where(tile > 128, 255, 0).astype(np.uint8)
+            else:
+                binary = (tile * 255).astype(np.uint8)
+        except:
+            return np.zeros((8, 8), dtype=np.uint8)
         
         return binary
     

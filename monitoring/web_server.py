@@ -402,12 +402,21 @@ class WebServer:
     
     def _setup_signal_handlers(self) -> None:
         """Setup handlers for system signals."""
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(
-                sig,
-                lambda s=sig: loop.create_task(self.shutdown(s))
-            )
+        # Signal handlers only work in the main thread
+        if threading.current_thread() is not threading.main_thread():
+            self.logger.debug("Skipping signal handler setup - not in main thread")
+            return
+            
+        try:
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(
+                    sig,
+                    lambda s=sig: loop.create_task(self.shutdown(s))
+                )
+            self.logger.debug("Signal handlers set up successfully")
+        except Exception as e:
+            self.logger.warning(f"Failed to set up signal handlers: {e}")
     
     async def shutdown(self, sig: Optional[signal.Signals] = None) -> None:
         """Shutdown the server gracefully."""
