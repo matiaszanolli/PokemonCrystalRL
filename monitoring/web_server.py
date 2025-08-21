@@ -11,6 +11,7 @@ This module provides the HTTP and WebSocket server functionality, handling:
 """
 
 import asyncio
+import aiohttp_cors
 import json
 import logging
 from typing import Dict, Any, Optional, List, Callable, Set
@@ -35,7 +36,7 @@ import aiofiles
 
 from .data_bus import DataType, get_data_bus
 from .error_handler import ErrorHandler, ErrorCategory, ErrorSeverity
-
+from core.monitoring.web_server import TrainingWebServer
 
 # Types for event handlers
 EventHandler = Callable[[Dict[str, Any]], None]
@@ -172,7 +173,6 @@ class WebServer:
         
         # CORS setup if needed
         if self.config.cors_origins:
-            import aiohttp_cors
             cors = aiohttp_cors.setup(self.app, defaults={
                 origin: aiohttp_cors.ResourceOptions(
                     allow_credentials=True,

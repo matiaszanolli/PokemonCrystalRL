@@ -7,7 +7,7 @@ This package provides unified monitoring capabilities including:
 - Bridge components for trainer integration
 """
 
-from .data_bus import (
+from monitoring.data_bus import (
     DataBus,
     DataType,
     DataMessage,

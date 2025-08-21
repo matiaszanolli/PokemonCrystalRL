@@ -3,6 +3,7 @@ Game state definitions and management for Pokemon Crystal RL agent.
 """
 
 from enum import Enum, auto
+from core.constants import PyBoyGameState, STATE_TRANSITION_REWARDS
 
 
 class PyBoyGameState(Enum):

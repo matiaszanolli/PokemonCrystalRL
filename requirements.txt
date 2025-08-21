@@ -33,3 +33,4 @@ black>=22.0.0
 
 # For JSON handling (backup, in case Lua JSON fails)
 jsonschema>=4.0.0
+aiohttp_cors==0.8.1
