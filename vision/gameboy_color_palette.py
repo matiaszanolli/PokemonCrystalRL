@@ -174,13 +174,28 @@ class GameBoyColorPalette:
             # Reshape image to be a list of pixels
             pixels = image.reshape(-1, 3).astype(np.float32)
             
+            # Handle single pixel case
+            if pixels.shape[0] == 1:
+                # Return the single pixel color repeated k times
+                single_color = (int(pixels[0, 0]), int(pixels[0, 1]), int(pixels[0, 2]))
+                return [single_color] * k
+            
+            # Ensure k doesn't exceed number of pixels
+            actual_k = min(k, pixels.shape[0])
+            
             # Apply k-means clustering
             criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
-            _, labels, centers = cv2.kmeans(pixels, k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+            _, labels, centers = cv2.kmeans(pixels, actual_k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
             
             # Convert centers to integers and return as tuples
             centers = centers.astype(np.uint8)
-            return [(int(c[0]), int(c[1]), int(c[2])) for c in centers]
+            result = [(int(c[0]), int(c[1]), int(c[2])) for c in centers]
+            
+            # Pad with the last color if we got fewer than k colors
+            while len(result) < k:
+                result.append(result[-1] if result else (128, 128, 128))
+            
+            return result
         
         except cv2.error:
             # Fallback: return gray colors
@@ -204,7 +219,12 @@ class GameBoyColorPalette:
             total_distance += min_distance
             comparisons += 1
         
-        return total_distance / comparisons if comparisons > 0 else 0.0
+        # Normalize the distance to [0, 1] range
+        # Maximum possible distance in RGB space is sqrt(3 * 255^2) ≈ 441.67
+        max_distance = np.sqrt(3 * 255 ** 2)
+        normalized_distance = (total_distance / comparisons) / max_distance if comparisons > 0 else 0.0
+        
+        return min(normalized_distance, 1.0)  # Ensure it doesn't exceed 1.0
     
     def create_color_aware_template(self, template: np.ndarray, 
                                   source_palette: str, target_palette: str) -> np.ndarray:
@@ -285,12 +305,10 @@ class GameBoyColorPalette:
         is_uniform = std_brightness < 5.0
         
         # Determine text style based on brightness patterns
-        if mean_brightness > 150:
+        if mean_brightness > 128:
             text_style = "dark_on_light"
-        elif mean_brightness < 100:
-            text_style = "light_on_dark"
         else:
-            text_style = "unknown"
+            text_style = "light_on_dark"
         
         # Get most likely palette
         detected_palette = self.detect_palette_from_image(region_rgb)

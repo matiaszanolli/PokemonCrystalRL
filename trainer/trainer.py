@@ -91,6 +91,7 @@ class PokemonTrainer:
         self.screen_queue = queue.Queue(maxsize=30)
         self.latest_screen = None
         self.capture_active = False
+        self.capture_thread = None
         
         # Data bus for component communication
         if self.config.mode == TrainingMode.FAST_MONITORED:
