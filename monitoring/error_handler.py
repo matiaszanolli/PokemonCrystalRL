@@ -32,7 +32,9 @@ from .data_bus import DataType, get_data_bus
 class ErrorSeverity(Enum):
     """Error severity levels."""
     CRITICAL = "critical"      # System-breaking errors
+    HIGH = "high"             # High priority errors
     ERROR = "error"           # Serious errors that need immediate attention
+    MEDIUM = "medium"         # Medium priority errors
     WARNING = "warning"       # Issues that need monitoring
     INFO = "info"            # Informational errors
 
@@ -54,7 +56,9 @@ class RecoveryStrategy(Enum):
     NONE = "none"  # No recovery attempted
     RETRY = "retry"  # Retry the operation
     RESTART = "restart"  # Restart the component
+    RESTART_COMPONENT = "restart_component"  # Restart specific component
     RESET = "reset"  # Full system reset
+    GRACEFUL_SHUTDOWN = "graceful_shutdown"  # Graceful shutdown
     FALLBACK = "fallback"  # Use fallback mechanism
 
 
@@ -73,6 +77,18 @@ class ErrorContext:
     handled: bool = False
     recovery_attempted: bool = False
     recovery_successful: bool = False
+
+
+@dataclass
+class ErrorEvent:
+    """Simplified error event for testing and basic error handling."""
+    timestamp: float
+    component: str
+    error_type: str
+    message: str
+    severity: ErrorSeverity
+    traceback: str = ""
+    recovery_strategy: RecoveryStrategy = RecoveryStrategy.NONE
 
 
 class CircuitBreaker:
@@ -252,6 +268,57 @@ class ErrorHandler:
             return ErrorContext(
                 timestamp=time.time(),
                 error_type="ErrorHandlerFailure",
+                error_message=str(e),
+                traceback=traceback.format_exc(),
+                severity=ErrorSeverity.CRITICAL,
+                category=ErrorCategory.SYSTEM,
+                component="error_handler",
+                handled=False
+            )
+    
+    def handle_error_event(self, error_event: ErrorEvent) -> ErrorContext:
+        """Handle an ErrorEvent object and convert it to ErrorContext."""
+        try:
+            # Convert ErrorEvent to ErrorContext
+            error_context = ErrorContext(
+                timestamp=error_event.timestamp,
+                error_type=error_event.error_type,
+                error_message=error_event.message,
+                traceback=error_event.traceback,
+                severity=error_event.severity,
+                category=ErrorCategory.UNKNOWN,  # Default category
+                component=error_event.component,
+                error_id=f"{int(error_event.timestamp * 1000)}_{hash(error_event.message)}",
+                handled=False
+            )
+            
+            # Check circuit breaker
+            if self.circuit_breaker.record_error(error_event.component):
+                self.logger.critical(
+                    f"Circuit breaker triggered for component: {error_event.component}"
+                )
+                self._notify_circuit_breaker(error_event.component)
+            
+            # Try recovery if strategy exists
+            error_context.recovery_attempted = self._attempt_recovery(error_context)
+            
+            # Store error
+            self._store_error(error_context)
+            
+            # Log error
+            self._log_error(error_context)
+            
+            # Queue for notification
+            self.notification_queue.put(error_context)
+            
+            return error_context
+            
+        except Exception as e:
+            # Fallback logging if error handling fails
+            self.logger.critical(f"Error event handler failed: {e}")
+            return ErrorContext(
+                timestamp=time.time(),
+                error_type="ErrorEventHandlerFailure",
                 error_message=str(e),
                 traceback=traceback.format_exc(),
                 severity=ErrorSeverity.CRITICAL,

@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import Mock, patch
 from monitoring import (
-    UnifiedMonitor,
+    WebMonitor,
     MonitorConfig,
     DatabaseManager,
     ErrorHandler,
@@ -28,7 +28,7 @@ def test_config(temp_dir):
         db_path=str(temp_dir / "test.db"),
         data_dir=str(temp_dir / "data"),
         static_dir=str(temp_dir / "static"),
-        web_port=8099,  # Use non-standard port
+        port=8099,  # Use non-standard port
         update_interval=0.1,
         snapshot_interval=0.5,
         max_events=1000,

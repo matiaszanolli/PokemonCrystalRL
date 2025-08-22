@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-from utils import calculate_reward
+from utils.utils import calculate_reward
 from utils.preprocess_state import preprocess_state
 
 

@@ -494,9 +494,9 @@ class PyBoyPokemonCrystalEnv(gym.Env):
             money_addr = self.memory_addresses['money']
             
             # Read all three bytes
-            byte0 = self.pyboy.memory[money_addr]      # First byte
-            byte1 = self.pyboy.memory[money_addr + 1]  # Second byte  
-            byte2 = self.pyboy.memory[money_addr + 2]  # Third byte
+            byte0 = self.pyboy.memory[money_addr]      # First byte (high)
+            byte1 = self.pyboy.memory[money_addr + 1]  # Second byte (middle)
+            byte2 = self.pyboy.memory[money_addr + 2]  # Third byte (low)
             
             # Check for invalid BCD digits
             for byte in [byte0, byte1, byte2]:
@@ -507,9 +507,12 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                         print(f"Warning: Invalid BCD digit in money value")
                     return 0
             
-            # Based on test cases, it appears to be:
-            # byte0 * 1000 + byte1 * 100 + byte2 * 1
-            # But each byte is BCD, so we need to convert BCD to decimal first
+            # Pokemon Crystal stores money as 3 BCD bytes representing 6 digits
+            # Each byte contains 2 BCD digits (4 bits each)
+            # For example: 999999 = 0x99 0x99 0x99
+            # byte0 = ten thousands + thousands (99)
+            # byte1 = hundreds + tens (99) 
+            # byte2 = ones (99)
             
             def bcd_to_decimal(bcd_byte):
                 """Convert a BCD byte to decimal"""
@@ -517,12 +520,13 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                 low = bcd_byte & 0xF
                 return high * 10 + low
             
-            # Convert each BCD byte to decimal, then apply positional values
-            decimal0 = bcd_to_decimal(byte0)  # thousands
-            decimal1 = bcd_to_decimal(byte1)  # hundreds
-            decimal2 = bcd_to_decimal(byte2)  # ones
+            # Convert each BCD byte to decimal
+            decimal0 = bcd_to_decimal(byte0)  # Ten thousands and thousands
+            decimal1 = bcd_to_decimal(byte1)  # Hundreds and tens
+            decimal2 = bcd_to_decimal(byte2)  # Ones
             
-            result = decimal0 * 1000 + decimal1 * 100 + decimal2
+            # Combine to form the full 6-digit number
+            result = decimal0 * 10000 + decimal1 * 100 + decimal2
             
             return result
         except Exception as e:
