@@ -12,7 +12,8 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from pokemon_crystal_rl.vision.vision_processor import UnifiedVisionProcessor, VisualContext, DetectedText, GameUIElement
+from vision.vision_processor import UnifiedVisionProcessor, test_vision_processor
+from shared_types import VisualContext, DetectedText, GameUIElement
 
 
 class TestDataClasses(unittest.TestCase):
@@ -63,19 +64,19 @@ class TestDataClasses(unittest.TestCase):
         self.assertEqual(context.dominant_colors, [(255, 0, 0)])
 
 
-class TestPokemonVisionProcessorInitialization(unittest.TestCase):
+class TestUnifiedVisionProcessorInitialization(unittest.TestCase):
     """Test vision processor initialization"""
     
     def setUp(self):
         """Set up test fixtures"""
         # Mock the font decoder to avoid import issues
-        with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+        with patch('vision.vision_processor.ROMFontDecoder'):
+            self.processor = UnifiedVisionProcessor()
         
     def test_initialization_without_font_decoder(self):
         """Test initialization without font decoder"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
-            processor = PokemonVisionProcessor()
+        with patch('vision.vision_processor.ROMFontDecoder'):
+            processor = UnifiedVisionProcessor()
             self.assertIsNone(processor.font_decoder)
             self.assertIsInstance(processor.pokemon_colors, dict)
             self.assertIsInstance(processor.ui_templates, dict)
@@ -87,7 +88,7 @@ class TestPokemonVisionProcessorInitialization(unittest.TestCase):
         mock_decoder_class.return_value = mock_decoder_instance
         
         with patch('vision.vision_processor.ROMFontDecoder', mock_decoder_class):
-            processor = PokemonVisionProcessor()
+            processor = UnifiedVisionProcessor()
             self.assertEqual(processor.font_decoder, mock_decoder_instance)
             
     def test_pokemon_colors_defined(self):
@@ -110,7 +111,7 @@ class TestScreenshotProcessing(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
         
     def test_process_empty_screenshot(self):
         """Test processing empty/None screenshot"""
@@ -164,7 +165,7 @@ class TestScreenshotUpscaling(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
         
     def test_upscale_valid_screenshot(self):
         """Test upscaling valid screenshot"""
@@ -201,7 +202,7 @@ class TestTextDetection(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
         # Create test image with different regions
         self.test_image = np.ones((400, 400, 3), dtype=np.uint8) * 128
@@ -264,7 +265,7 @@ class TestUIElementDetection(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_detect_ui_elements_empty_image(self):
         """Test UI detection with empty image"""
@@ -349,7 +350,7 @@ class TestScreenClassification(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_classify_screen_type_intro(self):
         """Test intro screen classification"""
@@ -424,7 +425,7 @@ class TestScreenContextDetection(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_is_indoor_environment_strong_indicators(self):
         """Test indoor environment detection with strong indicators"""
@@ -523,7 +524,7 @@ class TestColorAnalysis(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_get_dominant_colors_valid_image(self):
         """Test dominant color extraction from valid image"""
@@ -574,7 +575,7 @@ class TestGamePhaseDetermination(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_determine_game_phase_intro(self):
         """Test intro game phase"""
@@ -620,7 +621,7 @@ class TestVisualSummaryGeneration(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_generate_visual_summary_complete(self):
         """Test visual summary generation with all components"""
@@ -676,7 +677,7 @@ class TestScreenshotEncoding(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_encode_screenshot_for_llm(self):
         """Test screenshot encoding for LLM"""
@@ -697,7 +698,7 @@ class TestROMFontDecoding(unittest.TestCase):
         mock_decoder.decode_text_region.return_value = "DECODED TEXT"
         
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
         
         self.processor.font_decoder = mock_decoder
         
@@ -746,7 +747,7 @@ class TestLegacyMethods(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_guess_dense_text_content(self):
         """Test legacy dense text content guessing"""
@@ -787,9 +788,9 @@ class TestErrorHandling(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
-    @patch('vision.vision_processor.PokemonVisionProcessor._upscale_screenshot')
+    @patch('vision.vision_processor.UnifiedVisionProcessor._upscale_screenshot')
     def test_upscaling_error_handling(self, mock_upscale):
         """Test error handling in upscaling"""
         mock_upscale.side_effect = Exception("Mock upscaling error")
@@ -837,7 +838,7 @@ class TestIntegrationScenarios(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         with patch('vision.vision_processor.ROMFontDecoder', None):
-            self.processor = PokemonVisionProcessor()
+            self.processor = UnifiedVisionProcessor()
             
     def test_complete_battle_scenario(self):
         """Test complete battle screen processing"""

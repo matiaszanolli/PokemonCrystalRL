@@ -13,11 +13,10 @@ from unittest.mock import Mock, patch
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from pokemon_crystal_rl.trainer import PokemonTrainer
-from pokemon_crystal_rl.trainer import TrainingConfig, TrainingMode
-from pokemon_crystal_rl.monitoring.trainer_monitor_bridge import TrainerWebMonitorBridge
-from pokemon_crystal_rl.monitoring.web_monitor import WebMonitor
-from pokemon_crystal_rl.monitoring.config import MonitorConfig
+from trainer.trainer import PokemonTrainer
+from trainer.trainer import TrainingConfig, TrainingMode
+from monitoring.trainer_monitor_bridge import TrainerMonitorBridge
+from monitoring.web_monitor import WebMonitor, MonitorConfig
 
 
 def create_fixed_trainer(pyboy_mock):
@@ -51,7 +50,7 @@ def create_fixed_trainer(pyboy_mock):
     return trainer
 
 
-@patch('pokemon_crystal_rl.trainer.trainer.PyBoy')
+@patch('trainer.trainer.PyBoy')
 def test_fixed_streaming(mock_pyboy_class):
     """Test the fixed streaming system"""
     print("🧪 Testing Fixed Socket Streaming")
@@ -110,7 +109,7 @@ def test_fixed_streaming(mock_pyboy_class):
         debug=True
     )
     web_monitor = WebMonitor(config)
-    bridge = TrainerWebMonitorBridge(trainer, web_monitor)
+    bridge = TrainerMonitorBridge()
     
     # Start bridge
     bridge.start_bridge()

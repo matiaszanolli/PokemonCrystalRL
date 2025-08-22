@@ -17,13 +17,13 @@ from vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_g
 
 
 class TestGBCPalette(unittest.TestCase):
-    """Test GBCPalette enum"""
+    """Test GBCPalette dataclass"""
     
     def test_gbc_palette_creation(self):
-        """Test GBCPalette enum values"""
-        self.assertEqual(GBCPalette.DEFAULT.value, 'default')
-        self.assertEqual(GBCPalette.TEXT_WHITE.value, 'text_white')
-        self.assertEqual(GBCPalette.TEXT_BLACK.value, 'text_black')
+        """Test GBCPalette dataclass values"""
+        self.assertEqual(GBCPalette.DEFAULT.name, 'default')
+        self.assertEqual(GBCPalette.TEXT_WHITE.name, 'text_white')
+        self.assertEqual(GBCPalette.TEXT_BLACK.name, 'text_black')
         
     def test_gbc_palette_color_validation(self):
         """Test GBCPalette color values are valid RGB"""
@@ -41,8 +41,8 @@ class TestGBCPalette(unittest.TestCase):
                 self.assertGreaterEqual(channel, 0)
                 self.assertLessEqual(channel, 255)
 
-    def test_gbc_palette_enum_members(self):
-        """Test GBCPalette has expected members"""
+    def test_gbc_palette_class_members(self):
+        """Test GBCPalette has expected class members"""
         expected_members = [
             'DEFAULT', 'TEXT_WHITE', 'TEXT_BLACK', 
             'DIALOGUE_NORMAL', 'DIALOGUE_DARK'
