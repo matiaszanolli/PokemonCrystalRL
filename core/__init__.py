@@ -14,3 +14,4 @@ from trainer.choice_recognition_system import (
     RecognizedChoice,
     ChoiceRecognitionSystem
 )
+from core.vision_processor import DetectedText, VisualContext, UnifiedVisionProcessor

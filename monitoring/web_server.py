@@ -23,6 +23,10 @@ import time
 import weakref
 from functools import partial
 import signal
+import socket
+import base64
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import os
 
 from aiohttp import web
 import aiohttp
@@ -35,6 +39,13 @@ import aiofiles
 
 from .data_bus import DataType, get_data_bus
 from .error_handler import ErrorHandler, ErrorCategory, ErrorSeverity
+
+# Check for psutil availability
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 # Types for event handlers
 EventHandler = Callable[[Dict[str, Any]], None]
@@ -510,3 +521,456 @@ class WebServer:
         # Wait for server to be ready
         self._ready.wait(timeout=5.0)
         return thread
+
+
+# Legacy HTTP server classes for backwards compatibility
+class TrainingWebServer:
+    """Legacy training web server for backwards compatibility."""
+    
+    def __init__(self, config, trainer):
+        self.config = config
+        self.trainer = trainer
+        self.server = None
+        self.port = self._find_available_port()
+        
+    def _find_available_port(self):
+        """Find an available port starting from the configured port."""
+        start_port = getattr(self.config, 'web_port', 8080)
+        for port in range(start_port, start_port + 10):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.bind((getattr(self.config, 'web_host', 'localhost'), port))
+                    return port
+            except OSError:
+                continue
+        raise RuntimeError(f"Could not find available port starting from {start_port}")
+    
+    def start(self):
+        """Start the HTTP server."""
+        handler_factory = lambda *args: TrainingHandler(self.trainer, *args)
+        self.server = HTTPServer(
+            (getattr(self.config, 'web_host', 'localhost'), self.port),
+            handler_factory
+        )
+        return self.server
+    
+    def stop(self):
+        """Stop the HTTP server."""
+        if self.server:
+            self.server.shutdown()
+
+
+class TrainingHandler(BaseHTTPRequestHandler):
+    """Legacy HTTP request handler for backwards compatibility."""
+    
+    def __init__(self, trainer, *args, **kwargs):
+        self.trainer = trainer
+        super().__init__(*args, **kwargs)
+    
+    def do_GET(self):
+        """Handle GET requests."""
+        if self.path == "/":
+            self._serve_comprehensive_dashboard()
+        elif self.path in ["/screen", "/api/screenshot"]:
+            self._serve_screen()
+        elif self.path == "/stats":
+            self._serve_stats()
+        elif self.path == "/api/status":
+            self._serve_api_status()
+        elif self.path == "/api/system":
+            self._serve_api_system()
+        elif self.path == "/api/runs":
+            self._serve_api_runs()
+        elif self.path == "/api/text":
+            self._serve_api_text()
+        elif self.path == "/api/llm_decisions":
+            self._serve_api_llm_decisions()
+        elif self.path == "/api/streaming/stats":
+            self._serve_streaming_stats()
+        elif self.path.startswith("/api/streaming/quality/"):
+            self._handle_quality_control()
+        elif self.path.startswith("/socket.io/"):
+            self._handle_socketio_fallback()
+        else:
+            self.send_error(404)
+    
+    def do_POST(self):
+        """Handle POST requests."""
+        if self.path == "/api/start_training":
+            self._handle_start_training()
+        elif self.path == "/api/stop_training":
+            self._handle_stop_training()
+        else:
+            self.send_error(404)
+    
+    def _serve_comprehensive_dashboard(self):
+        """Serve the main dashboard."""
+        try:
+            # Try to load template file
+            template_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "templates", "dashboard.html"
+            )
+            with open(template_path, 'r') as f:
+                content = f.read()
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(content.encode('utf-8'))
+        except (FileNotFoundError, Exception):
+            self._serve_fallback_dashboard()
+    
+    def _serve_fallback_dashboard(self):
+        """Serve a fallback dashboard when template is not found."""
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Pokemon Crystal Trainer Monitor</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                .status { padding: 20px; background: #f0f0f0; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <h1>Pokemon Crystal Trainer Monitor</h1>
+            <div class="status">
+                <p>Training monitor is running...</p>
+                <p><a href="/api/status">View Status</a></p>
+                <p><a href="/screen">View Screen</a></p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html_content.encode('utf-8'))
+    
+    def _serve_screen(self):
+        """Serve current game screen."""
+        try:
+            # Try optimized streaming first
+            if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+                try:
+                    frame_bytes = self.trainer.video_streamer.get_frame_as_bytes()
+                    if frame_bytes:
+                        self.send_response(200)
+                        self.send_header('Content-type', 'image/jpeg')
+                        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                        self.send_header('Pragma', 'no-cache')
+                        self.send_header('Expires', '0')
+                        self.end_headers()
+                        self.wfile.write(frame_bytes)
+                        return
+                except Exception:
+                    pass  # Fall back to legacy method
+            
+            # Legacy fallback
+            if hasattr(self.trainer, 'latest_screen') and self.trainer.latest_screen:
+                image_b64 = self.trainer.latest_screen.get('image_b64')
+                if image_b64:
+                    image_data = base64.b64decode(image_b64)
+                    self.send_response(200)
+                    self.send_header('Content-type', 'image/png')
+                    self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                    self.send_header('Pragma', 'no-cache')
+                    self.send_header('Expires', '0')
+                    self.end_headers()
+                    self.wfile.write(image_data)
+                    return
+            
+            self.send_error(404)
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_stats(self):
+        """Serve training statistics."""
+        try:
+            stats = self.trainer.get_current_stats() if hasattr(self.trainer, 'get_current_stats') else {}
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(stats).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_api_status(self):
+        """Serve API status endpoint."""
+        try:
+            stats = self.trainer.get_current_stats() if hasattr(self.trainer, 'get_current_stats') else {}
+            
+            status = {
+                'is_training': getattr(self.trainer, '_training_active', False),
+                'current_run_id': getattr(self.trainer, 'current_run_id', None),
+                'total_actions': stats.get('total_actions', 0),
+                'llm_calls': stats.get('llm_calls', 0),
+                'actions_per_second': stats.get('actions_per_second', 0.0),
+                'elapsed_time': time.time() - stats.get('start_time', time.time()),
+                'current_state': getattr(self.trainer, '_current_state', 'unknown'),
+                'current_map': getattr(self.trainer, '_current_map', 0),
+                'player_position': {
+                    'x': getattr(self.trainer, '_player_x', 0),
+                    'y': getattr(self.trainer, '_player_y', 0)
+                },
+                'config': {
+                    'mode': getattr(self.trainer.config.mode, 'value', 'unknown') if hasattr(self.trainer, 'config') else 'unknown',
+                    'llm_backend': getattr(self.trainer.config.llm_backend, 'value', 'unknown') if hasattr(self.trainer, 'config') else 'unknown',
+                    'llm_interval': getattr(self.trainer.config, 'llm_interval', 0) if hasattr(self.trainer, 'config') else 0
+                }
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(status).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_api_system(self):
+        """Serve system metrics."""
+        try:
+            system_info = {
+                'cpu_percent': 0.0,
+                'memory_percent': 0.0,
+                'disk_usage': 0.0,
+                'gpu_available': False
+            }
+            
+            if PSUTIL_AVAILABLE:
+                try:
+                    system_info.update({
+                        'cpu_percent': psutil.cpu_percent(),
+                        'memory_percent': psutil.virtual_memory().percent,
+                        'disk_usage': psutil.disk_usage('/').percent
+                    })
+                except Exception as e:
+                    system_info['error'] = str(e)
+            else:
+                system_info['error'] = 'psutil not available'
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(system_info).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_api_runs(self):
+        """Serve training runs data."""
+        try:
+            stats = self.trainer.get_current_stats() if hasattr(self.trainer, 'get_current_stats') else {}
+            
+            runs = [{
+                'id': 1,
+                'status': 'completed' if not getattr(self.trainer, '_training_active', False) else 'running',
+                'start_time': stats.get('start_time', time.time()),
+                'total_timesteps': stats.get('total_actions', 0),
+                'reward': 0.0
+            }]
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(runs).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_api_text(self):
+        """Serve detected text data."""
+        try:
+            recent_text = getattr(self.trainer, 'recent_text', [])
+            text_frequency = getattr(self.trainer, 'text_frequency', {})
+            
+            # Sort by frequency
+            sorted_frequency = dict(sorted(text_frequency.items(), key=lambda x: x[1], reverse=True))
+            
+            text_data = {
+                'recent_text': recent_text,
+                'total_texts': len(recent_text),
+                'unique_texts': len(set(recent_text)),
+                'text_frequency': sorted_frequency
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(text_data).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_api_llm_decisions(self):
+        """Serve LLM decision data."""
+        try:
+            if hasattr(self.trainer, 'llm_manager') and self.trainer.llm_manager:
+                llm_data = self.trainer.llm_manager.get_decision_data()
+            else:
+                llm_data = {
+                    'recent_decisions': [],
+                    'total_decisions': 0,
+                    'performance_metrics': {
+                        'total_llm_calls': 0,
+                        'average_response_time': 0.0,
+                        'current_model': getattr(self.trainer.config.llm_backend, 'value', 'unknown') if hasattr(self.trainer, 'config') else 'unknown'
+                    }
+                }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(llm_data).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _serve_streaming_stats(self):
+        """Serve video streaming statistics."""
+        try:
+            if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+                try:
+                    stats = self.trainer.video_streamer.get_performance_stats()
+                except Exception as e:
+                    stats = {
+                        'method': 'optimized_streaming',
+                        'available': False,
+                        'error': str(e)
+                    }
+            else:
+                stats = {
+                    'method': 'legacy_fallback',
+                    'available': False,
+                    'message': 'Optimized streaming not initialized'
+                }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(stats).encode('utf-8'))
+        except Exception:
+            self.send_error(500)
+    
+    def _handle_quality_control(self):
+        """Handle video quality control requests."""
+        try:
+            path_parts = self.path.split('/')
+            if len(path_parts) >= 5:
+                quality = path_parts[4]
+                
+                if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+                    try:
+                        self.trainer.video_streamer.change_quality(quality)
+                        response = {
+                            'success': True,
+                            'quality': quality,
+                            'message': f'Quality changed to {quality}',
+                            'available_qualities': ['low', 'medium', 'high', 'ultra']
+                        }
+                    except Exception as e:
+                        response = {
+                            'success': False,
+                            'error': str(e)
+                        }
+                else:
+                    response = {
+                        'success': False,
+                        'error': 'Optimized streaming not available'
+                    }
+            else:
+                response = {
+                    'success': False,
+                    'error': 'Missing quality parameter'
+                }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+        except Exception as e:
+            self._send_error_response(str(e))
+    
+    def _handle_start_training(self):
+        """Handle start training requests."""
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            # Not implemented in legacy server
+            response = {
+                'success': False,
+                'message': 'Training control not implemented in legacy server'
+            }
+            
+            self.send_response(501)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+        except Exception as e:
+            self._send_error_response(str(e))
+    
+    def _handle_stop_training(self):
+        """Handle stop training requests."""
+        try:
+            response = {
+                'success': False,
+                'message': 'Training control not implemented in legacy server'
+            }
+            
+            self.send_response(501)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+        except Exception as e:
+            self._send_error_response(str(e))
+    
+    def _handle_socketio_fallback(self):
+        """Handle Socket.IO fallback requests."""
+        try:
+            response = {
+                'error': 'WebSocket/Socket.IO not implemented',
+                'use_polling': True,
+                'polling_endpoints': {
+                    'status': '/api/status',
+                    'metrics': '/api/metrics',
+                    'screen': '/screen'
+                }
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+        except Exception as e:
+            self._send_error_response(str(e))
+    
+    def _send_error_response(self, error_message):
+        """Send error response."""
+        try:
+            response = {
+                'success': False,
+                'error': error_message
+            }
+            
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+        except Exception:
+            pass  # Can't do much if error response fails

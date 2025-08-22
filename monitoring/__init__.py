@@ -9,6 +9,7 @@ This package provides comprehensive monitoring tools:
 """
 
 from .data_bus import DataBus, DataType, get_data_bus
+from .database import DatabaseManager
 from .unified_monitor import UnifiedMonitor
 from .game_streamer import GameStreamComponent as GameStreamer
 from .monitoring_client import MonitoringClient
@@ -17,13 +18,14 @@ from .text_logger import TextLogger
 from .trainer_monitor_bridge import TrainerMonitorBridge
 from .web_interface import WebInterface
 from .web_monitor import WebMonitor, ServerConfig, MonitorConfig
-from .web_server import WebServer
+from .web_server import WebServer, TrainingWebServer, TrainingHandler
 from .error_handler import ErrorHandler
 
 __all__ = [
     'DataBus',
     'DataType',
     'get_data_bus',
+    'DatabaseManager',
     'UnifiedMonitor',
     'GameStreamer',
     'MonitoringClient',
@@ -35,5 +37,7 @@ __all__ = [
     'ServerConfig',
     'MonitorConfig',
     'WebServer',
+    'TrainingWebServer',
+    'TrainingHandler',
     'ErrorHandler'
 ]

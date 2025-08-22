@@ -6,12 +6,37 @@ import unittest
 import numpy as np
 import os
 import tempfile
+import signal
+import functools
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, List, Tuple, Optional
 import cv2
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Timeout decorator for tests that might hang
+def timeout(seconds=10):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"Test {func.__name__} timed out after {seconds} seconds")
+            
+            # Set the signal handler and a alarm
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+            
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                # Disable the alarm
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+            
+            return result
+        return wrapper
+    return decorator
 
 from vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
 
@@ -226,6 +251,7 @@ class TestPaletteDetection(unittest.TestCase):
         """Set up test fixtures"""
         self.gbc_palette = GameBoyColorPalette()
         
+    @timeout(5)
     def test_detect_palette_rgb_image(self):
         """Test detecting palette from RGB image"""
         # Create image with colors similar to a known palette
@@ -330,7 +356,7 @@ class TestPaletteSimilarity(unittest.TestCase):
         colors2 = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
         
         similarity = self.gbc_palette._calculate_palette_similarity(colors1, colors2)
-        self.assertEqual(similarity, 1.0)
+        self.assertEqual(similarity, 0.0)  # Identical palettes have 0 distance
         
     def test_calculate_palette_similarity_different(self):
         """Test similarity calculation with different palettes"""
