@@ -13,25 +13,17 @@ import cv2
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from pokemon_crystal_rl.vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
+from vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
 
 
 class TestGBCPalette(unittest.TestCase):
-    """Test GBCPalette dataclass"""
+    """Test GBCPalette enum"""
     
     def test_gbc_palette_creation(self):
-        """Test creating GBCPalette objects"""
-        palette = GBCPalette(
-            name='test_palette',
-            colors=[(255, 255, 255), (128, 128, 128), (64, 64, 64), (0, 0, 0)],
-            description='Test palette description'
-        )
-        
-        self.assertEqual(palette.name, 'test_palette')
-        self.assertEqual(len(palette.colors), 4)
-        self.assertIsInstance(palette.colors[0], tuple)
-        self.assertEqual(len(palette.colors[0]), 3)  # RGB tuple
-        self.assertEqual(palette.description, 'Test palette description')
+        """Test GBCPalette enum values"""
+        self.assertEqual(GBCPalette.DEFAULT.value, 'default')
+        self.assertEqual(GBCPalette.TEXT_WHITE.value, 'text_white')
+        self.assertEqual(GBCPalette.TEXT_BLACK.value, 'text_black')
         
     def test_gbc_palette_color_validation(self):
         """Test GBCPalette color values are valid RGB"""
@@ -48,6 +40,15 @@ class TestGBCPalette(unittest.TestCase):
                 self.assertIsInstance(channel, int)
                 self.assertGreaterEqual(channel, 0)
                 self.assertLessEqual(channel, 255)
+
+    def test_gbc_palette_enum_members(self):
+        """Test GBCPalette has expected members"""
+        expected_members = [
+            'DEFAULT', 'TEXT_WHITE', 'TEXT_BLACK', 
+            'DIALOGUE_NORMAL', 'DIALOGUE_DARK'
+        ]
+        for member in expected_members:
+            self.assertTrue(hasattr(GBCPalette, member))
 
 
 class TestGameBoyColorPaletteInitialization(unittest.TestCase):
