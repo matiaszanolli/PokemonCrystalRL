@@ -210,8 +210,8 @@ class TestMonitorBasics:
         )
         assert len(events) == 1
         event = events[0]
-        assert event["severity"] == severity.value
-        assert event["recovery_strategy"] == strategy.value
+        assert event["event_data"]["severity"] == severity.value
+        assert event["event_data"]["recovery_strategy"] == strategy.value
         
         # Check training state based on severity
         if severity == ErrorSeverity.CRITICAL:

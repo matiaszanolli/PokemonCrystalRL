@@ -76,7 +76,10 @@ class UnifiedMonitor:
         # Initialize error handler
         try:
             from .error_handler import ErrorHandler
-            self.error_handler = ErrorHandler()
+            self.error_handler = ErrorHandler(db_manager=self.db)
+            # Set monitor reference for accessing run_id
+            if hasattr(self.error_handler, 'set_monitor'):
+                self.error_handler.set_monitor(self)
         except ImportError:
             self.error_handler = None
             self.logger.warning("Error handler not available")
@@ -143,6 +146,14 @@ class UnifiedMonitor:
                 'current_run_id': self.current_run_id,
                 'current_stats': self.current_stats,
                 'uptime': time.time() - self.session_start_time,
+                'connected_clients': 0,
+                'version': '1.0.0',
+                'components': {
+                    'trainer': {
+                        'status': 'active' if self.is_monitoring else 'inactive',
+                        'type': 'core'
+                    }
+                },
                 'timestamp': datetime.now().isoformat()
             })
         
@@ -154,7 +165,7 @@ class UnifiedMonitor:
                     stats = self.training_session.get_stats()
                 else:
                     stats = self.current_stats
-                return jsonify(stats)
+                return jsonify({'stats': stats})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
@@ -338,7 +349,9 @@ class UnifiedMonitor:
     def stop_monitoring(self):
         """Stop the monitoring process."""
         self.is_monitoring = False
-        self.training_state = TrainingState.STOPPED
+        # Only set to STOPPED if not already COMPLETED
+        if self.training_state != TrainingState.COMPLETED:
+            self.training_state = TrainingState.STOPPED
         self.logger.info("⏹️ Monitoring stopped")
     
     def _monitoring_loop(self):
@@ -498,9 +511,11 @@ class UnifiedMonitor:
         if final_reward is not None:
             self.logger.info(f"Training stopped with final reward: {final_reward}")
         
-        # Always set to COMPLETED when stop_training is called, regardless of final_reward
+        # Set to COMPLETED when stop_training is called
         self.training_state = TrainingState.COMPLETED
-        self.stop_monitoring()
+        # Stop monitoring but don't change the training state
+        self.is_monitoring = False
+        self.logger.info("⏹️ Monitoring stopped")
     
     def update_metrics(self, metrics: Dict[str, Any]):
         """Update training metrics."""

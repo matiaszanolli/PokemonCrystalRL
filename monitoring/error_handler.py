@@ -145,7 +145,8 @@ class ErrorHandler:
                  log_dir: str = "logs/errors",
                  max_stored_errors: int = 1000,
                  notification_batch_size: int = 10,
-                 notification_interval: float = 5.0):
+                 notification_interval: float = 5.0,
+                 db_manager=None):
         
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -187,6 +188,9 @@ class ErrorHandler:
         # Data bus
         self.data_bus = get_data_bus()
         
+        # Database manager for recording errors
+        self.db_manager = db_manager
+        
         # Register signal handlers
         self._setup_signal_handlers()
         
@@ -223,12 +227,19 @@ class ErrorHandler:
                     error: Exception,
                     message: Optional[str] = None,
                     severity: ErrorSeverity = ErrorSeverity.ERROR,
-                    category: ErrorCategory = ErrorCategory.UNKNOWN,
+                    category: Union[ErrorCategory, str] = ErrorCategory.UNKNOWN,
                     component: str = "unknown",
                     recovery_strategy: RecoveryStrategy = RecoveryStrategy.NONE,
                     additional_data: Optional[Dict[str, Any]] = None) -> ErrorContext:
         """Handle an error and create error context."""
         try:
+            # Convert string category to ErrorCategory enum if needed
+            if isinstance(category, str):
+                try:
+                    category = ErrorCategory(category.lower())
+                except ValueError:
+                    category = ErrorCategory.UNKNOWN
+            
             # Create error context
             error_context = ErrorContext(
                 timestamp=time.time(),
@@ -258,6 +269,9 @@ class ErrorHandler:
             
             # Log error
             self._log_error(error_context)
+            
+            # Record error in database if available
+            self._record_error_in_db(error_context, recovery_strategy)
             
             # Queue for notification
             self.notification_queue.put(error_context)
@@ -554,6 +568,48 @@ class ErrorHandler:
                 additional_data=additional_data
             )
             raise  # Re-raise the exception after handling
+    
+    def _record_error_in_db(self, error_context: ErrorContext, recovery_strategy: RecoveryStrategy) -> None:
+        """Record error in database if database manager is available."""
+        if not self.db_manager or not hasattr(self.db_manager, 'record_event'):
+            return
+        
+        try:
+            # Get current run_id from database manager or use a default
+            run_id = getattr(self.db_manager, 'current_run_id', None)
+            if not run_id:
+                # Try to get from a parent monitor if available
+                if hasattr(self, '_monitor') and hasattr(self._monitor, 'current_run_id'):
+                    run_id = self._monitor.current_run_id
+                else:
+                    run_id = "unknown_run"
+            
+            # Record error as an event in the database
+            event_data = {
+                'error_id': error_context.error_id,
+                'error_type': error_context.error_type,
+                'message': error_context.error_message,
+                'severity': error_context.severity.value,
+                'category': error_context.category.value,
+                'component': error_context.component,
+                'recovery_strategy': recovery_strategy.value,
+                'timestamp': error_context.timestamp,
+                'traceback': error_context.traceback,
+                'additional_data': error_context.additional_data
+            }
+            
+            self.db_manager.record_event(
+                run_id=run_id,
+                event_type="error",
+                event_data=event_data
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to record error in database: {e}")
+    
+    def set_monitor(self, monitor):
+        """Set the parent monitor for accessing run_id."""
+        self._monitor = monitor
     
     def __del__(self):
         """Cleanup on deletion."""

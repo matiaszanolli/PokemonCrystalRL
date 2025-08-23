@@ -631,6 +631,7 @@ class TrainingWebServer:
         """Stop the HTTP server."""
         if self.server:
             self.server.shutdown()
+            self.server.server_close()
     
     def shutdown(self):
         """Shutdown and unregister from data bus."""
