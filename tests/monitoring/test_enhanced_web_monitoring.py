@@ -21,9 +21,6 @@ from unittest.mock import Mock, patch, MagicMock
 from io import BytesIO
 import numpy as np
 from PIL import Image
-import http.server
-import urllib.request
-import urllib.error
 
 # Import test system modules
 import sys
@@ -31,22 +28,11 @@ import os
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-# Import the enhanced trainer system
-try:
-    from trainer.trainer import (
-        PokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
-except ImportError:
-    # Fallback import path
-    from scripts.pokemon_trainer import (
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
-    from trainer import UnifiedPokemonTrainer
+from trainer.trainer import (
+    TrainingConfig,
+)
+
+from trainer.unified_trainer import UnifiedPokemonTrainer
 
 
 @pytest.mark.web_monitoring
@@ -76,20 +62,21 @@ class TestWebServerIntegration:
     @pytest.fixture
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('trainer.web_server.HTTPServer')
-    def trainer_with_web(self, mock_http_server, mock_pyboy_class, web_config):
+    @patch('monitoring.web_server.TrainingWebServer')
+    def trainer_with_web(self, mock_web_server_class, mock_pyboy_class, web_config):
         """Create trainer with web server enabled"""
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
         mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        # Mock HTTP server
-        mock_server_instance = Mock()
-        mock_http_server.return_value = mock_server_instance
+        # Mock web server
+        mock_web_server_instance = Mock()
+        mock_web_server_instance.server = Mock()  # Mock the server attribute
+        mock_web_server_class.return_value = mock_web_server_instance
         
         trainer = UnifiedPokemonTrainer(web_config)
-        trainer.mock_server = mock_server_instance
+        trainer.mock_server = mock_web_server_instance.server
         
         return trainer
     

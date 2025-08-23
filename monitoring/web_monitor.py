@@ -36,6 +36,7 @@ class TrainingState(Enum):
     PAUSED = auto()
     STOPPED = auto()
     ERROR = auto()
+    COMPLETED = auto()
 
 
 class ClientMetrics:
@@ -134,6 +135,7 @@ class MonitorConfig:
     db_path: str = "monitoring.db"
     host: str = "localhost"
     port: int = 8080
+    web_port: int = None  # Alias for port for backward compatibility
     static_dir: str = "static"
     data_dir: str = "monitor_data"
     update_interval: float = 1.0
@@ -141,6 +143,11 @@ class MonitorConfig:
     max_events: int = 1000
     max_snapshots: int = 100
     debug: bool = False
+    
+    def __post_init__(self):
+        """Handle web_port alias for backward compatibility."""
+        if self.web_port is not None:
+            self.port = self.web_port
 
 
 class DataSnapshot:

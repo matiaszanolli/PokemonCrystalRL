@@ -203,6 +203,27 @@ class DatabaseManager:
                     ) VALUES (?, ?, ?, ?)
                 """, (run_id, timestamp, name, value))
     
+    def record_metric(
+        self,
+        run_id: str,
+        metric_name: str,
+        metric_value: float,
+        timestamp: Optional[datetime] = None
+    ):
+        """Record a single performance metric."""
+        timestamp = timestamp or datetime.now()
+        
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO performance_metrics (
+                    run_id,
+                    timestamp,
+                    metric_name,
+                    metric_value
+                ) VALUES (?, ?, ?, ?)
+            """, (run_id, timestamp, metric_name, metric_value))
+    
     def record_system_metrics(
         self,
         run_id: str,
@@ -271,7 +292,6 @@ class DatabaseManager:
                     player_y,
                     state_data
                 ) VALUES (?, ?, ?, ?, ?)
-                RETURNING id
             """, (
                 run_id,
                 game_state.get('map_id'),
@@ -279,7 +299,7 @@ class DatabaseManager:
                 game_state.get('player_y'),
                 json.dumps(game_state)
             ))
-            state_id = cursor.fetchone()[0]
+            state_id = cursor.lastrowid
             
             # Get current episode
             cursor.execute("""
@@ -289,7 +309,8 @@ class DatabaseManager:
                 ORDER BY episode_number DESC
                 LIMIT 1
             """, (run_id,))
-            episode_id = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            episode_id = result[0] if result else None
             
             # Record step
             cursor.execute("""
@@ -495,9 +516,74 @@ class DatabaseManager:
             events = []
             for row in cursor.fetchall():
                 event = dict(zip(columns, row))
-                event['event_data'] = json.loads(event['event_data'])
+                if event['event_data']:
+                    event['event_data'] = json.loads(event['event_data'])
                 events.append(event)
             return events
+    
+    def get_run_episodes(
+        self,
+        run_id: str,
+        start_episode: Optional[int] = None,
+        end_episode: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get episodes for a training run."""
+        query = "SELECT * FROM episodes WHERE run_id = ?"
+        params = [run_id]
+        
+        if start_episode is not None:
+            query += " AND episode_number >= ?"
+            params.append(start_episode)
+        
+        if end_episode is not None:
+            query += " AND episode_number <= ?"
+            params.append(end_episode)
+        
+        query += " ORDER BY episode_number"
+        
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            columns = [d[0] for d in cursor.description]
+            episodes = []
+            for row in cursor.fetchall():
+                episode = dict(zip(columns, row))
+                if episode['metadata']:
+                    episode['metadata'] = json.loads(episode['metadata'])
+                episodes.append(episode)
+            return episodes
+    
+    def get_run_states(
+        self,
+        run_id: str,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """Get game states for a training run."""
+        query = "SELECT * FROM game_states WHERE run_id = ?"
+        params = [run_id]
+        
+        if start_time:
+            query += " AND timestamp >= ?"
+            params.append(start_time)
+        
+        if end_time:
+            query += " AND timestamp <= ?"
+            params.append(end_time)
+        
+        query += " ORDER BY timestamp"
+        
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            columns = [d[0] for d in cursor.description]
+            states = []
+            for row in cursor.fetchall():
+                state = dict(zip(columns, row))
+                if state['state_data']:
+                    state['game_state'] = json.loads(state['state_data'])
+                states.append(state)
+            return states
     
     def get_run_summary(self, run_id: str) -> Dict[str, Any]:
         """Get summary of a training run."""
@@ -569,7 +655,7 @@ class DatabaseManager:
                 df.to_csv(export_dir / f"{table}.csv", index=False)
         
         # Export snapshots if requested
-        if include_snapshots:
+        if include_snapshots and hasattr(self, 'data_dir'):
             snapshots_dir = export_dir / "snapshots"
             snapshots_dir.mkdir(exist_ok=True)
             

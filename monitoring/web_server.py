@@ -923,32 +923,27 @@ class TrainingHandler(BaseHTTPRequestHandler):
         """Handle video quality control requests."""
         try:
             path_parts = self.path.split('/')
-            if len(path_parts) >= 5:
-                quality = path_parts[4]
-                
-                if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
-                    try:
-                        self.trainer.video_streamer.change_quality(quality)
-                        response = {
-                            'success': True,
-                            'quality': quality,
-                            'message': f'Quality changed to {quality}',
-                            'available_qualities': ['low', 'medium', 'high', 'ultra']
-                        }
-                    except Exception as e:
-                        response = {
-                            'success': False,
-                            'error': str(e)
-                        }
-                else:
+            # This will cause IndexError if path_parts[4] doesn't exist
+            quality = path_parts[4]
+            
+            if hasattr(self.trainer, 'video_streamer') and self.trainer.video_streamer:
+                try:
+                    self.trainer.video_streamer.change_quality(quality)
+                    response = {
+                        'success': True,
+                        'quality': quality,
+                        'message': f'Quality changed to {quality}',
+                        'available_qualities': ['low', 'medium', 'high', 'ultra']
+                    }
+                except Exception as e:
                     response = {
                         'success': False,
-                        'error': 'Optimized streaming not available'
+                        'error': str(e)
                     }
             else:
                 response = {
                     'success': False,
-                    'error': 'Missing quality parameter'
+                    'error': 'Optimized streaming not available'
                 }
             
             self.send_response(200)

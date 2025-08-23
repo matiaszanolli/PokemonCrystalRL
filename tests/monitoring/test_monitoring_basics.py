@@ -146,8 +146,8 @@ class TestMonitorBasics:
             assert len(episodes) == 1
             episode = episodes[0]
             assert episode["total_reward"] == 10.0
-            assert episode["steps"] == 100
-            assert episode["success"] is True
+            assert episode["total_steps"] == 100
+            assert episode["success"] == True  # SQLite stores boolean as int, so use == not is
             assert episode["metadata"]["completion"] == 0.5
 
     def test_game_state_tracking(self, monitor):
