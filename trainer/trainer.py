@@ -140,7 +140,7 @@ class PokemonTrainer:
         try:
             self.pyboy = PyBoy(
                 self.config.rom_path,
-                window_type="headless" if self.config.headless else "SDL2",
+                window="null" if self.config.headless else "SDL2",
                 debug=self.config.debug_mode
             )
             
@@ -512,7 +512,11 @@ class PokemonTrainer:
             
             # Create new instance
             from pyboy import PyBoy
-            self.pyboy = PyBoy(str(Path(self.config.rom_path).resolve()))
+            self.pyboy = PyBoy(
+                str(Path(self.config.rom_path).resolve()),
+                window="null" if self.config.headless else "SDL2",
+                debug=self.config.debug_mode
+            )
             
             # Load save state if configured
             if self.config.save_state_path and Path(self.config.save_state_path).exists():

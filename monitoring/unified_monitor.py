@@ -37,15 +37,43 @@ except ImportError:
 import cv2
 import numpy as np
 
+# Import TrainingState from web_monitor
+from .web_monitor import TrainingState
+
 
 class UnifiedMonitor:
     """Unified web monitoring server for Pokemon Crystal RL training."""
     
-    def __init__(self, training_session=None, host='127.0.0.1', port=5000):
+    def __init__(self, training_session=None, host='127.0.0.1', port=5000, config=None):
         self.training_session = training_session
+        self.config = config
         self.host = host
         self.port = port
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize training state and database
+        self.training_state = TrainingState.INITIALIZING
+        self.current_run_id = None
+        self.db = None
+        
+        # Initialize database if config provided
+        if self.config and hasattr(self.config, 'db_path'):
+            try:
+                from .database import DatabaseManager
+                self.db = DatabaseManager(self.config.db_path)
+            except ImportError as e:
+                self.logger.warning(f"Database module not available: {e}")
+            except Exception as e:
+                self.logger.warning(f"Database initialization failed: {e}")
+                self.db = None
+        
+        # Initialize error handler
+        try:
+            from .error_handler import ErrorHandler
+            self.error_handler = ErrorHandler()
+        except ImportError:
+            self.error_handler = None
+            self.logger.warning("Error handler not available")
         
         # Find template directory relative to this file
         template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'templates')
@@ -197,6 +225,7 @@ class UnifiedMonitor:
             return
         
         self.is_monitoring = True
+        self.training_state = TrainingState.RUNNING
         self.logger.info("🎯 Monitoring started")
         
         # Start monitoring thread
@@ -205,6 +234,7 @@ class UnifiedMonitor:
     def stop_monitoring(self):
         """Stop the monitoring process."""
         self.is_monitoring = False
+        self.training_state = TrainingState.STOPPED
         self.logger.info("⏹️ Monitoring stopped")
     
     def _monitoring_loop(self):

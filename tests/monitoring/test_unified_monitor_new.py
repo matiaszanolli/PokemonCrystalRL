@@ -11,8 +11,7 @@ from unittest.mock import Mock, patch
 import tempfile
 
 from monitoring.unified_monitor import UnifiedMonitor
-from monitoring.trainer_monitor_bridge import TrainingState
-from core.config import MonitorConfig
+from monitoring.web_monitor import TrainingState, MonitorConfig
 
 class TestUnifiedMonitor:
     """Test suite for UnifiedMonitor class."""
@@ -128,17 +127,26 @@ class TestUnifiedMonitor:
         config = MonitorConfig(
             db_path=str(tmp_path / "test.db"),
             static_dir=str(tmp_path / "static"),
-            web_port=8000
+            port=8000
         )
-        monitor = UnifiedMonitor(config=config)
         
-        # Verify database initialization
-        assert monitor.db is not None
-        assert monitor.current_run_id is None
-        assert monitor.training_state == TrainingState.INITIALIZING
-        
-        # Clean up
-        monitor.stop_monitoring()
+        # Mock Flask and SocketIO to avoid hanging in tests
+        with patch('monitoring.unified_monitor.Flask') as mock_flask, \
+             patch('monitoring.unified_monitor.SocketIO') as mock_socketio:
+            
+            mock_app = Mock()
+            mock_flask.return_value = mock_app
+            mock_socketio.return_value = Mock()
+            
+            monitor = UnifiedMonitor(config=config)
+            
+            # Verify database initialization
+            assert monitor.db is not None
+            assert monitor.current_run_id is None
+            assert monitor.training_state == TrainingState.INITIALIZING
+            
+            # Clean up
+            monitor.stop_monitoring()
 
     def test_training_state_management(self, monitor):
         """Test training state management."""

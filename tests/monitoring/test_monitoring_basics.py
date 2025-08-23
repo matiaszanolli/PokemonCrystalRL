@@ -12,7 +12,8 @@ from monitoring import (
     ErrorHandler,
     ErrorSeverity,
     RecoveryStrategy,
-    TrainingState
+    TrainingState,
+    UnifiedMonitor
 )
 
 @pytest.fixture
