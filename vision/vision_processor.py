@@ -35,7 +35,11 @@ class UnifiedVisionProcessor:
         
         # Initialize font decoder
         try:
-            self.font_decoder = ROMFontDecoder(template_path, rom_path)
+            # Check if ROMFontDecoder is available and not the fallback class
+            if hasattr(ROMFontDecoder, '__module__') and 'enhanced_font_decoder' in ROMFontDecoder.__module__:
+                self.font_decoder = ROMFontDecoder(template_path, rom_path)
+            else:
+                self.font_decoder = None
         except Exception as e:
             self.logger.warning(f"Failed to initialize ROMFontDecoder: {e}")
             self.font_decoder = None
@@ -113,20 +117,17 @@ class UnifiedVisionProcessor:
             # Extract dominant colors
             dominant_colors = self._get_dominant_colors(screen)
             
-            # Convert screen type enum to string
-            screen_type_str = screen_type.name.lower() if screen_type else "unknown"
-            
             # Determine game phase
-            game_phase = self._determine_game_phase(screen_type_str, detected_text)
+            game_phase = self._determine_game_phase(screen_type, detected_text)
             
             # Generate visual summary
             visual_summary = self._generate_visual_summary(
-                screen_type_str, detected_text, ui_elements, dominant_colors
+                screen_type, detected_text, ui_elements, dominant_colors
             )
             
             # Create context
             context = VisualContext(
-                screen_type=screen_type_str,
+                screen_type=screen_type,
                 detected_text=detected_text,
                 ui_elements=ui_elements,
                 dominant_colors=dominant_colors,
@@ -266,12 +267,12 @@ class UnifiedVisionProcessor:
             return []
     
     def _classify_screen_type(self, image: np.ndarray, detected_text: List[DetectedText],
-                            ui_elements: List[GameUIElement]) -> PyBoyGameState:
+                            ui_elements: List[GameUIElement]) -> str:
         """Classify the screen type."""
         # Check for invalid screen
         if (image is None or image.size == 0 or len(image.shape) != 3 or
             image.shape[0] != 144 or image.shape[1] != 160):
-            return PyBoyGameState.UNKNOWN
+            return "unknown"
         
         # Check UI elements first
         dialogue_boxes = [e for e in ui_elements if e.element_type == "dialogue_box"]
@@ -279,11 +280,11 @@ class UnifiedVisionProcessor:
         menu_boxes = [e for e in ui_elements if e.element_type == "menu_box"]
         
         if health_bars:
-            return PyBoyGameState.BATTLE
+            return "battle"
         elif menu_boxes:
-            return PyBoyGameState.MENU
+            return "menu"
         elif dialogue_boxes:
-            return PyBoyGameState.DIALOGUE
+            return "dialogue"
         
         # Analyze screen characteristics
         mean_brightness = np.mean(image)
@@ -292,11 +293,11 @@ class UnifiedVisionProcessor:
         
         # Check for problematic screens
         if mean_brightness < 30 and std_dev < 15:
-            return PyBoyGameState.UNKNOWN
+            return "unknown"
         if color_variance > 2000:
-            return PyBoyGameState.UNKNOWN
+            return "unknown"
         if mean_brightness > 220 and std_dev > 20:
-            return PyBoyGameState.UNKNOWN
+            return "unknown"
         
         # Default to overworld if screen seems stable
         is_stable = 15 < std_dev < 70
@@ -304,9 +305,9 @@ class UnifiedVisionProcessor:
         low_color_variance = color_variance < 1000
         
         if is_stable and is_normal_brightness and low_color_variance:
-            return PyBoyGameState.OVERWORLD
+            return "overworld"
         
-        return PyBoyGameState.UNKNOWN
+        return "unknown"
     
     def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
         """Get dominant colors from image."""

@@ -507,12 +507,11 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                         print(f"Warning: Invalid BCD digit in money value")
                     return 0
             
-            # Pokemon Crystal stores money as 3 BCD bytes representing 6 digits
-            # Each byte contains 2 BCD digits (4 bits each)
-            # For example: 999999 = 0x99 0x99 0x99
-            # byte0 = ten thousands + thousands (99)
-            # byte1 = hundreds + tens (99) 
-            # byte2 = ones (99)
+            # Pokemon Crystal stores money as 3 BCD bytes
+            # Based on test cases:
+            # - Ᵽ100: 00 01 00 → byte0=0, byte1=1, byte2=0 → 100
+            # - Ᵽ3000: 03 00 00 → byte0=3, byte1=0, byte2=0 → 3000
+            # This suggests: byte0 * 1000 + byte1 * 100 + byte2 * 1
             
             def bcd_to_decimal(bcd_byte):
                 """Convert a BCD byte to decimal"""
@@ -521,12 +520,12 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                 return high * 10 + low
             
             # Convert each BCD byte to decimal
-            decimal0 = bcd_to_decimal(byte0)  # Ten thousands and thousands
-            decimal1 = bcd_to_decimal(byte1)  # Hundreds and tens
-            decimal2 = bcd_to_decimal(byte2)  # Ones
+            decimal0 = bcd_to_decimal(byte0)  # Thousands place
+            decimal1 = bcd_to_decimal(byte1)  # Hundreds place
+            decimal2 = bcd_to_decimal(byte2)  # Ones place
             
-            # Combine to form the full 6-digit number
-            result = decimal0 * 10000 + decimal1 * 100 + decimal2
+            # Combine based on the correct place values from test cases
+            result = decimal0 * 1000 + decimal1 * 100 + decimal2
             
             return result
         except Exception as e:

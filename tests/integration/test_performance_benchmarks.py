@@ -26,21 +26,13 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-try:
-    from trainer.trainer import (
-        PokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
-except ImportError:
-    # Fallback import path
-    from scripts.pokemon_trainer import (
-        UnifiedPokemonTrainer,
-        TrainingConfig,
-        TrainingMode,
-        LLMBackend
-    )
+from trainer.trainer import (
+    PokemonTrainer,
+    TrainingConfig,
+    TrainingMode,
+    LLMBackend
+)
+from trainer.unified_trainer import UnifiedPokemonTrainer
 
 
 @pytest.mark.benchmarking
@@ -49,7 +41,7 @@ class TestActionPerformanceBenchmarks:
     """Test action execution performance benchmarks"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_fast_monitored(self, mock_pyboy_class):
         """Create trainer optimized for fast monitored performance"""
@@ -74,7 +66,7 @@ class TestActionPerformanceBenchmarks:
         return UnifiedPokemonTrainer(config)
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer_ultra_fast(self, mock_pyboy_class):
         """Create trainer for ultra-fast performance testing"""
@@ -360,7 +352,7 @@ class TestLLMInferenceBenchmarks:
             # But should not go below original
             assert trainer.adaptive_llm_interval >= original_interval
     
-    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def test_llm_performance_tracking_overhead(self, mock_pyboy_class):
         """Test that LLM performance tracking has minimal overhead"""

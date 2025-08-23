@@ -93,6 +93,10 @@ class PokemonTrainer:
         self.capture_active = False
         self.capture_thread = None
         
+        # Start screen capture if enabled
+        if self.config.capture_screens:
+            self._start_screen_capture()
+        
         # Data bus for component communication
         if self.config.mode == TrainingMode.FAST_MONITORED:
             from monitoring.data_bus import get_data_bus, DataType
@@ -288,7 +292,18 @@ class PokemonTrainer:
         """Get action from LLM manager."""
         try:
             start_time = time.time()
-            action = self.llm_manager.get_action()
+            
+            # Get current screenshot and detect game state
+            screenshot = self._simple_screenshot_capture()
+            game_state = self._detect_game_state(screenshot)
+            
+            # Pass game state to LLM manager
+            action = self.llm_manager.get_action(
+                screenshot=screenshot,
+                game_state=game_state,
+                step=self.stats['total_actions'],
+                stuck_counter=getattr(self.game_state_detector, 'stuck_counter', 0)
+            )
             
             # Handle both actual integers and Mock objects for testing
             if hasattr(action, '_mock_return_value'):
@@ -614,3 +629,60 @@ class PokemonTrainer:
         except Exception as e:
             self.logger.error(f"Error capturing screen: {e}")
             self.error_count['capture_errors'] += 1
+    
+    def _start_screen_capture(self) -> None:
+        """Start the screen capture thread."""
+        if self.capture_active:
+            return
+        
+        self.capture_active = True
+        self.capture_thread = threading.Thread(target=self._screen_capture_loop, daemon=True)
+        self.capture_thread.start()
+        self.logger.info("📸 Screen capture thread started")
+    
+    def _stop_screen_capture(self) -> None:
+        """Stop the screen capture thread."""
+        self.capture_active = False
+        if self.capture_thread and self.capture_thread.is_alive():
+            self.capture_thread.join(timeout=1.0)
+        self.logger.info("📸 Screen capture thread stopped")
+    
+    def _screen_capture_loop(self) -> None:
+        """Main screen capture loop running in separate thread."""
+        capture_interval = 1.0 / self.config.capture_fps
+        
+        while self.capture_active:
+            try:
+                # Capture current screen
+                screen = self._simple_screenshot_capture()
+                if screen is not None:
+                    # Create screen data with metadata
+                    screen_data = {
+                        'frame_id': getattr(self.pyboy, 'frame_count', 0),
+                        'timestamp': time.time(),
+                        'data_length': screen.nbytes,
+                        'size': f"{screen.shape[1]}x{screen.shape[0]}",
+                        'image': screen
+                    }
+                    
+                    # Update latest screen
+                    self.latest_screen = screen_data
+                    
+                    # Add to queue for processing
+                    try:
+                        self.screen_queue.put_nowait(screen_data)
+                    except queue.Full:
+                        # Remove oldest and add new
+                        try:
+                            self.screen_queue.get_nowait()
+                            self.screen_queue.put_nowait(screen_data)
+                        except queue.Empty:
+                            pass
+                
+                # Wait for next capture
+                time.sleep(capture_interval)
+                
+            except Exception as e:
+                self.logger.error(f"Screen capture error: {e}")
+                self.error_count['capture_errors'] += 1
+                time.sleep(0.1)  # Brief pause on error

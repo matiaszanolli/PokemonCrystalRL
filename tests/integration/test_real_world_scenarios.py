@@ -28,13 +28,13 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-from trainer import (
+from trainer.trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend,
-    UnifiedPokemonTrainer
 )
+from trainer.unified_trainer import UnifiedPokemonTrainer
 
 
 @pytest.mark.integration
