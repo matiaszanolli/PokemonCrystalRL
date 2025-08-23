@@ -223,7 +223,7 @@ class TestErrorHandling:
             monitor.error_handler.handle_error(
                 error,
                 severity=ErrorSeverity.CRITICAL,
-                strategy=RecoveryStrategy.ABORT,
+                strategy=RecoveryStrategy.GRACEFUL_SHUTDOWN,
                 component="test"
             )
             

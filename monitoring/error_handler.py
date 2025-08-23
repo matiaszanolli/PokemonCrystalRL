@@ -230,8 +230,23 @@ class ErrorHandler:
                     category: Union[ErrorCategory, str] = ErrorCategory.UNKNOWN,
                     component: str = "unknown",
                     recovery_strategy: RecoveryStrategy = RecoveryStrategy.NONE,
+                    strategy: RecoveryStrategy = None,  # Alias for recovery_strategy for backward compatibility
                     additional_data: Optional[Dict[str, Any]] = None) -> ErrorContext:
-        """Handle an error and create error context."""
+        """Handle an error and create error context.
+        
+        Args:
+            error: The exception to handle
+            message: Optional custom error message
+            severity: Error severity level
+            category: Error category
+            component: Component where error occurred
+            recovery_strategy: Recovery strategy to use
+            strategy: Alias for recovery_strategy (for backward compatibility)
+            additional_data: Additional error context data
+        """
+        # Handle backward compatibility: if strategy is provided, use it
+        if strategy is not None:
+            recovery_strategy = strategy
         try:
             # Convert string category to ErrorCategory enum if needed
             if isinstance(category, str):

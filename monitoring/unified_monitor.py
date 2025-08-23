@@ -40,6 +40,9 @@ import numpy as np
 # Import TrainingState from web_monitor
 from .web_monitor import TrainingState
 
+# Import get_data_bus to make it available for tests
+from .data_bus import get_data_bus
+
 
 class UnifiedMonitor:
     """Unified web monitoring server for Pokemon Crystal RL training."""
@@ -496,7 +499,7 @@ class UnifiedMonitor:
     def start_training(self, config: Dict[str, Any] = None):
         """Start training session."""
         if self.is_monitoring:
-            raise RuntimeError("Training is already running")
+            raise RuntimeError("Training already in progress")
         
         if config:
             self.logger.info(f"Starting training with config: {config}")
