@@ -221,9 +221,11 @@ class ErrorHandler:
     
     def handle_error(self,
                     error: Exception,
+                    message: Optional[str] = None,
                     severity: ErrorSeverity = ErrorSeverity.ERROR,
                     category: ErrorCategory = ErrorCategory.UNKNOWN,
                     component: str = "unknown",
+                    recovery_strategy: RecoveryStrategy = RecoveryStrategy.NONE,
                     additional_data: Optional[Dict[str, Any]] = None) -> ErrorContext:
         """Handle an error and create error context."""
         try:
@@ -231,7 +233,7 @@ class ErrorHandler:
             error_context = ErrorContext(
                 timestamp=time.time(),
                 error_type=error.__class__.__name__,
-                error_message=str(error),
+                error_message=message or str(error),
                 traceback=traceback.format_exc(),
                 severity=severity,
                 category=category,

@@ -44,6 +44,20 @@ def monitor(test_config):
     """Create and start monitor instance."""
     monitor = UnifiedMonitor(config=test_config)
     monitor.start_training(config={"test": True})
+    
+    # Start the web server in a separate thread
+    import threading
+    import time
+    
+    def run_server():
+        monitor.run(debug=False)
+    
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+    
+    # Wait for server to start
+    time.sleep(2)
+    
     try:
         yield monitor
     finally:
@@ -57,7 +71,7 @@ class TestWebIntegration:
     def test_status_endpoint(self, monitor):
         """Test status API endpoint."""
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/api/status"
+            f"http://localhost:{monitor.port}/api/status"
         )
         assert response.status_code == 200
         
@@ -79,7 +93,7 @@ class TestWebIntegration:
         
         # Get metrics
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/api/metrics"
+            f"http://localhost:{monitor.port}/api/metrics"
         )
         assert response.status_code == 200
         
@@ -90,7 +104,7 @@ class TestWebIntegration:
         
         # Test historical metrics
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/api/metrics/history",
+            f"http://localhost:{monitor.port}/api/metrics/history",
             params={"metric": "loss", "minutes": 5}
         )
         assert response.status_code == 200
@@ -108,7 +122,7 @@ class TestWebIntegration:
         
         # Get screenshot
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/api/screenshot"
+            f"http://localhost:{monitor.port}/api/screenshot"
         )
         assert response.status_code == 200
         
@@ -121,7 +135,7 @@ class TestWebIntegration:
     @pytest.mark.asyncio
     async def test_websocket_connection(self, monitor):
         """Test WebSocket connectivity."""
-        uri = f"ws://localhost:{monitor.config.web_port}/ws"
+        uri = f"ws://localhost:{monitor.port}/ws"
         
         async with websockets.connect(uri) as websocket:
             # Send test message
@@ -139,7 +153,7 @@ class TestWebIntegration:
     @pytest.mark.asyncio
     async def test_real_time_updates(self, monitor):
         """Test real-time updates via WebSocket."""
-        uri = f"ws://localhost:{monitor.config.web_port}/ws"
+        uri = f"ws://localhost:{monitor.port}/ws"
         
         updates_received = []
         
@@ -190,7 +204,7 @@ class TestWebIntegration:
         
         # Check error endpoint
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/api/errors"
+            f"http://localhost:{monitor.port}/api/errors"
         )
         assert response.status_code == 200
         
@@ -204,7 +218,7 @@ class TestWebIntegration:
     def test_system_metrics(self, monitor):
         """Test system metrics reporting."""
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/api/system"
+            f"http://localhost:{monitor.port}/api/system"
         )
         assert response.status_code == 200
         
@@ -218,7 +232,7 @@ class TestWebIntegration:
         """Test training control via web interface."""
         # Pause training
         response = requests.post(
-            f"http://localhost:{monitor.config.web_port}/api/training/control",
+            f"http://localhost:{monitor.port}/api/training/control",
             json={"action": "pause"}
         )
         assert response.status_code == 200
@@ -226,7 +240,7 @@ class TestWebIntegration:
         
         # Resume training
         response = requests.post(
-            f"http://localhost:{monitor.config.web_port}/api/training/control",
+            f"http://localhost:{monitor.port}/api/training/control",
             json={"action": "resume"}
         )
         assert response.status_code == 200
@@ -242,7 +256,7 @@ class TestWebIntegration:
         
         # Get file
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/static/test.txt"
+            f"http://localhost:{monitor.port}/static/test.txt"
         )
         assert response.status_code == 200
         assert response.text == "test content"
@@ -250,7 +264,7 @@ class TestWebIntegration:
     def test_dashboard_html(self, monitor):
         """Test dashboard HTML endpoint."""
         response = requests.get(
-            f"http://localhost:{monitor.config.web_port}/"
+            f"http://localhost:{monitor.port}/"
         )
         assert response.status_code == 200
         assert "text/html" in response.headers["Content-Type"]

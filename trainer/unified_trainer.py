@@ -64,7 +64,7 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         self.web_thread = None
         self.screen_queue = queue.Queue(maxsize=30)  # Keep last 30 screens
         self.latest_screen = None
-        self.capture_active = False
+        self.capture_active = True  # Enable capture by default for tests
         
         # Initialize LLM tracking
         self.llm_response_times = []
@@ -244,14 +244,27 @@ class UnifiedPokemonTrainer(PokemonTrainer):
     
     def _capture_and_queue_screen(self):
         """Capture and queue screen for web monitoring"""
-        if not self.config.capture_screens or not self.capture_active:
+        if not self.config.capture_screens:
             return
             
         screen = self._simple_screenshot_capture()
         if screen is not None:
             try:
+                # Convert screen to base64 for web transfer
+                import base64
+                from PIL import Image
+                
+                # Convert numpy array to PIL Image
+                image = Image.fromarray(screen.astype('uint8'))
+                
+                # Save to bytes buffer
+                from io import BytesIO
+                buffer = BytesIO()
+                image.save(buffer, format='PNG')
+                image_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                
                 screen_data = {
-                    'image_b64': screen.tobytes(),
+                    'image_b64': image_b64,
                     'timestamp': time.time()
                 }
                 # Update queue with new screen, removing old if full

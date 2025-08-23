@@ -498,6 +498,7 @@ class UnifiedMonitor:
         if final_reward is not None:
             self.logger.info(f"Training stopped with final reward: {final_reward}")
         
+        # Always set to COMPLETED when stop_training is called, regardless of final_reward
         self.training_state = TrainingState.COMPLETED
         self.stop_monitoring()
     

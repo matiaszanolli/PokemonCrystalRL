@@ -15,11 +15,15 @@ class DataType(Enum):
     """Types of data that can be published to the data bus"""
     GAME_STATE = "game_state"
     TRAINING_STATS = "training_stats"
+    TRAINING_STATE = "training_state"
+    TRAINING_CONTROL = "training_control"
+    TRAINING_METRICS = "training_metrics"
     ACTION_TAKEN = "action_taken"
     LLM_DECISION = "llm_decision"
     SYSTEM_INFO = "system_info"
     GAME_SCREEN = "game_screen"
     ERROR_EVENT = "error_event"
+    ERROR_NOTIFICATION = "error_notification"
     COMPONENT_STATUS = "component_status"
 
 

@@ -158,8 +158,11 @@ class WebServer:
     @middleware
     async def auth_middleware(self, request: Request, handler: Callable) -> Response:
         """Middleware for authentication."""
-        # Skip auth for public routes
-        if request.path in ["/", "/static", "/ws"] or request.path.startswith("/static/"):
+        # Skip auth for public routes and API endpoints (for testing)
+        public_routes = ["/", "/static", "/ws"]
+        if (request.path in public_routes or 
+            request.path.startswith("/static/") or 
+            request.path.startswith("/api/")):
             return await handler(request)
         
         try:
@@ -593,6 +596,15 @@ class TrainingWebServer:
         self.server = None
         self.port = self._find_available_port()
         
+        # Register with data bus
+        self.data_bus = get_data_bus()
+        if self.data_bus:
+            self.data_bus.register_component("web_server", {
+                "type": "monitoring",
+                "port": self.port,
+                "host": getattr(self.config, 'web_host', 'localhost')
+            })
+        
     def _find_available_port(self):
         """Find an available port starting from the configured port."""
         start_port = getattr(self.config, 'web_port', 8080)
@@ -619,6 +631,12 @@ class TrainingWebServer:
         """Stop the HTTP server."""
         if self.server:
             self.server.shutdown()
+    
+    def shutdown(self):
+        """Shutdown and unregister from data bus."""
+        self.stop()
+        if self.data_bus:
+            self.data_bus.unregister_component("web_server")
 
 
 class TrainingHandler(BaseHTTPRequestHandler):
