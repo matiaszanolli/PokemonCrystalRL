@@ -266,7 +266,8 @@ class SemanticContextSystem:
             
         # Location-based context influence
         if context and context.location_info:
-            location_type = context.location_info.get('current_map', '').lower()
+            location_value = context.location_info.get('current_map', '')
+            location_type = str(location_value).lower() if location_value else ''
             if 'gym' in location_type:
                 response['primary_intent'] = DialogueIntent.GYM_CHALLENGE.value
                 response['confidence'] = max(response['confidence'], 0.4)  # Ensure > 0.3

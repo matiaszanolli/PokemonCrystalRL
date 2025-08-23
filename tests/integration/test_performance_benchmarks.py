@@ -205,11 +205,17 @@ class TestLLMInferenceBenchmarks:
         }
     
     @pytest.mark.parametrize("backend", [LLMBackend.SMOLLM2, LLMBackend.LLAMA32_1B, LLMBackend.LLAMA32_3B])
-    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    def test_llm_inference_timing(self, mock_pyboy_class, backend, performance_expectations):
+    @patch('trainer.llm_manager.ollama')
+    def test_llm_inference_timing(self, mock_ollama, mock_pyboy_available, mock_pyboy_class, backend, performance_expectations):
         """Test LLM inference timing for each backend"""
         mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen = Mock()
+        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_instance.send_input = Mock()
+        mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(
@@ -221,44 +227,49 @@ class TestLLMInferenceBenchmarks:
         trainer = UnifiedPokemonTrainer(config)
         expectations = performance_expectations[backend]
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
-            # Mock response with realistic delay
-            def mock_generate(*args, **kwargs):
-                time.sleep(expectations["target_ms"] / 1000)  # Convert to seconds
-                return {'response': '5'}
+        # Mock response with realistic delay
+        def mock_generate(*args, **kwargs):
+            time.sleep(expectations["target_ms"] / 1000)  # Convert to seconds
+            return {'response': '5'}
+        
+        mock_ollama.generate.side_effect = mock_generate
+        mock_ollama.show.return_value = {'model': expectations["model"]}
+        
+        # Warm up
+        for _ in range(3):
+            trainer._get_llm_action()
+        
+        # Benchmark
+        timings = []
+        for _ in range(10):
+            start_time = time.perf_counter()
+            action = trainer._get_llm_action()
+            elapsed = time.perf_counter() - start_time
             
-            mock_ollama.generate.side_effect = mock_generate
-            mock_ollama.show.return_value = {'model': expectations["model"]}
+            if action is not None:  # Only count successful calls
+                timings.append(elapsed * 1000)  # Convert to ms
+        
+        if timings:
+            avg_timing = mean(timings)
+            max_timing = max(timings)
             
-            # Warm up
-            for _ in range(3):
-                trainer._get_llm_action()
+            # Should meet performance expectations
+            assert avg_timing <= expectations["max_ms"], f"{backend.value} avg: {avg_timing:.1f}ms > {expectations['max_ms']}ms"
+            assert max_timing <= expectations["max_ms"] * 1.5, f"{backend.value} max: {max_timing:.1f}ms too high"
             
-            # Benchmark
-            timings = []
-            for _ in range(10):
-                start_time = time.perf_counter()
-                action = trainer._get_llm_action()
-                elapsed = time.perf_counter() - start_time
-                
-                if action is not None:  # Only count successful calls
-                    timings.append(elapsed * 1000)  # Convert to ms
-            
-            if timings:
-                avg_timing = mean(timings)
-                max_timing = max(timings)
-                
-                # Should meet performance expectations
-                assert avg_timing <= expectations["max_ms"], f"{backend.value} avg: {avg_timing:.1f}ms > {expectations['max_ms']}ms"
-                assert max_timing <= expectations["max_ms"] * 1.5, f"{backend.value} max: {max_timing:.1f}ms too high"
-                
-                print(f"✅ {backend.value} Performance: {avg_timing:.1f}ms avg, {max_timing:.1f}ms max")
+            print(f"✅ {backend.value} Performance: {avg_timing:.1f}ms avg, {max_timing:.1f}ms max")
     
-    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    def test_llm_fallback_performance(self, mock_pyboy_class):
+    @patch('trainer.llm_manager.ollama')
+    def test_llm_fallback_performance(self, mock_ollama, mock_pyboy_available, mock_pyboy_class):
         """Test performance when LLM fails and falls back to rule-based"""
         mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen = Mock()
+        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_instance.send_input = Mock()
+        mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(
@@ -269,33 +280,38 @@ class TestLLMInferenceBenchmarks:
         
         trainer = UnifiedPokemonTrainer(config)
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
-            # Mock LLM failure
-            mock_ollama.generate.side_effect = Exception("LLM unavailable")
-            mock_ollama.show.side_effect = Exception("Model not found")
-            
-            # Benchmark fallback performance
-            start_time = time.time()
-            action_count = 100
-            
-            for i in range(action_count):
-                action = trainer._get_llm_action()
-                # Should still get valid actions via fallback
-                if action is not None:
-                    assert 1 <= action <= 8
-            
-            elapsed = time.time() - start_time
-            
-            # Fallback should be very fast (< 30ms total for 100 calls)
-            assert elapsed < 0.03, f"LLM fallback too slow: {elapsed:.4f}s for {action_count} calls"
-            
-            print(f"✅ LLM Fallback Performance: {elapsed*1000:.2f}ms for {action_count} calls")
+        # Mock LLM failure
+        mock_ollama.generate.side_effect = Exception("LLM unavailable")
+        mock_ollama.show.side_effect = Exception("Model not found")
+        
+        # Benchmark fallback performance
+        start_time = time.time()
+        action_count = 100
+        
+        for i in range(action_count):
+            action = trainer._get_llm_action()
+            # Should still get valid actions via fallback
+            if action is not None:
+                assert 1 <= action <= 8
+        
+        elapsed = time.time() - start_time
+        
+        # Fallback should be very fast (< 30ms total for 100 calls)
+        assert elapsed < 0.03, f"LLM fallback too slow: {elapsed:.4f}s for {action_count} calls"
+        
+        print(f"✅ LLM Fallback Performance: {elapsed*1000:.2f}ms for {action_count} calls")
     
-    @patch('trainer.llm_manager.ollama')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    def test_adaptive_llm_interval_performance(self, mock_pyboy_class):
+    @patch('trainer.llm_manager.ollama')
+    def test_adaptive_llm_interval_performance(self, mock_ollama, mock_pyboy_available, mock_pyboy_class):
         """Test adaptive LLM interval performance optimization"""
         mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen = Mock()
+        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_instance.send_input = Mock()
+        mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(
@@ -308,49 +324,48 @@ class TestLLMInferenceBenchmarks:
         
         trainer = UnifiedPokemonTrainer(config)
         
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
-            # Mock slow LLM responses initially
-            def slow_generate(*args, **kwargs):
-                time.sleep(0.004)  # 4ms delay (simulated slow)
-                return {'response': '5'}
-            
-            mock_ollama.generate.side_effect = slow_generate
-            mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
-            
-            original_interval = trainer.adaptive_llm_interval
-            
-            # Trigger 10 slow LLM calls to activate adaptive interval
-            for i in range(10):
-                trainer.stats['llm_calls'] = i + 1
-                trainer._track_llm_performance(4.5)  # Report slow response times
-            
-            # Interval should have increased
-            assert trainer.adaptive_llm_interval > original_interval
-            increased_interval = trainer.adaptive_llm_interval
-            
-            print(f"✅ Adaptive Interval Increased: {original_interval} → {increased_interval}")
-            
-            # Now mock fast responses - clear the window first with many fast responses
-            def fast_generate(*args, **kwargs):
-                time.sleep(0.001)  # 1ms delay (simulated fast)
-                return {'response': '5'}
-            
-            mock_ollama.generate.side_effect = fast_generate
-            
-            # Add enough fast calls to fill the entire sliding window (25 calls)
-            # This ensures the average drops below the 1.5s threshold
-            for i in range(10, 35):
-                trainer.stats['llm_calls'] = i + 1
-                trainer._track_llm_performance(0.8)  # Report fast response times
-            
-            # Interval should have decreased
-            assert trainer.adaptive_llm_interval < increased_interval
-            final_interval = trainer.adaptive_llm_interval
-            
-            print(f"✅ Adaptive Interval Decreased: {increased_interval} → {final_interval}")
-            
-            # But should not go below original
-            assert trainer.adaptive_llm_interval >= original_interval
+        # Mock slow LLM responses initially
+        def slow_generate(*args, **kwargs):
+            time.sleep(0.004)  # 4ms delay (simulated slow)
+            return {'response': '5'}
+        
+        mock_ollama.generate.side_effect = slow_generate
+        mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
+        
+        original_interval = trainer.adaptive_llm_interval
+        
+        # Trigger 10 slow LLM calls to activate adaptive interval
+        for i in range(10):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(4.5)  # Report slow response times
+        
+        # Interval should have increased
+        assert trainer.adaptive_llm_interval > original_interval
+        increased_interval = trainer.adaptive_llm_interval
+        
+        print(f"✅ Adaptive Interval Increased: {original_interval} → {increased_interval}")
+        
+        # Now mock fast responses - clear the window first with many fast responses
+        def fast_generate(*args, **kwargs):
+            time.sleep(0.001)  # 1ms delay (simulated fast)
+            return {'response': '5'}
+        
+        mock_ollama.generate.side_effect = fast_generate
+        
+        # Add enough fast calls to fill the entire sliding window (25 calls)
+        # This ensures the average drops below the 1.5s threshold
+        for i in range(10, 35):
+            trainer.stats['llm_calls'] = i + 1
+            trainer._track_llm_performance(0.8)  # Report fast response times
+        
+        # Interval should have decreased
+        assert trainer.adaptive_llm_interval < increased_interval
+        final_interval = trainer.adaptive_llm_interval
+        
+        print(f"✅ Adaptive Interval Decreased: {increased_interval} → {final_interval}")
+        
+        # But should not go below original
+        assert trainer.adaptive_llm_interval >= original_interval
     
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
@@ -393,7 +408,7 @@ class TestMemoryPerformanceBenchmarks:
     """Test memory usage and performance characteristics"""
     
     @pytest.fixture
-    @patch('scripts.pokemon_trainer.PyBoy')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()

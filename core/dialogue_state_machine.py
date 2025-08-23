@@ -120,10 +120,17 @@ class DialogueStateMachine:
         # Create semantic analysis context
         from core.semantic_context_system import GameContext
         
+        # Ensure location_info is a dictionary
+        location_info = game_state.get('location', {})
+        if isinstance(location_info, int):
+            location_info = {'current_map': location_info}
+        elif not isinstance(location_info, dict):
+            location_info = {}
+        
         context = GameContext(
             current_objective=game_state.get('objective'),
             player_progress=game_state.get('player', {}),
-            location_info=game_state.get('location', {}),
+            location_info=location_info,
             recent_events=self.dialogue_history[-5:],
             active_quests=game_state.get('quests', [])
         )
@@ -146,8 +153,9 @@ class DialogueStateMachine:
             cursor = conn.cursor()
             
             # Store dialogue session if new
-            if not any(cursor.execute("SELECT 1 FROM dialogue_sessions WHERE session_id = ?", 
-                                    (self.current_session_id,))):
+            cursor.execute("SELECT 1 FROM dialogue_sessions WHERE session_id = ?", 
+                          (self.current_session_id,))
+            if not cursor.fetchone():
                 cursor.execute("""
                     INSERT INTO dialogue_sessions (session_id, start_time, npc_type)
                     VALUES (?, ?, ?)
@@ -258,11 +266,18 @@ class DialogueStateMachine:
         if not dialogue_text:
             return None
             
+        # Ensure location_info is a dictionary
+        location_info = game_state.get('location', {})
+        if isinstance(location_info, int):
+            location_info = {'current_map': location_info}
+        elif not isinstance(location_info, dict):
+            location_info = {}
+            
         # Create context from game state
         context = GameContext(
             current_objective=game_state.get('objective'),
             player_progress=game_state.get('player', {}),
-            location_info=game_state.get('location', {}),
+            location_info=location_info,
             recent_events=self.dialogue_history[-5:],
             active_quests=game_state.get('quests', [])
         )
@@ -291,15 +306,47 @@ class DialogueStateMachine:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Dialogue sessions table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS dialogue_sessions (
-                    session_id INTEGER PRIMARY KEY,
-                    start_time FLOAT,
-                    end_time FLOAT,
-                    npc_type TEXT
-                )
-            """)
+            # Check if dialogue_sessions table exists and get its schema
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dialogue_sessions'")
+            table_exists = cursor.fetchone() is not None
+            
+            if table_exists:
+                # Check if session_id column exists
+                cursor.execute("PRAGMA table_info(dialogue_sessions)")
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                if 'session_id' not in columns:
+                    # Migrate old table structure
+                    cursor.execute("ALTER TABLE dialogue_sessions RENAME TO dialogue_sessions_old")
+                    cursor.execute("""
+                        CREATE TABLE dialogue_sessions (
+                            session_id INTEGER PRIMARY KEY,
+                            start_time FLOAT,
+                            end_time FLOAT,
+                            npc_type TEXT
+                        )
+                    """)
+                    # Migrate data if old table had compatible columns
+                    try:
+                        cursor.execute("""
+                            INSERT INTO dialogue_sessions (session_id, start_time, npc_type)
+                            SELECT id, CAST(session_start AS FLOAT), npc_type FROM dialogue_sessions_old
+                            WHERE id IS NOT NULL
+                        """)
+                    except sqlite3.Error:
+                        # If migration fails, just create empty table
+                        pass
+                    cursor.execute("DROP TABLE dialogue_sessions_old")
+            else:
+                # Create new table with correct schema
+                cursor.execute("""
+                    CREATE TABLE dialogue_sessions (
+                        session_id INTEGER PRIMARY KEY,
+                        start_time FLOAT,
+                        end_time FLOAT,
+                        npc_type TEXT
+                    )
+                """)
             
             # Dialogue choices table
             cursor.execute("""
@@ -312,14 +359,55 @@ class DialogueStateMachine:
                 )
             """)
             
-            # NPC interaction tracking table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS npc_interactions (
-                    npc_type TEXT PRIMARY KEY,
-                    interaction_count INTEGER,
-                    last_interaction FLOAT
-                )
-            """)
+            # Check if npc_interactions table exists and get its schema
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='npc_interactions'")
+            npc_table_exists = cursor.fetchone() is not None
+            
+            if npc_table_exists:
+                # Check the current schema
+                cursor.execute("PRAGMA table_info(npc_interactions)")
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                # If the old schema with npc_identifier exists, migrate to new schema
+                if 'npc_identifier' in columns:
+                    # Rename old table
+                    cursor.execute("ALTER TABLE npc_interactions RENAME TO npc_interactions_old")
+                    
+                    # Create new table with simplified schema
+                    cursor.execute("""
+                        CREATE TABLE npc_interactions (
+                            npc_type TEXT PRIMARY KEY,
+                            interaction_count INTEGER,
+                            last_interaction FLOAT
+                        )
+                    """)
+                    
+                    # Migrate data from old table, aggregating by npc_type
+                    try:
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO npc_interactions (npc_type, interaction_count, last_interaction)
+                            SELECT npc_type, 
+                                   SUM(interaction_count) as total_count,
+                                   MAX(datetime(last_interaction)) as latest_interaction
+                            FROM npc_interactions_old 
+                            GROUP BY npc_type
+                        """)
+                    except sqlite3.Error as e:
+                        # If migration fails, just create empty table
+                        print(f"Warning: Could not migrate npc_interactions data: {e}")
+                        pass
+                    
+                    # Drop old table
+                    cursor.execute("DROP TABLE npc_interactions_old")
+            else:
+                # Create new table with correct schema
+                cursor.execute("""
+                    CREATE TABLE npc_interactions (
+                        npc_type TEXT PRIMARY KEY,
+                        interaction_count INTEGER,
+                        last_interaction FLOAT
+                    )
+                """)
             
             conn.commit()
             

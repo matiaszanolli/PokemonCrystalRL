@@ -8,7 +8,7 @@ showing how semantic analysis enhances dialogue understanding and decision-makin
 
 import sys
 from pathlib import Path
-from core.vision_processor import DetectedText, VisualContext
+from shared_types import DetectedText, VisualContext
 from core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
 from core.semantic_context_system import SemanticContextSystem, GameContext, DialogueIntent
 
