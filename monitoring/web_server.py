@@ -404,12 +404,24 @@ class WebServer:
     
     async def _cleanup_loop(self) -> None:
         """Periodic cleanup of dead connections."""
-        while self.is_running:
-            with self._ws_lock:
-                dead = {ws for ws in self._ws_clients if ws.closed}
-                self._ws_clients.difference_update(dead)
-            
-            await asyncio.sleep(60)  # Run every minute
+        try:
+            while self.is_running:
+                with self._ws_lock:
+                    dead = {ws for ws in self._ws_clients if ws.closed}
+                    self._ws_clients.difference_update(dead)
+                
+                # Use asyncio.wait_for with timeout to make cancellation more responsive
+                try:
+                    await asyncio.wait_for(asyncio.sleep(60), timeout=60)
+                except asyncio.TimeoutError:
+                    continue  # This shouldn't happen, but just in case
+        except asyncio.CancelledError:
+            self.logger.debug("Cleanup loop cancelled")
+            raise
+        except Exception as e:
+            self.logger.error(f"Error in cleanup loop: {e}")
+        finally:
+            self.logger.debug("Cleanup loop finished")
     
     def _setup_signal_handlers(self) -> None:
         """Setup handlers for system signals."""
@@ -435,26 +447,46 @@ class WebServer:
             self.logger.info(f"Received exit signal {sig.name}...")
         
         self.logger.info("Shutting down web server...")
+        
+        # Set shutdown flag first
         self.is_running = False
         
-        # Close all WebSocket connections
-        with self._ws_lock:
-            for ws in self._ws_clients:
-                if not ws.closed:
-                    await ws.close(code=aiohttp.WSCloseCode.GOING_AWAY,
-                                message="Server shutdown")
-        
-        # Cancel cleanup task
+        # Cancel cleanup task with proper error handling
         if self._cleanup_task and not self._cleanup_task.done():
+            self.logger.debug("Cancelling cleanup task...")
             self._cleanup_task.cancel()
             try:
-                await self._cleanup_task
+                await asyncio.wait_for(self._cleanup_task, timeout=5.0)
             except asyncio.CancelledError:
-                pass
+                self.logger.debug("Cleanup task cancelled successfully")
+            except asyncio.TimeoutError:
+                self.logger.warning("Cleanup task cancellation timed out")
+            except Exception as e:
+                self.logger.error(f"Error during cleanup task cancellation: {e}")
         
-        # Shutdown the application
-        await self.app.shutdown()
-        await self.app.cleanup()
+        # Close all WebSocket connections with error handling
+        try:
+            with self._ws_lock:
+                close_tasks = []
+                for ws in self._ws_clients:
+                    if not ws.closed:
+                        close_tasks.append(ws.close(
+                            code=aiohttp.WSCloseCode.GOING_AWAY,
+                            message="Server shutdown"
+                        ))
+                
+                if close_tasks:
+                    await asyncio.gather(*close_tasks, return_exceptions=True)
+        except Exception as e:
+            self.logger.error(f"Error closing WebSocket connections: {e}")
+        
+        # Shutdown the application with error handling
+        try:
+            await self.app.shutdown()
+            await self.app.cleanup()
+            self.logger.info("Web server shutdown complete")
+        except Exception as e:
+            self.logger.error(f"Error during application shutdown: {e}")
     
     async def start(self) -> None:
         """Start the web server."""
@@ -510,16 +542,44 @@ class WebServer:
             self._ready.set()  # Signal server is ready
             loop.run_forever()
         except KeyboardInterrupt:
+            self.logger.info("Received keyboard interrupt")
+            loop.run_until_complete(self.shutdown())
+        except Exception as e:
+            self.logger.error(f"Error in server run loop: {e}")
             loop.run_until_complete(self.shutdown())
         finally:
+            # Cancel any remaining tasks
+            pending_tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
+            if pending_tasks:
+                self.logger.info(f"Cancelling {len(pending_tasks)} pending tasks...")
+                for task in pending_tasks:
+                    task.cancel()
+                
+                # Wait for tasks to be cancelled
+                try:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending_tasks, return_exceptions=True)
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error cancelling pending tasks: {e}")
+            
             loop.close()
+            self.logger.debug("Event loop closed")
     
     def run_in_thread(self) -> threading.Thread:
         """Run the server in a separate thread and wait for it to be ready."""
-        thread = threading.Thread(target=self.run, daemon=True)
+        def run_with_exception_handling():
+            try:
+                self.run()
+            except Exception as e:
+                self.logger.error(f"Error in server thread: {e}")
+                raise
+        
+        thread = threading.Thread(target=run_with_exception_handling, daemon=True)
         thread.start()
         # Wait for server to be ready
-        self._ready.wait(timeout=5.0)
+        if not self._ready.wait(timeout=10.0):
+            self.logger.warning("Server did not become ready within timeout")
         return thread
 
 

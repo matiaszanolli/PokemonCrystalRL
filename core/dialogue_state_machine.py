@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
 import time
+from core.semantic_context_system import GameContext, SemanticContextSystem
 from vision.vision_processor import VisualContext
 
 
