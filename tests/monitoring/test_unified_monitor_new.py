@@ -19,9 +19,18 @@ class TestUnifiedMonitor:
     @pytest.fixture
     def monitor(self):
         """Create a test monitor instance."""
-        monitor = UnifiedMonitor(host='127.0.0.1', port=5000)
-        yield monitor
-        monitor.stop_monitoring()
+        # Mock Flask and SocketIO for all tests using this fixture
+        with patch('monitoring.unified_monitor.Flask') as mock_flask, \
+             patch('monitoring.unified_monitor.SocketIO') as mock_socketio:
+            
+            mock_app = Mock()
+            mock_app.config = {}
+            mock_flask.return_value = mock_app
+            mock_socketio.return_value = Mock()
+            
+            monitor = UnifiedMonitor(host='127.0.0.1', port=5000)
+            yield monitor
+            monitor.stop_monitoring()
 
     def test_init(self, monitor):
         """Test monitor initialization."""
@@ -135,6 +144,8 @@ class TestUnifiedMonitor:
              patch('monitoring.unified_monitor.SocketIO') as mock_socketio:
             
             mock_app = Mock()
+            # Configure the mock app to have a proper config dictionary
+            mock_app.config = {}
             mock_flask.return_value = mock_app
             mock_socketio.return_value = Mock()
             

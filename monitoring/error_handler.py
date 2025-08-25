@@ -288,6 +288,12 @@ class ErrorHandler:
             # Record error in database if available
             self._record_error_in_db(error_context, recovery_strategy)
             
+            # Handle critical errors by changing training state
+            if severity == ErrorSeverity.CRITICAL and hasattr(self, '_monitor'):
+                from .web_monitor import TrainingState
+                if hasattr(self._monitor, 'training_state'):
+                    self._monitor.training_state = TrainingState.ERROR
+            
             # Queue for notification
             self.notification_queue.put(error_context)
             

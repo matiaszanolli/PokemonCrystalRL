@@ -88,14 +88,32 @@ class UnifiedMonitor:
             self.logger.warning("Error handler not available")
         
         # Find template directory relative to this file
-        template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'templates')
+        # First try the core/monitoring/web/templates directory
+        template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'core', 'monitoring', 'web', 'templates')
         if not os.path.exists(template_dir):
-            template_dir = 'templates'  # Fallback to local templates
+            # Fallback to static/templates
+            template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'templates')
+            if not os.path.exists(template_dir):
+                # Create a minimal templates directory if none exists
+                template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+                os.makedirs(template_dir, exist_ok=True)
+                # Create a minimal dashboard.html if it doesn't exist
+                dashboard_path = os.path.join(template_dir, 'dashboard.html')
+                if not os.path.exists(dashboard_path):
+                    with open(dashboard_path, 'w') as f:
+                        f.write('''<!DOCTYPE html>
+<html><head><title>Pokemon Crystal RL Monitor</title></head>
+<body><h1>Pokemon Crystal RL Monitor</h1><p>Monitoring system is running.</p></body></html>''')
+        
+        # Setup static directory
+        static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'core', 'monitoring', 'web')
+        if not os.path.exists(static_dir):
+            static_dir = 'static'
         
         # Flask app setup
         self.app = Flask(__name__, 
                         template_folder=template_dir,
-                        static_folder='static')
+                        static_folder=static_dir)
         self.app.config['SECRET_KEY'] = 'pokemon_rl_monitor'
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode='threading')
         
@@ -137,7 +155,15 @@ class UnifiedMonitor:
         @self.app.route('/')
         def dashboard():
             """Main dashboard page"""
-            return render_template('dashboard.html')
+            try:
+                return render_template('dashboard.html')
+            except Exception as e:
+                self.logger.warning(f"Template rendering failed: {e}")
+                # Return a simple HTML response if template fails
+                return '''<!DOCTYPE html>
+<html><head><title>Pokemon Crystal RL Monitor</title></head>
+<body><h1>Pokemon Crystal RL Monitor</h1><p>Monitoring system is running.</p>
+<p>Status: <span id="status">Active</span></p></body></html>'''
         
         @self.app.route('/api/status')
         def get_status():
@@ -541,12 +567,11 @@ class UnifiedMonitor:
         # Store in database if available
         if self.db and self.current_run_id:
             try:
-                for name, value in metrics.items():
-                    self.db.record_metric(
-                        run_id=self.current_run_id,
-                        metric_name=name,
-                        metric_value=value
-                    )
+                # Record all metrics with the same timestamp
+                self.db.record_metrics(
+                    run_id=self.current_run_id,
+                    metrics=metrics
+                )
             except Exception as e:
                 self.logger.error(f"Failed to record metrics in database: {e}")
         

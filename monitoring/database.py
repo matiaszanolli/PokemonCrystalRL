@@ -56,11 +56,11 @@ class DatabaseManager:
                     UNIQUE (run_id, episode_number)
                 );
                 
-                -- Steps table
+                -- Steps table (episode_id can be NULL)
                 CREATE TABLE IF NOT EXISTS steps (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     run_id TEXT NOT NULL,
-                    episode_id INTEGER NOT NULL,
+                    episode_id INTEGER,
                     step_number INTEGER NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     action TEXT NOT NULL,
@@ -301,7 +301,7 @@ class DatabaseManager:
             ))
             state_id = cursor.lastrowid
             
-            # Get current episode
+            # Get current episode (optional)
             cursor.execute("""
                 SELECT id
                 FROM episodes
@@ -312,7 +312,7 @@ class DatabaseManager:
             result = cursor.fetchone()
             episode_id = result[0] if result else None
             
-            # Record step
+            # Record step (episode_id can be NULL)
             cursor.execute("""
                 INSERT INTO steps (
                     run_id,
@@ -459,7 +459,35 @@ class DatabaseManager:
         query += " ORDER BY timestamp"
         
         with self._connect() as conn:
-            return pd.read_sql_query(query, conn, params=params)
+            df = pd.read_sql_query(query, conn, params=params)
+            
+            # If we have metrics data, pivot to have metric names as columns
+            if not df.empty and 'metric_name' in df.columns and 'metric_value' in df.columns:
+                # Use pandas pivot_table to transform the data
+                pivoted = df.pivot_table(
+                    index=['run_id', 'timestamp'], 
+                    columns='metric_name', 
+                    values='metric_value',
+                    aggfunc='first'
+                )
+                
+                # Reset index to make run_id and timestamp regular columns
+                pivoted = pivoted.reset_index()
+                
+                # Add id column (use the first id for each timestamp group)
+                id_mapping = df.groupby('timestamp')['id'].first().to_dict()
+                pivoted['id'] = pivoted['timestamp'].map(id_mapping)
+                
+                # Reorder columns to match expected format
+                cols = ['id', 'run_id', 'timestamp'] + [col for col in pivoted.columns if col not in ['id', 'run_id', 'timestamp']]
+                pivoted = pivoted[cols]
+                
+                # Reset column names index
+                pivoted.columns.name = None
+                
+                return pivoted
+            else:
+                return df
     
     def get_run_system_metrics(
         self,
