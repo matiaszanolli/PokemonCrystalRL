@@ -335,9 +335,10 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         return actions[step % len(actions)]
 
     def _get_llm_action(self) -> Optional[int]:
-        """Get action from LLM manager"""
+        """Get action from LLM manager with fallback to rule-based"""
         if not self.llm_manager:
-            return None
+            # Fallback to rule-based when no LLM manager available
+            return self._get_rule_based_action(self.stats['total_actions'])
 
         try:
             start_time = time.time()

@@ -219,7 +219,11 @@ class PokemonTrainer:
         """Get current training statistics."""
         if self._training_active:
             self._update_stats()
-        return self.stats
+        
+        # Combine stats with error counts for comprehensive API data
+        combined_stats = self.stats.copy()
+        combined_stats.update(self.error_count)
+        return combined_stats
 
     def _run_legacy_fast_training(self):
         """Run training in legacy fast mode with basic monitoring."""
