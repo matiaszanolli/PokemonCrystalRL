@@ -464,24 +464,30 @@ class TestAntiStuckIntegration:
         """Test anti-stuck works with LLM system"""
         trainer.config.llm_backend = LLMBackend.SMOLLM2
         trainer.config.llm_interval = 5
+        
+        # Create a consistent screen to trigger stuck detection
+        stuck_screen = np.ones((144, 160, 3), dtype=np.uint8) * 128
+        
         with patch('trainer.llm_manager.ollama') as mock_ollama:
             mock_ollama.generate.return_value = {'response': '5'}  # Always A button
             mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
             
-            # Simulate LLM getting stuck on same action
-            actions = []
-            for step in range(20):
-                if step % trainer.config.llm_interval == 0:
-                    action = trainer.llm_manager.get_llm_action(np.zeros((144, 160, 3)))
-                else:
-                    action = trainer._get_rule_based_action(step)
+            # Mock screenshot capture to return the same screen consistently
+            with patch.object(trainer, '_simple_screenshot_capture', return_value=stuck_screen):
+                # Simulate getting stuck on same action - need enough steps to trigger stuck detection
+                actions = []
+                for step in range(40):  # Increased to trigger stuck detection (need >30)
+                    if step % trainer.config.llm_interval == 0 and trainer.llm_manager:
+                        action = trainer.llm_manager.get_llm_action(np.zeros((144, 160, 3)))
+                    else:
+                        action = trainer._get_rule_based_action(step)
+                    
+                    if action:
+                        actions.append(action)
                 
-                if action:
-                    actions.append(action)
-            
-            # Anti-stuck should kick in and provide variety
-            unique_actions = set(actions)
-            assert len(unique_actions) > 1, "Anti-stuck should prevent single action loops"
+                # Anti-stuck should kick in and provide variety
+                unique_actions = set(actions)
+                assert len(unique_actions) > 1, "Anti-stuck should prevent single action loops"
     
     def test_stuck_recovery_effectiveness(self, trainer):
         """Test effectiveness of stuck recovery over time"""

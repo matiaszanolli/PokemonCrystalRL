@@ -80,6 +80,8 @@ def mock_llm_manager(monkeypatch, request):
         marker.name in ['enhanced_prompting', 'llm', 'multi_model', 'performance'] 
         for marker in request.node.iter_markers()
     ):
+        # For LLM tests, ensure ollama is available
+        monkeypatch.setattr('trainer.llm_manager.OLLAMA_AVAILABLE', True)
         return
     
     # Apply mock for other tests
@@ -91,32 +93,38 @@ def mock_llm_manager(monkeypatch, request):
 @pytest.fixture
 def enhanced_llm_trainer(mock_config):
     """Create trainer with enhanced LLM capabilities for testing."""
-    with patch('trainer.trainer.PyBoy') as mock_pyboy_class:
+    with patch('trainer.trainer.PyBoy') as mock_pyboy_class, \
+         patch('trainer.llm_manager.ollama') as mock_ollama, \
+         patch('trainer.llm_manager.OLLAMA_AVAILABLE', True):
+        
+        # Setup PyBoy mock
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen = Mock()
+        mock_pyboy_instance.screen.ndarray = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        # Don't mock the LLM manager for these tests - we want to test it
-        with patch('trainer.llm_manager.ollama') as mock_ollama:
-            mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
-            mock_ollama.generate.return_value = {'response': '5'}
-            
-            trainer = UnifiedPokemonTrainer(mock_config)
-            
-            # Ensure LLM manager is properly initialized
-            if trainer.llm_manager is None:
-                from trainer.llm_manager import LLMManager
-                trainer.llm_manager = LLMManager(
-                    model=mock_config.llm_backend.value,
-                    interval=mock_config.llm_interval
-                )
-            
-            # Add game state detector if missing
-            if not hasattr(trainer, 'game_state_detector'):
-                from trainer.game_state_detection import GameStateDetector
-                trainer.game_state_detector = GameStateDetector()
-            
-            return trainer
+        # Setup ollama mock
+        mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
+        mock_ollama.generate.return_value = {'response': '5'}
+        
+        # Create trainer - this should now work with mocked ollama
+        trainer = UnifiedPokemonTrainer(mock_config)
+        
+        # Force initialize LLM manager if it's still None
+        if trainer.llm_manager is None:
+            from trainer.llm_manager import LLMManager
+            trainer.llm_manager = LLMManager(
+                model=mock_config.llm_backend.value,
+                interval=mock_config.llm_interval
+            )
+        
+        # Ensure game state detector exists
+        if not hasattr(trainer, 'game_state_detector') or trainer.game_state_detector is None:
+            from trainer.game_state_detection import GameStateDetector
+            trainer.game_state_detector = GameStateDetector()
+        
+        return trainer
 
 @pytest.fixture
 def choice_system():

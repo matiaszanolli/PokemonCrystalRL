@@ -443,6 +443,9 @@ class TestPromptPerformanceOptimizations:
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
+        mock_pyboy_instance.frame_count = 1000
+        mock_pyboy_instance.screen = Mock()
+        mock_pyboy_instance.screen.ndarray = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(
@@ -452,7 +455,31 @@ class TestPromptPerformanceOptimizations:
             headless=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        # Mock ollama availability and initialization
+        with patch('trainer.llm_manager.OLLAMA_AVAILABLE', True), \
+             patch('trainer.llm_manager.ollama') as mock_ollama:
+            
+            # Setup ollama mock
+            mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
+            mock_ollama.generate.return_value = {'response': '5'}
+            
+            # Create trainer - this should now work with mocked ollama
+            trainer = UnifiedPokemonTrainer(config)
+            
+            # Force initialize LLM manager if it's still None
+            if trainer.llm_manager is None:
+                from trainer.llm_manager import LLMManager
+                trainer.llm_manager = LLMManager(
+                    model=config.llm_backend.value,
+                    interval=config.llm_interval
+                )
+            
+            # Ensure game state detector exists
+            if not hasattr(trainer, 'game_state_detector') or trainer.game_state_detector is None:
+                from trainer.game_state_detection import GameStateDetector
+                trainer.game_state_detector = GameStateDetector()
+            
+            return trainer
     
     def test_prompt_caching_efficiency(self, trainer):
         """Test that LLM calls are efficient"""
@@ -487,13 +514,15 @@ class TestPromptPerformanceOptimizations:
             
             # Simulate 10 actions
             for step in range(10):
-                action = trainer.llm_manager.get_llm_action(np.zeros((144, 160, 3))) if step % trainer.config.llm_interval == 0 else None
-                if mock_ollama.generate.called:
-                    llm_call_count += 1
-                    mock_ollama.reset_mock()
+                # Only call LLM on interval steps, skip others
+                if step % trainer.config.llm_interval == 0:
+                    action = trainer.llm_manager.get_llm_action(np.zeros((144, 160, 3)))
+                    if mock_ollama.generate.called:
+                        llm_call_count += 1
+                        mock_ollama.reset_mock()
             
-            # Should have made approximately 10/3 = ~3 LLM calls
-            expected_calls = 10 // trainer.config.llm_interval
+            # Should have made approximately 10/3 = ~4 LLM calls (steps 0, 3, 6, 9)
+            expected_calls = (10 + trainer.config.llm_interval - 1) // trainer.config.llm_interval
             assert abs(llm_call_count - expected_calls) <= 1, f"Expected ~{expected_calls} LLM calls, got {llm_call_count}"
 
 

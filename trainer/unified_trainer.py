@@ -116,28 +116,13 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         # Capture screen for stuck detection
         screen = self._simple_screenshot_capture()
         if screen is not None:
-            # Detect game state (this updates stuck detection counters)
-            game_state = self._detect_game_state(screen)
+            # Use the GameStateDetector to detect game state and update stuck counters
+            game_state = self.game_state_detector.detect_game_state(screen)
             
-            # Update stuck counter based on screen hash
-            screen_hash = self._get_screen_hash(screen)
-            if screen_hash == getattr(self, 'last_screen_hash', None):
-                self.consecutive_same_screens += 1
-                if self.consecutive_same_screens > 15:
-                    self.stuck_counter += 1
-            else:
-                self.consecutive_same_screens = 0
-                if self.stuck_counter > 0:
-                    self.stuck_counter -= 1
-            
-            self.last_screen_hash = screen_hash
-            
-            # If we're stuck, return an unstuck action
-            if self.stuck_counter > 0:
-                # Use step and stuck_counter to determine action
-                actions = [1, 2, 3, 4]  # Movement actions
-                action_idx = (step + self.stuck_counter) % len(actions)
-                return actions[action_idx]
+            # Check if stuck and return unstuck action
+            if self.game_state_detector.is_stuck():
+                from trainer.game_state_detection import get_unstuck_action
+                return get_unstuck_action(step, self.game_state_detector.stuck_counter)
         
         # Default rule-based action
         return 5  # A button
