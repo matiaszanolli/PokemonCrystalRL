@@ -8,7 +8,7 @@ import numpy as np
 from unittest.mock import Mock, patch
 
 from trainer.trainer import TrainingConfig, PokemonTrainer
-from .mock_web_server import MockWebServer, ServerConfig
+from tests.trainer.mock_web_server import MockWebServer, ServerConfig
 
 # Mock PyBoy for tests
 @pytest.fixture

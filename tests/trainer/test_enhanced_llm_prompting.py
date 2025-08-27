@@ -19,19 +19,7 @@ import time
 import numpy as np
 from trainer.unified_trainer import UnifiedPokemonTrainer
 from trainer.trainer import TrainingConfig, LLMBackend
-
-# Import test system modules
-import sys
-import os
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, parent_dir)
-
-# Import the enhanced trainer system
-from trainer import (
-    UnifiedPokemonTrainer,
-    TrainingConfig,
-    LLMBackend
-)
+from trainer.unified_trainer import UnifiedPokemonTrainer
 
 
 @pytest.mark.enhanced_prompting

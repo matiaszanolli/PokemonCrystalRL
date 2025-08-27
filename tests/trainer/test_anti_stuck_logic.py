@@ -15,20 +15,8 @@ import numpy as np
 import time
 from unittest.mock import Mock, patch, MagicMock
 from collections import deque
+from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend
 from trainer.unified_trainer import UnifiedPokemonTrainer
-
-# Import test system modules
-import sys
-import os
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, parent_dir)
-
-# Import the enhanced trainer system
-from trainer import (
-    TrainingConfig,
-    TrainingMode,
-    LLMBackend
-)
 from trainer.game_state_detection import get_unstuck_action
 from trainer.training_strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
 

@@ -21,13 +21,8 @@ from pathlib import Path
 from monitoring.data_bus import DataBus, DataType
 from monitoring.web_server import WebServer as TrainingWebServer
 from .mock_llm_manager import MockLLMManager
-from trainer import (
-    PokemonTrainer,
-    TrainingConfig,
-    TrainingMode,
-    LLMBackend,
-    UnifiedPokemonTrainer
-)
+from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
+from trainer.unified_trainer import UnifiedPokemonTrainer
 
 
 import socket

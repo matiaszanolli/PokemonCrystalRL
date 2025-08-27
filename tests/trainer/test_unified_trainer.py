@@ -361,6 +361,28 @@ class TestWebDashboardAndHTTPPolling:
     """Test web dashboard and HTTP polling functionality"""
     
     @pytest.fixture
+    def mock_web_server(self):
+        """Create a mock web server for testing"""
+        # Create the ServerConfig class mock first
+        server_config_cls = Mock()
+        server_config_cls.from_training_config = Mock()
+        server_config_cls.from_training_config.return_value = Mock(port=8080)
+        
+        # Create the server instance mock
+        mock_server = Mock()
+        mock_server.start.return_value = True
+        mock_server.run_in_thread = Mock()
+        mock_server.server = Mock()
+        
+        # Create the TrainingWebServer class mock
+        mock_server_cls = Mock()
+        mock_server_cls.ServerConfig = server_config_cls
+        mock_server_cls.return_value = mock_server
+        
+        with patch('trainer.trainer.TrainingWebServer', mock_server_cls):
+            yield mock_server_cls
+    
+    @pytest.fixture
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
     def web_enabled_trainer(self, mock_pyboy_class):
@@ -378,36 +400,30 @@ class TestWebDashboardAndHTTPPolling:
         
         return UnifiedPokemonTrainer(config)
     
-@patch('monitoring.web_server.TrainingWebServer')
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    def test_web_server_initialization(self, mock_pyboy_class, mock_pyboy, mock_web_server):
+    def test_web_server_initialization(self, mock_web_server, mock_pyboy_class):
         """Test web server initialization"""
-        # Create mocks
-        mock_server = Mock()
-        mock_server.start.return_value = True
-        mock_server.run_in_thread = Mock()
-        mock_server.server = Mock()
-        mock_web_server_class.return_value = mock_server
-
-        # Create server config mock attached to the class
-        mock_server_config = Mock()
-        mock_server_config.from_training_config = Mock(return_value=Mock(port=8080))
-        mock_web_server_class.ServerConfig = mock_server_config
-
+        # Mock PyBoy instance first
+        mock_pyboy_instance = Mock()
+        mock_pyboy_class.return_value = mock_pyboy_instance
+        
         # Create a test config
         config = TrainingConfig(
             rom_path="test.gbc",
-            enable_web=True
+            enable_web=True,
+            headless=True
         )
         
         # Create trainer with web server enabled
         trainer = UnifiedPokemonTrainer(config)
         
-        # Web server should be created and started
-        mock_web_server_class.assert_called_once()
-        mock_server.start.assert_called_once()
-        mock_server.run_in_thread.assert_called_once()
+        # Web server and its components should be properly initialized
+        assert mock_web_server.call_count == 1, "TrainingWebServer constructor should be called once"
+        
+        # Get the server instance and verify it was called correctly
+        server_instance = trainer.web_server
+        assert server_instance is not None, "Web server instance should be created"
+        assert server_instance.start.call_count == 1, "Web server start should be called once"
+        assert server_instance.run_in_thread.call_count == 1, "Web server run_in_thread should be called once"
     
     def test_screenshot_memory_management(self, web_enabled_trainer):
         """Test screenshot memory management"""
@@ -746,17 +762,25 @@ class TestIntegrationScenarios:
     
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-def test_full_training_cycle_with_recovery(self, mock_pyboy_class, integration_config):
-        mock_pyboy_class.return_value = None # Force recovery on first execution
+    def test_full_training_cycle_with_recovery(self, mock_pyboy_class, integration_config):
         """Test complete training cycle with PyBoy recovery"""
-        # Setup mocks
-        mock_pyboy_instance = Mock()
-        mock_pyboy_instance.frame_count = 1000
-        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
-        mock_pyboy_instance.send_input = Mock()
-        mock_pyboy_instance.tick = Mock()
-        mock_pyboy_instance.stop = Mock()
-        mock_pyboy_class.return_value = mock_pyboy_instance
+        # Setup PyBoy to fail on first init, then succeed
+        first_init = [True]
+        def mock_pyboy_factory(*args, **kwargs):
+            if first_init[0]:
+                first_init[0] = False
+                return None  # First initialization fails
+            
+            # Subsequent initializations succeed
+            mock_instance = Mock()
+            mock_instance.frame_count = 1000
+            mock_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+            mock_instance.send_input = Mock()
+            mock_instance.tick = Mock()
+            mock_instance.stop = Mock()
+            return mock_instance
+        
+        mock_pyboy_class.side_effect = mock_pyboy_factory
         
         trainer = None
         try:
@@ -1086,27 +1110,33 @@ class TestWebMonitoringEnhancements:
             debug_mode=True
         )
     
-@patch('trainer.trainer.PyBoy')
+    @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('monitoring.web_server.TrainingWebServer')
+    @patch('trainer.trainer.TrainingWebServer')
     def test_web_server_initialization(self, mock_web_server, mock_pyboy_class, web_trainer_config):
+        """Test enhanced web server initialization"""
         # Force port in config
         web_trainer_config.web_port = 9999
-        """Test enhanced web server initialization"""
+        
+        # Set up PyBoy mock
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
+        # Set up web server mock
         mock_server_instance = Mock()
-        mock_server_instance.start = Mock()
+        mock_server_instance.start.return_value = True
         mock_server_instance.server = Mock()
         mock_server_instance.server.serve_forever = Mock()
         mock_web_server.return_value = mock_server_instance
         
+        # Create trainer with web server enabled
         trainer = UnifiedPokemonTrainer(web_trainer_config)
         
-        # Enhanced web features should be initialized
-        assert trainer.web_server is not None
-        assert trainer.web_thread is not None
+        # Web server should be properly initialized
+        assert mock_web_server.call_count == 1, "TrainingWebServer should be called once"
+        assert trainer.web_thread is not None, "Web thread should be created"
+        assert trainer.screen_queue.maxsize == 30, "Screen queue should be initialized with maxsize=30"
+        assert trainer.capture_active is False, "Capture should not be active by default"
         assert trainer.screen_queue.maxsize == 30  # Memory-bounded queue
         assert trainer.capture_active is False
     
@@ -1350,7 +1380,7 @@ class TestLLMBackendSwitching:
         elapsed = time.time() - start_time
         
         # Should be very fast without LLM overhead
-assert elapsed < 0.1, f"Rule-based actions too slow: {elapsed:.4f}s for 100 actions"
+        assert elapsed < 0.1, f"Rule-based actions too slow: {elapsed:.4f}s for 100 actions"
 
 
 @pytest.mark.performance
