@@ -92,7 +92,11 @@ class ChoiceRecognitionSystem:
                 CREATE TABLE IF NOT EXISTS choice_recognitions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     dialogue_text TEXT,
-                    recognized_choices TEXT,
+                    choice_text TEXT,
+                    choice_type TEXT,
+                    confidence REAL,
+                    priority REAL,
+                    outcome TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
