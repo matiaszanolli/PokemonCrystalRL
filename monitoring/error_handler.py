@@ -525,6 +525,20 @@ class ErrorHandler:
         except Exception as e:
             self.logger.error(f"Failed to send circuit breaker notification: {e}")
     
+    def get_recent_errors(self) -> List[Dict[str, Any]]:
+        """Get list of recent errors."""
+        with self._error_lock:
+            return [{
+                'error_id': e.error_id,
+                'error_type': e.error_type,
+                'message': e.error_message,
+                'severity': e.severity.value,
+                'category': e.category.value,
+                'component': e.component,
+                'timestamp': e.timestamp,
+                'traceback': e.traceback
+            } for e in self.recent_errors]
+
     def get_error_stats(self) -> Dict[str, Any]:
         """Get error statistics."""
         with self._error_lock:

@@ -194,29 +194,38 @@ class PokemonTrainer:
         
         # Initialize the web server based on config and mode
         try:
-            if hasattr(self.config, '_mock_name'):
-                # Mock or test mode, use mock server
-                from tests.trainer.mock_web_server import MockWebServer
-                server_cls = MockWebServer
-            else:
-                server_cls = TrainingWebServer
-            
-            # Create config for server
-            if hasattr(server_cls, 'ServerConfig'):
+            try:
+                # For tests, always use mock server
+                if hasattr(self.config, '_mock_name'):
+                    # Mock or test mode, use mock server
+                    from tests.trainer.mock_web_server import MockWebServer
+                    server_cls = MockWebServer
+                else:
+                    server_cls = TrainingWebServer
+                
+                # Create config for server
                 server_config = server_cls.ServerConfig.from_training_config(self.config)
-            else:
-                # Fallback for mock server
-                server_config = type('ServerConfig', (), {
-                    'port': self.config.web_port,
-                    'host': self.config.web_host
-                })()
+            except ImportError:
+                # Not in test environment, use real server
+                server_cls = TrainingWebServer
+                server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
 
             # Create server instance with config and trainer
             server_inst = server_cls(server_config, self)
+            if not server_inst:
+                self.web_server = None
+                self.web_thread = None
+                return None
             
             # Start server (which may change port)
             started = server_inst.start() if hasattr(server_inst, 'start') else None
             if not started:
+                self.web_server = None
+                self.web_thread = None
+                return None
+
+            # Check if running - tests may need to verify this
+            if hasattr(server_inst, '_running') and not server_inst._running:
                 self.web_server = None
                 self.web_thread = None
                 return None

@@ -3,9 +3,9 @@
 import pytest
 import json
 import asyncio
-import websockets
 import tempfile
 import requests
+import socketio
 import time
 import numpy as np
 from pathlib import Path
@@ -16,7 +16,7 @@ from monitoring import (
     UnifiedMonitor,
     MonitorConfig,
 )
-from monitoring.trainer_monitor_bridge import TrainingState
+from monitoring.web_monitor import TrainingState
 
 @pytest.fixture
 def temp_dir():
@@ -27,11 +27,18 @@ def temp_dir():
 @pytest.fixture
 def test_config(temp_dir):
     """Create test configuration."""
+    # Find an available port
+    import socket
+    sock = socket.socket()
+    sock.bind(('', 0))
+    available_port = sock.getsockname()[1]
+    sock.close()
+    
     return MonitorConfig(
         db_path=str(temp_dir / "test.db"),
         data_dir=str(temp_dir / "data"),
         static_dir=str(temp_dir / "static"),
-        web_port=8099,  # Use non-standard port
+        web_port=available_port,  # Use dynamic port
         update_interval=0.1,
         snapshot_interval=0.5,
         max_events=1000,
@@ -40,14 +47,22 @@ def test_config(temp_dir):
     )
 
 @pytest.fixture
-def monitor(test_config):
+def error_handler():
+    """Create error handler for testing."""
+    from monitoring.error_handler import ErrorHandler, ErrorSeverity, ErrorCategory
+    return ErrorHandler()
+
+@pytest.fixture
+def monitor(test_config, error_handler):
     """Create and start monitor instance."""
     monitor = UnifiedMonitor(config=test_config)
+    monitor.error_handler = error_handler
     monitor.start_training(config={"test": True})
     
     # Start the web server in a separate thread
     import threading
     import time
+    import requests
     
     def run_server():
         monitor.run(debug=False)
@@ -55,8 +70,18 @@ def monitor(test_config):
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
     
-    # Wait for server to start
-    time.sleep(2)
+    # Wait for server to become available
+    start_time = time.time()
+    max_wait = 10  # Maximum wait time in seconds
+    while time.time() - start_time < max_wait:
+        try:
+            response = requests.get(f"http://localhost:{monitor.port}/api/status")
+            if response.status_code == 200:
+                break
+        except requests.ConnectionError:
+            time.sleep(0.1)
+    else:
+        raise TimeoutError("Server did not start within timeout period")
     
     try:
         yield monitor
@@ -132,73 +157,106 @@ class TestWebIntegration:
         assert "timestamp" in data
         assert "dimensions" in data
     
-    @pytest.mark.asyncio
-    async def test_websocket_connection(self, monitor):
-        """Test WebSocket connectivity."""
-        uri = f"ws://localhost:{monitor.port}/ws"
+    def test_websocket_connection(self, monitor):
+        """Test Socket.IO connectivity."""
+        # Create Socket.IO client
+        socket = socketio.Client()
+        socket.connect(f"http://localhost:{monitor.port}")
+
+        # Initialize response holder
+        response_data = None
+        done = False
+        def handle_response(data):
+            nonlocal response_data, done
+            response_data = data
+            done = True
+
+        # Register handler and emit test message
+        socket.on('test', handle_response)
+        socket.emit('test', {'message': 'test'})
+
+        # Wait for response with timeout
+        start = time.time()
+        while not done and time.time() - start < 5:
+            time.sleep(0.1)
         
-        async with websockets.connect(uri) as websocket:
-            # Send test message
-            await websocket.send(json.dumps({
-                "type": "test",
-                "data": {"message": "test"}
-            }))
-            
-            # Wait for response
-            response = await websocket.recv()
-            data = json.loads(response)
-            assert data["type"] == "test"
-            assert "timestamp" in data
+        socket.disconnect()
+        
+        assert response_data is not None
+        assert 'type' in response_data
+        assert response_data['type'] == 'test'
+        assert 'timestamp' in response_data
     
-    @pytest.mark.asyncio
-    async def test_real_time_updates(self, monitor):
-        """Test real-time updates via WebSocket."""
-        uri = f"ws://localhost:{monitor.port}/ws"
-        
+    def test_real_time_updates(self, monitor):
+        """Test real-time updates via Socket.IO."""
+        socket = socketio.Client()
+        socket.connect(f"http://localhost:{monitor.port}")
+
         updates_received = []
-        
-        async with websockets.connect(uri) as websocket:
-            # Update metrics
-            monitor.update_metrics({
-                "loss": 0.5,
-                "accuracy": 0.8
-            })
-            
-            # Should receive update
-            response = await websocket.recv()
-            data = json.loads(response)
-            updates_received.append(data)
-            
-            assert data["type"] == "metrics_update"
-            assert data["data"]["metrics"]["loss"] == 0.5
-            
-            # Update episode
-            monitor.update_episode(
-                episode=0,
-                total_reward=10.0,
-                steps=100,
-                success=True
-            )
-            
-            # Should receive update
-            response = await websocket.recv()
-            data = json.loads(response)
-            updates_received.append(data)
-            
-            assert data["type"] == "episode_update"
-            assert data["data"]["total_reward"] == 10.0
-            
+        done = False
+
+        def handle_metrics(data):
+            updates_received.append(('metrics', data))
+            check_done()
+
+        def handle_episode(data):
+            updates_received.append(('episode', data))
+            check_done()
+
+        def check_done():
+            nonlocal done
+            done = len(updates_received) >= 2
+
+        socket.on('metrics_update', handle_metrics)
+        socket.on('episode_update', handle_episode)
+
+        # Update metrics
+        monitor.update_metrics({
+            "loss": 0.5,
+            "accuracy": 0.8
+        })
+
+        # Update episode
+        monitor.update_episode(
+            episode=0,
+            total_reward=10.0,
+            steps=100,
+            success=True
+        )
+
+        # Wait for updates with timeout
+        start = time.time()
+        while not done and time.time() - start < 5:
+            time.sleep(0.1)
+
+        socket.disconnect()
+
         assert len(updates_received) >= 2
+
+        # Get metrics and episode updates
+        metrics_payload = next(data for type, data in updates_received if type == 'metrics')
+        episode_payload = next(data for type, data in updates_received if type == 'episode')
+
+        # metrics_payload is the full event data; access nested structure if present
+        metrics = metrics_payload.get('data', {}).get('metrics') or metrics_payload
+        assert metrics['loss'] == 0.5
+        assert metrics['accuracy'] == 0.8
+
+        # Episode payload may be nested as well
+        episode = episode_payload.get('data') or episode_payload
+        assert episode['episode'] == 0
+        assert episode['total_reward'] == 10.0
     
     def test_error_reporting(self, monitor):
         """Test error reporting via web interface."""
         # Generate error
         error = Exception("Test error")
+        from monitoring.error_handler import ErrorSeverity, ErrorCategory
         monitor.error_handler.handle_error(
             error=error,
             message="Test error message",
-            severity="error",
-            category="test",
+            severity=ErrorSeverity.ERROR,
+            category=ErrorCategory.SYSTEM,
             component="monitor"
         )
         
@@ -268,4 +326,4 @@ class TestWebIntegration:
         )
         assert response.status_code == 200
         assert "text/html" in response.headers["Content-Type"]
-        assert "Pokemon Crystal RL Monitor" in response.text
+        assert "Pokemon Crystal RL Training Monitor" in response.text

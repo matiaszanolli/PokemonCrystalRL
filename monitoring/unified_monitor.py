@@ -670,7 +670,7 @@ class UnifiedMonitor:
     def run(self, debug=False):
         """Run the monitoring server."""
         self.logger.info(f"🌐 Starting web monitor on http://{self.host}:{self.port}")
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=debug)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=debug, allow_unsafe_werkzeug=True)
 
 
 def main():

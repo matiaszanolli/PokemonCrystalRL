@@ -589,6 +589,7 @@ class WebServer:
 # Legacy HTTP server classes for backwards compatibility
 class TrainingWebServer:
     """Legacy training web server for backwards compatibility."""
+    ServerConfig = ServerConfig
     
     def __init__(self, config, trainer):
         self.config = config

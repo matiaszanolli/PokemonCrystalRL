@@ -24,7 +24,8 @@ def mock_pyboy():
 
 @pytest.fixture
 def mock_web_server():
-    with patch('trainer.trainer.WebServer', MockWebServer):
+    with patch('core.monitoring.web_server.TrainingWebServer', MockWebServer), \
+         patch('monitoring.web_server.TrainingWebServer', MockWebServer):
         yield MockWebServer
 
 @pytest.mark.web
@@ -100,7 +101,7 @@ class TestWebServerIntegration:
         )
         
         # Force server creation failure first
-        with patch('monitoring.web_server.WebServer.start') as mock_start:
+        with patch('core.monitoring.web_server.TrainingWebServer.start') as mock_start:
             mock_start.side_effect = Exception("Server start failed")
             trainer = PokemonTrainer(config)
             assert trainer.web_server is None
