@@ -9,6 +9,7 @@ Pokemon choices, etc.
 import json
 import sqlite3
 import time
+import re
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
@@ -282,26 +283,100 @@ class ChoiceRecognitionSystem:
     def _extract_choice_texts(self, detected_texts: List) -> List[Dict]:
         """Extract potential choice texts from detected text"""
         choice_texts = []
+        
+        # Track special cases like yes/no in dialogue blocks
+        dialogue_choices = []
+        bottom_row_texts = []
+        
         for text in detected_texts:
             # Handle None text
             if not text or not hasattr(text, 'text') or text.text is None:
                 continue
                 
-            if 2 <= len(text.text) <= 20:  # Reasonable length for a choice
-                choice_texts.append({
-                    "text": text.text,
-                    "coordinates": getattr(text, 'bbox', (0, 0, 0, 0)),
-                    "confidence": getattr(text, 'confidence', 0.0),
-                    "location": getattr(text, 'location', 'unknown')
-                })
-        return choice_texts
+            text_str = text.text.strip()
+            coords = getattr(text, 'bbox', (0, 0, 0, 0))
+            location = getattr(text, 'location', 'unknown')
+            confidence = getattr(text, 'confidence', 0.0)
+            
+            # Base criteria for valid choice text
+            if 1 <= len(text_str) <= 20:  # Accept single-letter choices too
+                info = {
+                    "text": text_str,
+                    "coordinates": coords,
+                    "confidence": confidence,
+                    "location": location
+                }
+                
+                # Check if text is a Yes/No response or common choice pattern
+                if text_str.lower() in ['yes', 'no', 'a)', 'b)', '1)', '2)']:
+                    choice_texts.append(info)
+                    continue
+                    
+                # Check for Pokemon or character names as choices
+                if any(s in text_str.lower() for s in ['cyndaquil', 'totodile', 'chikorita', 'nurse', 'oak', 'elm']):
+                    choice_texts.append(info)
+                    continue
+                    
+                # Check text in the bottom 1/3rd of screen (likely choices)
+                y_pos = coords[1] if coords != (0, 0, 0, 0) else 0
+                if y_pos >= 96:  # Bottom third of 144px screen
+                    bottom_row_texts.append(info)
+                    continue
+                    
+                # Collect obvious labelled choices
+                if location == 'choice':
+                    choice_texts.append(info)
+                    continue
+                    
+                # Collect potential dialogue text choices for later analysis
+                if location == 'dialogue':
+                    dialogue_choices.append(info)
+        # Post-process collected texts:
+        
+        # If we found explicit choices, trust those
+        if choice_texts:
+            return choice_texts
+            
+        # If we found bottom row texts that look like choices, use those
+        if bottom_row_texts:
+            return bottom_row_texts
+            
+        # If we found dialogue text that looks like choices, use those
+        if dialogue_choices:
+            # Only consider dialogue text as choices if they look like menu items
+            filtered_dialogue = []
+            for dc in dialogue_choices:
+                text = dc['text'].lower()
+                # Common menu-like dialogue patterns
+                if any([
+                    # Yes/No patterns
+                    text in ['yes', 'no', 'sure', 'okay', 'nope'],
+                    # Action verbs at start
+                    text.startswith(('use ', 'take ', 'go ', 'give ', 'fight ', 'run ')),
+                    # Numbered/lettered choices
+                    bool(re.match(r'^[1-9ab][.)].+', text)),
+                    # Short action words
+                    text in ['save', 'quit', 'menu', 'pack', 'heal', 'buy', 'sell']
+                ]):
+                    filtered_dialogue.append(dc)
+            if filtered_dialogue:
+                return filtered_dialogue
+                
+        # No valid choices found
+        return []
 
     def _match_choice_patterns(self, text: str) -> Tuple[Optional[ChoiceType], float]:
         """Match text against choice patterns"""
         if not text:
             return None, 0.0
 
-        text = text.lower()
+        text = text.lower().strip()
+
+        # Quick check for common patterns
+        if text in ['yes', 'no', 'sure', 'okay']:
+            return ChoiceType.YES_NO, 0.95
+        if text in ['cyndaquil', 'totodile', 'chikorita']:
+            return ChoiceType.POKEMON_SELECTION, 0.9
         
         # Define pattern priority order (most specific first)
         pattern_priority = [
@@ -466,11 +541,25 @@ class ChoiceRecognitionSystem:
                 tags.append("positive_response")
             else:
                 tags.append("negative_response")
+            # Mark common responses
+            if text.lower() in ['yes', 'okay', 'sure']:
+                tags.append("affirmative_response")
+                if context.npc_type == "nurse":
+                    tags.append("healing_acceptance")
+            elif text.lower() in ['no', 'nope', 'cancel']:
+                tags.append("rejection_response")
+
         elif choice_type == ChoiceType.POKEMON_SELECTION:
             tags.append("pokemon_choice")
+            if text.lower() in ['cyndaquil', 'totodile', 'chikorita']:
+                tags.append("starter_pokemon")
+                tags.append(f"starter_{text.lower()}")
+
         elif choice_type == ChoiceType.MENU_SELECTION:
             if any(word in text.lower() for word in ["fight", "battle", "challenge"]):
                 tags.append("battle_related")
+            if text.lower() in ['heal', 'rest']:
+                tags.append("healing_related")
 
         return tags
 
@@ -482,10 +571,14 @@ class ChoiceRecognitionSystem:
             if context.conversation_history:
                 history_text = " ".join(context.conversation_history).lower()
                 
-                # Pokemon selection context
-                if any(keyword in history_text for keyword in ["starter pokemon", "fire water grass", "choose pokemon"]):
+            # Pokemon selection context
+                if any(keyword in history_text for keyword in 
+                      ["starter pokemon", "fire water grass", "choose pokemon", "cyndaquil", "totodile", "chikorita"]):
                     if choice.choice_type == ChoiceType.POKEMON_SELECTION:
                         choice.priority += 20  # Significant boost for pokemon choices
+                    # Bias towards 'yes' in starter context
+                    elif choice.text.lower() == 'yes':
+                        choice.priority += 15
                 
                 # Healing context
                 if any(keyword in history_text for keyword in ["heal", "pokemon", "center"]):

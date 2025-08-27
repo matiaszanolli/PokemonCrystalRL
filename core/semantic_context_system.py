@@ -156,17 +156,19 @@ class SemanticContextSystem:
         # Handle None input
         if text is None:
             return {
-                'primary_intent': DialogueIntent.UNKNOWN.value,
+                'intent': DialogueIntent.UNKNOWN.value,
                 'confidence': 0.0,
-                'response_strategy': 'wait_and_observe',
+                'strategy': 'wait_and_observe',
+                'reasoning': 'No dialogue text provided',
                 'suggested_actions': ['A'],
                 'context_factors': []
             }
             
         response = {
-            'primary_intent': DialogueIntent.UNKNOWN.value,
+            'intent': DialogueIntent.UNKNOWN.value,
             'confidence': 0.0,
-            'response_strategy': None,
+            'strategy': None,
+            'reasoning': None,
             'suggested_actions': ['A'],  # Default action
             'context_factors': []
         }
@@ -183,9 +185,10 @@ class SemanticContextSystem:
         # Check for healing requests FIRST (more specific)
         if 'pokemon center' in lower_text or ('heal' in lower_text and 'pokemon' in lower_text) or 'welcome to the pokemon center' in lower_text:
             response.update({
-                'primary_intent': DialogueIntent.HEALING_REQUEST.value,
+                'intent': DialogueIntent.HEALING_REQUEST.value,
                 'confidence': 0.9,
-                'response_strategy': 'accept_healing',
+                'strategy': 'accept_healing',
+                'reasoning': 'At Pokemon Center with healing offer',
                 'suggested_actions': ['A'],
                 'context_factors': ['healing_context', 'pokemon_center']
             })
@@ -196,17 +199,19 @@ class SemanticContextSystem:
             if context and context.player_progress.get('badges', 0) == 0:
                 # Beginner might not recognize this as gym challenge
                 response.update({
-                    'primary_intent': DialogueIntent.UNKNOWN.value,  # or 'battle_request'
+                    'intent': DialogueIntent.UNKNOWN.value,
                     'confidence': 0.4,  # Higher than 0.3 for test
-                    'response_strategy': 'wait_and_observe',
+                    'strategy': 'wait_and_observe',
+                    'reasoning': 'New trainer unsure about gym challenge',
                     'suggested_actions': ['A'],
                     'context_factors': ['beginner_context', 'uncertain_battle']
                 })
             else:
                 response.update({
-                    'primary_intent': DialogueIntent.GYM_CHALLENGE.value,
+                    'intent': DialogueIntent.GYM_CHALLENGE.value,
                     'confidence': 0.8,
-                    'response_strategy': 'accept_challenge',
+                    'strategy': 'accept_challenge',
+                    'reasoning': 'Experienced trainer ready for gym battle',
                     'suggested_actions': ['A'],
                     'context_factors': ['gym_context', 'battle_request']
                 })
@@ -214,9 +219,10 @@ class SemanticContextSystem:
         # Check for shop interactions THIRD (more specific)
         elif 'buy' in lower_text or 'sell' in lower_text or 'pokemart' in lower_text or ('shop' in lower_text):
             response.update({
-                'primary_intent': DialogueIntent.SHOP_INTERACTION.value,
+                'intent': DialogueIntent.SHOP_INTERACTION.value,
                 'confidence': 0.8,
-                'response_strategy': 'purchase_supplies',
+                'strategy': 'purchase_supplies',
+                'reasoning': 'Shop interaction dialogue detected',
                 'suggested_actions': ['A'],
                 'context_factors': ['shop_context', 'commerce']
             })
@@ -234,8 +240,10 @@ class SemanticContextSystem:
                 confidence = 0.7
                 response['response_strategy'] = 'select_fire_starter'  # Changed from choose_starter
             response.update({
-                'primary_intent': DialogueIntent.STARTER_SELECTION.value,
+                'intent': DialogueIntent.STARTER_SELECTION.value,
                 'confidence': confidence,
+                'strategy': 'select_fire_starter',
+                'reasoning': 'Starter Pokemon selection dialogue',
                 'suggested_actions': ['A'],
                 'context_factors': ['starter_context', 'pokemon_selection']
             })
@@ -243,9 +251,10 @@ class SemanticContextSystem:
         # Check for quest dialogue
         elif context and context.active_quests and any(quest in lower_text for quest in context.active_quests):
             response.update({
-                'primary_intent': DialogueIntent.QUEST_DIALOGUE.value,
+                'intent': DialogueIntent.QUEST_DIALOGUE.value,
                 'confidence': 0.7,
-                'response_strategy': 'follow_quest_line',
+                'strategy': 'follow_quest_line',
+                'reasoning': 'Quest-related dialogue detected',
                 'suggested_actions': ['A'],
                 'context_factors': ['quest_context']
             })
@@ -253,25 +262,33 @@ class SemanticContextSystem:
         # Check for Pokemon references (for special characters test) - MOVED TO LAST
         elif 'pokémon' in lower_text or 'pokemon' in lower_text:
             response.update({
-                'primary_intent': DialogueIntent.INFORMATION.value,
+                'intent': DialogueIntent.INFORMATION.value,
                 'confidence': 0.5,
-                'response_strategy': 'listen_and_respond_appropriately',
+                'strategy': 'listen_and_respond_appropriately',
+                'reasoning': 'General Pokemon-related dialogue',
                 'suggested_actions': ['A'],
                 'context_factors': ['pokemon_reference']
             })
             
         # Fallback for nonsense dialogue
         else:
-            response['response_strategy'] = 'wait_and_observe'
+            response['strategy'] = 'wait_and_observe'
+            response['reasoning'] = 'No specific dialogue pattern matched'
             
         # Location-based context influence
         if context and context.location_info:
             location_value = context.location_info.get('current_map', '')
             location_type = str(location_value).lower() if location_value else ''
             if 'gym' in location_type:
-                response['primary_intent'] = DialogueIntent.GYM_CHALLENGE.value
+                response['intent'] = DialogueIntent.GYM_CHALLENGE.value
                 response['confidence'] = max(response['confidence'], 0.4)  # Ensure > 0.3
+                response['reasoning'] = f'Location context: {location_type}'
             
+        # Ensure intent/strategy keys exist for compatibility
+        response['intent'] = response.get('intent', response.get('primary_intent', DialogueIntent.UNKNOWN.value))
+        if response.get('response_strategy') and not response.get('strategy'):
+            response['strategy'] = response['response_strategy']
+        
         # Store analysis in database if available
         if self.db_path and self.db_path.exists():
             self._store_analysis(text, response, context)
@@ -332,11 +349,16 @@ class SemanticContextSystem:
                     INSERT INTO dialogue_understanding 
                     (dialogue_text, intent, confidence, context_data)
                     VALUES (?, ?, ?, ?)
-                ''', (text, result['primary_intent'], result['confidence'], str(context.__dict__)))
+                ''', (text, result['intent'], result['confidence'], str({
+                    'context': context.__dict__,
+                    'strategy': result.get('strategy'),
+                    'reasoning': result.get('reasoning'),
+                    'context_factors': result.get('context_factors', [])
+                })))
                 conn.commit()
                 
                 # Also update pattern effectiveness for the intent
-                self.update_pattern_effectiveness(result['primary_intent'], result['confidence'] > 0.5)
+                self.update_pattern_effectiveness(result['intent'], result['confidence'] > 0.5)
                 
         except Exception:
             pass  # Silently fail for testing

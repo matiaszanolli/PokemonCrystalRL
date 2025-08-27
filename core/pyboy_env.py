@@ -486,7 +486,12 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                 pass
         
     def _read_bcd_money(self) -> int:
-        """Read money value in BCD format (3 bytes)."""
+        """Read money value in BCD format (3 bytes).
+        In Pokemon Crystal, money is stored as a sequence of BCD bytes where each byte
+        represents two decimal digits. For example:
+        - ¥99 is stored as [0x00, 0x00, 0x99]
+        - ¥999999 is stored as [0x99, 0x99, 0x99]
+        """
         if self.pyboy is None:
             return 0
             
@@ -494,45 +499,32 @@ class PyBoyPokemonCrystalEnv(gym.Env):
             money_addr = self.memory_addresses['money']
             
             # Read all three bytes
-            byte0 = self.pyboy.memory[money_addr]      # First byte (high)
-            byte1 = self.pyboy.memory[money_addr + 1]  # Second byte (middle)
-            byte2 = self.pyboy.memory[money_addr + 2]  # Third byte (low)
-            
-            # Check for invalid BCD digits
-            for byte in [byte0, byte1, byte2]:
-                high = (byte >> 4) & 0xF
-                low = byte & 0xF
-                if high > 9 or low > 9:
-                    if self.debug_mode:
-                        print(f"Warning: Invalid BCD digit in money value")
-                    return 0
-            
-            # Pokemon Crystal stores money as 3 BCD bytes
-            # Based on test cases:
-            # - Ᵽ100: 00 01 00 → byte0=0, byte1=1, byte2=0 → 100
-            # - Ᵽ3000: 03 00 00 → byte0=3, byte1=0, byte2=0 → 3000
-            # This suggests: byte0 * 1000 + byte1 * 100 + byte2 * 1
-            
-            # Money is stored as BCD in memory (2 digits per byte)
-            # For the test cases:
-            # - Ᵽ100: 00 01 00 -> byte0=0x00, byte1=0x01, byte2=0x00 -> 100
-            # - Ᵽ3000: 03 00 00 -> byte0=0x03, byte1=0x00, byte2=0x00 -> 3000
-            # This indicates each byte value should be directly converted to decimal
-            # without extra place value calculations
+            byte0 = self.pyboy.memory[money_addr]      # Highest byte (first two digits)
+            byte1 = self.pyboy.memory[money_addr + 1]  # Middle byte (middle two digits)
+            byte2 = self.pyboy.memory[money_addr + 2]  # Lowest byte (last two digits)
             
             def bcd_to_decimal(byte):
                 high = (byte >> 4) & 0xF  # High nybble
                 low = byte & 0xF          # Low nybble
                 if high > 9 or low > 9:   # Invalid BCD
-                    return 0
+                    return None
                 return high * 10 + low
             
-            # Convert BCD bytes to decimal integers
-            # For example: 0x03 0x00 0x00 -> 3000
-            # byte0=3 gets 1000s place, byte1=0 gets 100s place, byte2=0 gets 1s place
-            result = (bcd_to_decimal(byte0) * 1000) + \
-                     (bcd_to_decimal(byte1) * 100) + \
-                     bcd_to_decimal(byte2)
+            # Convert each byte to its decimal value
+            val0 = bcd_to_decimal(byte0)
+            val1 = bcd_to_decimal(byte1)
+            val2 = bcd_to_decimal(byte2)
+            
+            # If any conversion failed, return 0
+            if val0 is None or val1 is None or val2 is None:
+                if self.debug_mode:
+                    print(f"Warning: Invalid BCD digit in money value")
+                return 0
+            
+            # Combine the decimal values as a six-digit number
+            # For example:
+            # [0x99, 0x99, 0x99] -> 99 * 10000 + 99 * 100 + 99 -> 999999
+            result = (val0 * 10000) + (val1 * 100) + val2
             
             return result
         except Exception as e:

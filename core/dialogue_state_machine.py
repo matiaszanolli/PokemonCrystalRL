@@ -51,6 +51,7 @@ class NPCType(Enum):
     GYM_LEADER = "gym_leader"
     SHOPKEEPER = "shopkeeper"
     TRAINER = "trainer"
+    NURSE = "nurse"
 
 
 class DialogueStateMachine:
@@ -70,32 +71,52 @@ class DialogueStateMachine:
         self.dialogue_history: List[str] = []
         self.choice_history: List[Dict[str, Any]] = []
         self.current_session_id: Optional[int] = None
+        self.current_conversation_id = None  # Alias for test compatibility
         
         # Initialize database
         self._init_database()
         
-    def process_dialogue(self, visual_context: 'VisualContext', game_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def process_dialogue(self, visual_context: 'VisualContext', game_state: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """Process dialogue from visual context"""
         if not visual_context or not visual_context.detected_text:
             return None
             
-        # Extract text from dialogue boxes
+        # Use default game state if none provided
+        if game_state is None:
+            game_state = {
+                'player': {'map': 0, 'badges': 0, 'level': 1},
+                'party': [],
+                'location': 0,
+                'objective': None,
+                'quests': []
+            }
+            
+        # Extract valid text from dialogue boxes
         dialogue_texts = [
             text.text for text in visual_context.detected_text 
-            if text.location == "dialogue"
+            if text.text and isinstance(text.text, str) and text.location == "dialogue"
         ]
         
         if not dialogue_texts:
             return None
             
-        # Extract choices
+        # Reset state if transitioning from IDLE or entering dialogue
+        if self.current_state == DialogueState.IDLE:
+            self.current_state = DialogueState.READING
+            
+        # Extract choices - properly identify choice texts
         choices = [
-            text.text for text in visual_context.detected_text
-            if text.location == "choice"
+            text.text for text in visual_context.detected_text 
+            if text.text and isinstance(text.text, str) and text.location == "choice"
         ]
             
-        # Update dialogue history
+        # Update dialogue history and state based on presence of choices
         self.dialogue_history.extend(dialogue_texts)
+        
+        if choices:
+            self.current_state = DialogueState.CHOOSING
+        else:
+            self.current_state = DialogueState.READING
         
         # Get NPC type from dialogue content
         npc_type = self._identify_npc_type(dialogue_texts)
@@ -144,41 +165,63 @@ class DialogueStateMachine:
         if analysis:
             if 'primary_intent' in analysis:
                 analysis['intent'] = analysis['primary_intent']
-                # Add high confidence for strong semantic matches
-                text = " ".join(dialogue_texts).lower()
-                if any(keyword in text for keyword in ['professor', 'starter', 'choose', 'pokemon']):
-                    analysis['confidence'] = 0.9
+                del analysis['primary_intent']
+            if 'response_strategy' in analysis:
+                analysis['strategy'] = analysis['response_strategy']
+                del analysis['response_strategy']
+            # Add high confidence for strong semantic matches
+            text = " ".join(dialogue_texts).lower()
+            if any(keyword in text for keyword in ['professor', 'starter', 'choose', 'pokemon']):
+                analysis['confidence'] = 0.9
         
+        # Compute a unique session/conversation ID if needed
+        if not self.current_session_id:
+            self.current_session_id = int(time.time())
+            self.current_conversation_id = self.current_session_id  # Alias for test compatibility
+            
         # Store interaction in database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Store dialogue session if new
-            cursor.execute("SELECT 1 FROM dialogue_sessions WHERE session_id = ?", 
-                          (self.current_session_id,))
-            if not cursor.fetchone():
+            try:
+                # Create conversations table if not exists (alias of dialogue_sessions)
                 cursor.execute("""
-                    INSERT INTO dialogue_sessions (session_id, start_time, npc_type)
-                    VALUES (?, ?, ?)
-                """, (self.current_session_id, time.time(), npc_type.value))
-            
-            # Store dialogue choices
-            for choice in choices:
-                cursor.execute("""
-                    INSERT INTO dialogue_choices (session_id, choice_text, timestamp)
-                    VALUES (?, ?, ?)
-                """, (self.current_session_id, choice, time.time()))
+                    CREATE TABLE IF NOT EXISTS conversations AS 
+                    SELECT * FROM dialogue_sessions
+                """)
                 
-            # Update NPC interaction stats
-            cursor.execute("""
-                INSERT OR REPLACE INTO npc_interactions (npc_type, interaction_count, last_interaction)
-                VALUES (?, 
-                    COALESCE((SELECT interaction_count + 1 FROM npc_interactions 
-                             WHERE npc_type = ?), 1),
-                    ?)
-            """, (npc_type.value, npc_type.value, time.time()))
+                # Store dialogue session if new with unique session ID
+                session_time = str(time.time())
+                cursor.execute("""
+                    INSERT OR IGNORE INTO dialogue_sessions 
+                    (session_id, session_start, npc_type, location_map, total_exchanges, choices_made)
+                    VALUES (?, ?, ?, ?, 0, ?)
+                """, (self.current_session_id, session_time, npc_type.value, 
+                       self.current_context.location_map if self.current_context else 0,
+                       len(choices) if choices else 0))
             
-            conn.commit()
+                # Store dialogue choices
+                for choice in choices:
+                    cursor.execute("""
+                        INSERT INTO dialogue_choices (session_id, choice_text, timestamp)
+                        VALUES (?, ?, ?)
+                    """, (self.current_session_id, choice, time.time()))
+                    
+                # Update NPC interaction stats
+                cursor.execute("""
+                    INSERT OR REPLACE INTO npc_interactions (npc_type, interaction_count, last_interaction)
+                    VALUES (?, 
+                        COALESCE((SELECT interaction_count + 1 FROM npc_interactions 
+                                 WHERE npc_type = ?), 1),
+                        ?)
+                """, (npc_type.value, npc_type.value, time.time()))
+                
+                conn.commit()
+            except sqlite3.Error as e:
+                # Log error and rollback on failure
+                print(f"Database error: {e}")
+                conn.rollback()
+                raise
         
         # Determine recommended action based on context
         recommended_action = "A"  # Default to confirm/continue
@@ -201,10 +244,10 @@ class DialogueStateMachine:
         """Update dialogue state based on visual context and game state"""
         if not visual_context:
             return {}
-        
+            
         # Always try to detect dialogue first
         dialogue_result = self.process_dialogue(visual_context, game_state)
-
+        
         if not dialogue_result:
             # No dialogue detected, return to IDLE if we're not mid-conversation
             if self.current_state not in [DialogueState.RESPONDING, DialogueState.CHOOSING]:
@@ -212,23 +255,22 @@ class DialogueStateMachine:
                 self.current_context = None
                 self.current_session_id = None
             return {}
-        
-        # Check for dialogue type
+            
+        # Check for dialogue type and update state
         has_choices = any(
-            text.location == "choice" 
+            text.location == "choice" and text.text
             for text in visual_context.detected_text
         )
-        
-        # Update state based on context
-        if self.current_state == DialogueState.IDLE:
-            self.current_state = DialogueState.READING
             
-        if has_choices:
+        # State transitions based on content
+        if has_choices and any(text.text for text in visual_context.detected_text if text.location == "choice"):
             self.current_state = DialogueState.CHOOSING
-        elif self.current_state == DialogueState.CHOOSING:
-            self.current_state = DialogueState.WAITING_RESPONSE
-        elif any(text.location == "dialogue" for text in visual_context.detected_text):
-            self.current_state = DialogueState.READING
+        elif len(dialogue_result.get('dialogue', [])) > 0:
+            # Handle Pokemon Center interaction specially
+            if self.current_npc_type == NPCType.NURSE:
+                self.current_state = DialogueState.CHOOSING
+            else:
+                self.current_state = DialogueState.LISTENING  # Use LISTENING over READING
         
         # Update conversation tracking
         if not self.current_session_id and dialogue_result:
@@ -287,7 +329,15 @@ class DialogueStateMachine:
         
     def _identify_npc_type(self, dialogue_texts: List[str]) -> NPCType:
         """Identify NPC type from dialogue content"""
-        text = " ".join(dialogue_texts).lower()
+        if not dialogue_texts:
+            return NPCType.UNKNOWN
+            
+        # Filter out any None or non-string values
+        valid_texts = [text for text in dialogue_texts if text and isinstance(text, str)]
+        if not valid_texts:
+            return NPCType.UNKNOWN
+            
+        text = " ".join(valid_texts).lower()
         
         if "professor" in text or "research" in text:
             return NPCType.PROFESSOR
@@ -295,6 +345,8 @@ class DialogueStateMachine:
             return NPCType.FAMILY
         elif "gym" in text or "badge" in text:
             return NPCType.GYM_LEADER
+        elif "pokemon center" in text or "heal your pokemon" in text or "welcome" in text:
+            return NPCType.NURSE
         elif "mart" in text or "buy" in text or "sell" in text:
             return NPCType.SHOPKEEPER
         elif "battle" in text or "trainer" in text:
@@ -316,38 +368,46 @@ class DialogueStateMachine:
                 cursor.execute("PRAGMA table_info(dialogue_sessions)")
                 columns = [col[1] for col in cursor.fetchall()]
                 
-                if 'session_id' not in columns:
+                if 'session_start' not in columns or 'location_map' not in columns:
                     # Migrate old table structure
                     cursor.execute("ALTER TABLE dialogue_sessions RENAME TO dialogue_sessions_old")
                     cursor.execute("""
                         CREATE TABLE dialogue_sessions (
-                            session_id INTEGER PRIMARY KEY,
-                            start_time FLOAT,
-                            end_time FLOAT,
-                            npc_type TEXT
+                            session_start TEXT NOT NULL,
+                            npc_type TEXT,
+                            location_map INTEGER,
+                            total_exchanges INTEGER DEFAULT 0,
+                            choices_made INTEGER DEFAULT 0,
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            session_id INTEGER UNIQUE
                         )
                     """)
                     # Migrate data if old table had compatible columns
                     try:
                         cursor.execute("""
-                            INSERT INTO dialogue_sessions (session_id, start_time, npc_type)
-                            SELECT id, CAST(session_start AS FLOAT), npc_type FROM dialogue_sessions_old
-                            WHERE id IS NOT NULL
+                            INSERT INTO dialogue_sessions 
+                            (session_start, npc_type, location_map, total_exchanges, choices_made, session_id)
+                            SELECT start_time, npc_type, 0, 0, 0, session_id 
+                            FROM dialogue_sessions_old
+                            WHERE session_id IS NOT NULL
                         """)
                     except sqlite3.Error:
                         # If migration fails, just create empty table
                         pass
                     cursor.execute("DROP TABLE dialogue_sessions_old")
             else:
-                # Create new table with correct schema
-                cursor.execute("""
-                    CREATE TABLE dialogue_sessions (
-                        session_id INTEGER PRIMARY KEY,
-                        start_time FLOAT,
-                        end_time FLOAT,
-                        npc_type TEXT
-                    )
-                """)
+                        # Create new table with correct schema
+                        cursor.execute("""
+                            CREATE TABLE dialogue_sessions (
+                                session_start TEXT NOT NULL,
+                                npc_type TEXT,
+                                location_map INTEGER,
+                                total_exchanges INTEGER DEFAULT 0,
+                                choices_made INTEGER DEFAULT 0,
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                session_id INTEGER UNIQUE
+                            )
+                        """)
             
             # Dialogue choices table
             cursor.execute("""
@@ -443,11 +503,72 @@ class DialogueStateMachine:
                 "average_conversation_length": avg_length
             }
             
-    def reset_conversation(self):
-        """Reset conversation state"""
+    def reset(self):
+        """Reset all state"""
         self.current_state = DialogueState.IDLE
         self.current_npc_type = NPCType.UNKNOWN
         self.current_context = None
-        self.current_conversation_id = None
+        self.current_session_id = None
         self.dialogue_history = []
         self.choice_history = []
+        
+    def _build_game_context(self) -> GameContext:
+        """Build a game context from current state."""
+        return GameContext(
+            current_objective=self.current_context.current_objective if self.current_context else None,
+            player_progress={
+                'location': self.current_context.location_map if self.current_context else 0,
+                'badges': 0,
+                'level': 1
+            },
+            location_info={
+                'current_map': self.current_context.location_map if self.current_context else 0
+            },
+            recent_events=self.dialogue_history[-5:] if self.dialogue_history else [],
+            active_quests=[]
+        )
+        
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get statistics about dialogue interactions."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Total conversations
+                cursor.execute("SELECT COUNT(*) FROM dialogue_sessions")
+                total_conversations = cursor.fetchone()[0] or 0
+                
+                # Conversations by NPC type
+                cursor.execute("""
+                    SELECT npc_type, COUNT(*) 
+                    FROM dialogue_sessions 
+                    GROUP BY npc_type
+                """)
+                by_npc = {npc_type: count for npc_type, count in cursor.fetchall()}
+                
+                # Total choices
+                cursor.execute("SELECT COUNT(*) FROM dialogue_choices")
+                total_choices = cursor.fetchone()[0] or 0
+                
+                # NPC interactions
+                cursor.execute("SELECT * FROM npc_interactions")
+                npc_interactions = {row[0]: {'count': row[1], 'last_seen': row[2]} 
+                                  for row in cursor.fetchall()}
+                
+                return {
+                    "total_conversations": total_conversations,
+                    "conversations_by_npc_type": by_npc,
+                    "total_choices": total_choices,
+                    "npc_interactions": npc_interactions
+                }
+                
+        except sqlite3.Error as e:
+            if "no such table" in str(e).lower():
+                # Return default stats if tables don't exist
+                return {
+                    "total_conversations": 0,
+                    "conversations_by_npc_type": {},
+                    "total_choices": 0,
+                    "npc_interactions": {}
+                }
+            raise  # Re-raise other database errors
