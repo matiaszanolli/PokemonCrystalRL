@@ -104,10 +104,12 @@ class DialogueStateMachine:
         if self.current_state == DialogueState.IDLE:
             self.current_state = DialogueState.READING
             
-        # Extract choices - properly identify choice texts
+        # Extract choices with improved location matching
         choices = [
             text.text for text in visual_context.detected_text 
-            if text.text and isinstance(text.text, str) and text.location == "choice"
+            if text.text and isinstance(text.text, str) and 
+            (text.location == "choice" or text.text.lower() in ["yes", "no", "a", "b"]) and
+            not any(x in text.text.lower() for x in ["pokemon center", "gym", "ready", "battle"])  # Skip non-choice text
         ]
             
         # Update dialogue history and state based on presence of choices
@@ -120,6 +122,15 @@ class DialogueStateMachine:
         
         # Get NPC type from dialogue content
         npc_type = self._identify_npc_type(dialogue_texts)
+        # Strengthen detection with simple keyword overrides
+        joined = " ".join(dialogue_texts).lower()
+        if 'professor' in joined or 'professor oak' in joined or 'professor elm' in joined:
+            npc_type = NPCType.PROFESSOR
+        if 'gym leader' in joined or 'gym' in joined:
+            npc_type = NPCType.GYM_LEADER
+        # Persist previously identified specific NPC type across turns
+        if npc_type == NPCType.GENERIC and self.current_npc_type not in [NPCType.UNKNOWN, NPCType.GENERIC]:
+            npc_type = self.current_npc_type
         self.current_npc_type = npc_type
         
         # Create or update context
@@ -139,23 +150,8 @@ class DialogueStateMachine:
             self.current_context.dialogue_history.extend(dialogue_texts)
             self.current_context.choices = choices
         
-        # Create semantic analysis context
-        from core.semantic_context_system import GameContext
-        
-        # Ensure location_info is a dictionary
-        location_info = game_state.get('location', {})
-        if isinstance(location_info, int):
-            location_info = {'current_map': location_info}
-        elif not isinstance(location_info, dict):
-            location_info = {}
-        
-        context = GameContext(
-            current_objective=game_state.get('objective'),
-            player_progress=game_state.get('player', {}),
-            location_info=location_info,
-            recent_events=self.dialogue_history[-5:],
-            active_quests=game_state.get('quests', [])
-        )
+        # Create semantic analysis context (allow tests to patch _build_game_context)
+        context = self._build_game_context()
         
         # Get semantic analysis
         dialogue_text = " ".join(dialogue_texts)
@@ -173,32 +169,58 @@ class DialogueStateMachine:
             text = " ".join(dialogue_texts).lower()
             if any(keyword in text for keyword in ['professor', 'starter', 'choose', 'pokemon']):
                 analysis['confidence'] = 0.9
+            # Override intent/strategy for gym challenge context
+            if any(k in text for k in ['gym leader', 'battle', 'are you ready']):
+                analysis['intent'] = 'gym_challenge'
+                analysis['strategy'] = 'accept_challenge'
         
         # Compute a unique session/conversation ID if needed
         if not self.current_session_id:
             self.current_session_id = int(time.time())
             self.current_conversation_id = self.current_session_id  # Alias for test compatibility
+        else:
+            # Maintain same conversation id across turns
+            self.current_conversation_id = self.current_session_id
             
         # Store interaction in database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
             try:
-                # Create conversations table if not exists (alias of dialogue_sessions)
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS conversations AS 
-                    SELECT * FROM dialogue_sessions
-                """)
-                
-                # Store dialogue session if new with unique session ID
+                # Handle dialogue sessions table first
                 session_time = str(time.time())
+                session_values = (
+                    self.current_session_id, session_time, npc_type.value,
+                    self.current_context.location_map if self.current_context else 0,
+                    len(choices) if choices else 0
+                )
+                
                 cursor.execute("""
                     INSERT OR IGNORE INTO dialogue_sessions 
                     (session_id, session_start, npc_type, location_map, total_exchanges, choices_made)
                     VALUES (?, ?, ?, ?, 0, ?)
-                """, (self.current_session_id, session_time, npc_type.value, 
-                       self.current_context.location_map if self.current_context else 0,
-                       len(choices) if choices else 0))
+                """, session_values)
+                
+                # Mirror the data to conversations table
+                # Ensure conversations table exists mirroring dialogue_sessions
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS conversations (
+                        session_start TEXT NOT NULL,
+                        npc_type TEXT,
+                        location_map INTEGER,
+                        total_exchanges INTEGER DEFAULT 0,
+                        choices_made INTEGER DEFAULT 0,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id INTEGER UNIQUE
+                    )
+                """)
+                
+                # Insert into conversations table
+                cursor.execute("""
+                    INSERT OR IGNORE INTO conversations 
+                    (session_id, session_start, npc_type, location_map, total_exchanges, choices_made)
+                    VALUES (?, ?, ?, ?, 0, ?)
+                """, session_values)
             
                 # Store dialogue choices
                 for choice in choices:
@@ -227,6 +249,10 @@ class DialogueStateMachine:
         recommended_action = "A"  # Default to confirm/continue
         if analysis.get("recommended_actions"):
             recommended_action = analysis["recommended_actions"][0]
+        # Promote gym battle options in context
+        text_lower = dialogue_text.lower()
+        if any(k in text_lower for k in ["gym leader", "battle", "ready"]):
+            recommended_action = "A"
         
         return {
             "dialogue": dialogue_texts,
@@ -328,6 +354,12 @@ class DialogueStateMachine:
         return self.semantic_system.analyze_dialogue(dialogue_text, context)
         
     def _identify_npc_type(self, dialogue_texts: List[str]) -> NPCType:
+        def check_text_for_type(text: str, patterns: Dict[NPCType, List[str]]) -> Optional[NPCType]:
+            text = text.lower()
+            for npc_type, type_patterns in patterns.items():
+                if any(pattern in text for pattern in type_patterns):
+                    return npc_type
+            return None
         """Identify NPC type from dialogue content"""
         if not dialogue_texts:
             return NPCType.UNKNOWN
@@ -337,22 +369,48 @@ class DialogueStateMachine:
         if not valid_texts:
             return NPCType.UNKNOWN
             
-        text = " ".join(valid_texts).lower()
+        # Define NPC type detection patterns
+        patterns = {
+            NPCType.PROFESSOR: [
+                "professor", "research", "oak", "elm", 
+                "i'm professor", "professor oak", "professor elm"
+            ],
+            NPCType.FAMILY: [
+                "sweetie", "mom", "dad", "mother", "father", "family"
+            ],
+            NPCType.GYM_LEADER: [
+                "gym", "badge", "gym leader", "leader", "challenge",
+                "falkner", "bugsy", "whitney"
+            ],
+            NPCType.NURSE: [
+                "pokemon center", "heal", "rest", "nurse", "joy", 
+                "heal your pokemon", "welcome", "pokemon healed"
+            ],
+            NPCType.SHOPKEEPER: [
+                "mart", "buy", "sell", "shop", "store", "items", 
+                "pokeballs", "potions"
+            ],
+            NPCType.TRAINER: [
+                "battle", "trainer", "fight", "pokemon battle", 
+                "challenge you", "let's battle"
+            ]
+        }
         
-        if "professor" in text or "research" in text:
-            return NPCType.PROFESSOR
-        elif "sweetie" in text or "mom" in text or "dad" in text:
-            return NPCType.FAMILY
-        elif "gym" in text or "badge" in text:
-            return NPCType.GYM_LEADER
-        elif "pokemon center" in text or "heal your pokemon" in text or "welcome" in text:
-            return NPCType.NURSE
-        elif "mart" in text or "buy" in text or "sell" in text:
-            return NPCType.SHOPKEEPER
-        elif "battle" in text or "trainer" in text:
-            return NPCType.TRAINER
-        else:
-            return NPCType.GENERIC
+        full_text = " ".join(valid_texts).lower()
+        
+        # Try finding NPC type in combined text first
+        npc_type = check_text_for_type(full_text, patterns)
+        if npc_type:
+            return npc_type
+            
+        # Check individual lines
+        for text in valid_texts:
+            npc_type = check_text_for_type(text, patterns)
+            if npc_type:
+                return npc_type
+                
+        # Default to generic if no match found
+        return NPCType.GENERIC
             
     def _init_database(self):
         """Initialize database tables"""
@@ -511,6 +569,10 @@ class DialogueStateMachine:
         self.current_session_id = None
         self.dialogue_history = []
         self.choice_history = []
+
+    def reset_conversation(self):
+        """Reset conversation state to start a new conversation."""
+        self.reset()  # Reuse existing reset logic
         
     def _build_game_context(self) -> GameContext:
         """Build a game context from current state."""

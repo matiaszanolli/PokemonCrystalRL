@@ -29,14 +29,19 @@ def temp_db():
             )
         """)
         cursor.execute("""
-            CREATE TABLE semantic_context (
+            CREATE TABLE dialogue_choices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER,
-                timestamp TEXT NOT NULL,
-                dialogue_text TEXT,
-                intent TEXT,
-                confidence REAL,
+                choice_text TEXT,
+                timestamp FLOAT,
                 FOREIGN KEY (session_id) REFERENCES dialogue_sessions (session_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE npc_interactions (
+                npc_type TEXT PRIMARY KEY,
+                interaction_count INTEGER,
+                last_interaction FLOAT
             )
         """)
         conn.commit()
