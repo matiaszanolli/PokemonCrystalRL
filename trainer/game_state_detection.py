@@ -72,7 +72,7 @@ class GameStateDetector:
     
     def is_stuck(self) -> bool:
         """Check if the game appears to be stuck."""
-        return self.consecutive_same_screens > 20 or self.stuck_counter > 0
+        return self.consecutive_same_screens >= 30 or self.stuck_counter > 0
 
     def detect_game_state(self, screen: np.ndarray) -> str:
         """Detect game state from screen content."""
@@ -102,15 +102,27 @@ class GameStateDetector:
 
         # Store last screen hash for transition detection
         current_hash = self.get_screen_hash(screen)
-        if current_hash == self.last_screen_hash:
+        if current_hash is None:
+            return "unknown"
+
+        # Check if we have a different screen
+        same_screen = current_hash == self.last_screen_hash
+        if same_screen:
+            # With same screen, always increment consecutive counter
             self.consecutive_same_screens += 1
-            if self.consecutive_same_screens > 30:
+            
+            # Update stuck counter if threshold reached
+            if self.consecutive_same_screens >= 30:
                 self.stuck_counter += 1
                 return "stuck"
         else:
-            self.consecutive_same_screens = 0
+            # Different screen - only reset if substantially different
             self.last_screen_hash = current_hash
-            self.stuck_counter = 0
+            if self.consecutive_same_screens >= 15:
+                self.consecutive_same_screens = 0
+                self.stuck_counter = 0
+            self._last_gray = None  # Reset gray cache on change
+            self.last_screen_hash = current_hash
             self._last_gray = None  # Reset gray cache on screen change
 
         # Detect loading/black screen

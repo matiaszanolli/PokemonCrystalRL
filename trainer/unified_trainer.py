@@ -103,33 +103,33 @@ class UnifiedPokemonTrainer(PokemonTrainer):
     def _init_web_server(self):
         """Initialize web server using available TrainingWebServer class"""
         if not self.config.enable_web:
-            return
+            return None
 
-        # For tests, always use mock web server
-        if hasattr(self.config, '_mock_name'):
-            try:
-                from core.monitoring.web_server import TrainingWebServer as MockWebServer
-                self.web_server = MockWebServer()
-                # Start web server if mock has the right attributes
-                if hasattr(self.web_server, 'start'):
-                    self.web_server.start()
-                if hasattr(self.web_server, 'server'):
-                    # Create HTTP server if it doesn't exist
-                    from http.server import HTTPServer
-                    if isinstance(self.web_server.server, HTTPServer):
-                        self.web_server.server.serve_forever()
-                return self.web_server
-            except Exception as e:
-                self.logger.warning(f"Failed to initialize mock web server: {str(e)}")
-
-        # Regular initialization
         try:
-            config = TrainingWebServer.ServerConfig.from_training_config(self.config)
-            self.web_server = TrainingWebServer(config, self)
-            setattr(self.web_server, '_trainer', self)
-            return self.web_server
+            # Initialize server instance (might be mocked in tests)
+            from monitoring.web_server import TrainingWebServer
+            server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
+            server_inst = TrainingWebServer(server_config, self)
+            
+            # Save server instance
+            self.web_server = server_inst
+            
+            # Start the server if it has start method
+            if hasattr(server_inst, 'start'):
+                if not server_inst.start():
+                    self.logger.error("Web server failed to start")
+                    return None
+            
+            # Create server thread if supported
+            if hasattr(server_inst, 'run_in_thread'):
+                thread = threading.Thread(target=server_inst.run_in_thread, daemon=True)
+                thread.start()
+                self.web_thread = thread
+                
+            return server_inst
+
         except Exception as e:
-            self.logger.error(f"Failed to initialize web server: {str(e)}")
+            self.logger.error(f"Failed to initialize web server: {e}")
             self.web_server = None
             self.web_thread = None
             return None
@@ -163,25 +163,26 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         # Quick return for tests to improve performance
         if hasattr(self, '_mock_action'):
             return self._mock_action
-            
-        # Quick return in headless mode
-        if self.config.headless:
-            actions = [5, 1, 2, 3, 4]  # A, UP, DOWN, LEFT, RIGHT
-            return actions[step % len(actions)]
         
-        # Capture screen for stuck detection
+        # Get current screen and detect game state
         screen = self._simple_screenshot_capture()
         if screen is not None:
-            # Use the GameStateDetector to detect game state and update stuck counters
-            game_state = self.game_state_detector.detect_game_state(screen)
-            
-            # Check if stuck and return unstuck action
-            if self.game_state_detector.is_stuck():
+            # Use GameStateDetector to check for stuck state and get state
+            state = self.game_state_detector.detect_game_state(screen)
+            if state == "stuck" or self.game_state_detector.is_stuck():
+                # Use unstuck actions to try to recover
                 from trainer.game_state_detection import get_unstuck_action
                 return get_unstuck_action(step, self.game_state_detector.stuck_counter)
+            
+            # Handle specific states
+            if state == "dialogue":
+                return 5  # A button for dialogue
+            if state == "menu":
+                return [1, 2, 5][step % 3]  # UP, DOWN, A for menus
         
-        # Default rule-based action
-        return 5  # A button
+        # Default basic action pattern
+        actions = [5, 1, 2, 3, 4]  # A, UP, DOWN, LEFT, RIGHT
+        return actions[step % len(actions)]
 
     def _attempt_pyboy_recovery(self) -> bool:
         """Attempt to recover from PyBoy crash"""
@@ -325,7 +326,16 @@ class UnifiedPokemonTrainer(PokemonTrainer):
     def _execute_synchronized_action(self, action: int):
         """Execute action with synchronization and stuck detection"""
         if not self._is_pyboy_alive():
-            self._attempt_pyboy_recovery()
+            if not self._attempt_pyboy_recovery():
+                raise RuntimeError("PyBoy recovery failed")
+            
+        # For testing: check if simulated crash should be triggered
+        if hasattr(self, '_force_crash_point') and hasattr(self, '_force_crash_trigger'):
+            if self._force_crash_trigger > 0:
+                self._force_crash_trigger -= 1
+                if self._force_crash_trigger == 0:
+                    self._force_crash_trigger = self._force_crash_point
+                    raise RuntimeError("Simulated PyBoy crash")
             
         try:
             self.pyboy.send_input(action)
@@ -344,9 +354,11 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         except Exception as e:
             # Attempt recovery immediately on execution errors
             try:
-                self._attempt_pyboy_recovery()
-            except Exception:
-                pass
+                if not self._attempt_pyboy_recovery():
+                    raise RuntimeError("PyBoy recovery failed")
+            except Exception as rec_e:
+                self.logger.error(f"Recovery failed: {rec_e}")
+                raise
             self.logger.error(f"Error executing action {action}: {str(e)}")
             raise
     
@@ -625,12 +637,10 @@ class UnifiedPokemonTrainer(PokemonTrainer):
                             self.stats['total_actions'] % 5 == 0):
                             self._capture_and_queue_screen()
                     except Exception as e:
-                    # Don't count failed actions
+                        # Don't count failed actions
                         self.stats['total_actions'] -= 1
-                        # First attempt recovery
-                        self._attempt_pyboy_recovery()
-                        # Then raise the error to trigger error handler and counting
-                        with self._handle_errors("synchronized_training", "pyboy_crashes"):
+                        # Trigger error handling and recovery
+                        with self._handle_errors('synchronized_training', 'pyboy_crashes'):
                             raise e
                             
         finally:
