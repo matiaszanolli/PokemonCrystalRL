@@ -78,6 +78,11 @@ class LLMManager:
     def get_action(self, screenshot: Optional[np.ndarray] = None, game_state: str = "overworld", step: int = 0, stuck_counter: int = 0) -> Optional[int]:
         """Get next action from LLM model."""
         try:
+            # Check if LLM has consistently failed (more than 5 consecutive failures)
+            if self.stats['failures'] > 5 and self.stats['failures'] == self.stats['calls']:
+                # LLM is not available, return fallback immediately
+                return self._get_fallback_action(game_state, stuck_counter)
+
             start_time = time.time()
             # Get state-specific prompt and temperature
             prompt = self._get_state_prompt(game_state, stuck_counter)

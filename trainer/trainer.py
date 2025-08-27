@@ -79,6 +79,8 @@ class PokemonTrainer:
         self._training_active = False
         self.adaptive_llm_interval = self.config.llm_interval
         self.llm_response_times = []
+        self._llm_unavailable = False
+        self._llm_failures_logged = 0  # Track number of failures logged
 
         # Game state tracking
         self.game_state_detector = GameStateDetector()
@@ -294,6 +296,10 @@ class PokemonTrainer:
 
     def _get_llm_action(self) -> Optional[int]:
         """Get action from LLM manager."""
+        # If LLM has been marked unavailable or manager not present, fast fallback
+        if self._llm_unavailable or not self.llm_manager:
+            return self._get_rule_based_action(self.stats['total_actions'], skip_state_detection=True)
+        
         try:
             start_time = time.time()
             
@@ -321,12 +327,26 @@ class PokemonTrainer:
             return None
 
         except Exception as e:
-            self.logger.warning(f"LLM action failed: {e}")
+            # Only log every 10th failure to reduce logging overhead
             self.error_count['llm_failures'] += 1
-            return None
+            if self.error_count['llm_failures'] % 10 == 1:
+                self.logger.warning(f"LLM action failed: {e} (failure {self.error_count['llm_failures']})")
+            # Mark LLM as unavailable after first failure to avoid repeated overhead
+            self._llm_unavailable = True
+            return self._get_rule_based_action(self.stats['total_actions'], skip_state_detection=True)
 
-    def _get_rule_based_action(self, step: int) -> int:
-        """Get action using rule-based system with stuck detection."""
+    def _get_rule_based_action(self, step: int, skip_state_detection: bool = False) -> int:
+        """Get action using rule-based system with stuck detection.
+        
+        Args:
+            step: Current step number
+            skip_state_detection: If True, skips state detection and returns direct action
+        """
+        if skip_state_detection:
+            # Cycle through basic actions when state detection is skipped
+            actions = [5, 1, 2, 3, 4]  # A, UP, DOWN, LEFT, RIGHT
+            return actions[step % len(actions)]
+            
         # Capture screen for stuck detection
         screen = self._simple_screenshot_capture()
         if screen is not None:

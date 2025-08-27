@@ -521,11 +521,11 @@ class PyBoyPokemonCrystalEnv(gym.Env):
                     print(f"Warning: Invalid BCD digit in money value")
                 return 0
             
-            # Combine the decimal values with correct scaling
+            # Combine the decimal values with correct scaling (each byte represents 2 digits)
             # For example:
-            # [0x00, 0x01, 0x00] -> 0 * 1000 + 1 * 100 + 0 * 1 = 100
-            # [0x03, 0x00, 0x00] -> 3 * 1000 + 0 * 100 + 0 * 1 = 3000
-            result = (val0 * 1000) + (val1 * 100) + val2
+            # [0x00, 0x01, 0x00] -> 0 * 10000 + 1 * 100 + 0 = 100
+            # [0x99, 0x99, 0x99] -> 99 * 10000 + 99 * 100 + 99 = 999999
+            result = (val0 * 10000) + (val1 * 100) + val2
             
             return result
         except Exception as e:
