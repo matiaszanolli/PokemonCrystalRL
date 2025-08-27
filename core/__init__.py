@@ -6,12 +6,12 @@ other shared functionality.
 """
 
 from shared_types import PyBoyGameState
-from core.game_states import STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
-from trainer.choice_recognition_system import (
+from .game_states import STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
+from .choice_recognition import (
     ChoiceType,
     ChoicePosition,
     ChoiceContext,
     RecognizedChoice,
     ChoiceRecognitionSystem
 )
-from core.vision_processor import DetectedText, VisualContext, UnifiedVisionProcessor
+from .vision_processor import DetectedText, VisualContext, UnifiedVisionProcessor

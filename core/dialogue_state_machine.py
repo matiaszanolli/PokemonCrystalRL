@@ -210,6 +210,7 @@ class DialogueStateMachine:
                         location_map INTEGER,
                         total_exchanges INTEGER DEFAULT 0,
                         choices_made INTEGER DEFAULT 0,
+                        end_time TEXT,
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         session_id INTEGER UNIQUE
                     )
@@ -277,6 +278,23 @@ class DialogueStateMachine:
         if not dialogue_result:
             # No dialogue detected, return to IDLE if we're not mid-conversation
             if self.current_state not in [DialogueState.RESPONDING, DialogueState.CHOOSING]:
+                # Set the end time for the dialogue session
+                if self.current_session_id:
+                    with sqlite3.connect(self.db_path) as conn:
+                        cursor = conn.cursor()
+                        current_time = str(time.time())
+                        cursor.execute("""
+                            UPDATE dialogue_sessions 
+                            SET end_time = ? 
+                            WHERE session_id = ? AND end_time IS NULL
+                        """, (current_time, self.current_session_id))
+                        cursor.execute("""
+                            UPDATE conversations 
+                            SET end_time = ? 
+                            WHERE session_id = ? AND end_time IS NULL
+                        """, (current_time, self.current_session_id))
+                        conn.commit()
+
                 self.current_state = DialogueState.IDLE
                 self.current_context = None
                 self.current_session_id = None
@@ -436,6 +454,7 @@ class DialogueStateMachine:
                             location_map INTEGER,
                             total_exchanges INTEGER DEFAULT 0,
                             choices_made INTEGER DEFAULT 0,
+                            end_time TEXT,
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             session_id INTEGER UNIQUE
                         )
@@ -456,15 +475,16 @@ class DialogueStateMachine:
             else:
                         # Create new table with correct schema
                         cursor.execute("""
-                            CREATE TABLE dialogue_sessions (
-                                session_start TEXT NOT NULL,
-                                npc_type TEXT,
-                                location_map INTEGER,
-                                total_exchanges INTEGER DEFAULT 0,
-                                choices_made INTEGER DEFAULT 0,
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                session_id INTEGER UNIQUE
-                            )
+                        CREATE TABLE dialogue_sessions (
+                            session_start TEXT NOT NULL,
+                            npc_type TEXT,
+                            location_map INTEGER,
+                            total_exchanges INTEGER DEFAULT 0,
+                            choices_made INTEGER DEFAULT 0,
+                            end_time TEXT,
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            session_id INTEGER UNIQUE
+                        )
                         """)
             
             # Dialogue choices table
@@ -547,13 +567,14 @@ class DialogueStateMachine:
             """)
             conversations_by_npc = dict(cursor.fetchall())
             
-            # Average conversation length
+            # Average conversation length - use ROUND for readability
             cursor.execute("""
-                SELECT AVG(end_time - start_time) 
-                FROM dialogue_sessions 
-                WHERE end_time IS NOT NULL
+                SELECT ROUND(AVG(
+                    CAST((COALESCE(end_time, strftime('%s', 'now')) - CAST(session_start AS INTEGER)) AS FLOAT)
+                ), 2)
+                FROM dialogue_sessions
             """)
-            avg_length = cursor.fetchone()[0] or 0
+            avg_length = cursor.fetchone()[0] or 0.0
             
             return {
                 "total_conversations": total_conversations,
@@ -563,6 +584,23 @@ class DialogueStateMachine:
             
     def reset(self):
         """Reset all state"""
+        # Set end time for any active dialogue session
+        if self.current_session_id:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                current_time = str(time.time())
+                cursor.execute("""
+                    UPDATE dialogue_sessions 
+                    SET end_time = ? 
+                    WHERE session_id = ? AND end_time IS NULL
+                """, (current_time, self.current_session_id))
+                cursor.execute("""
+                    UPDATE conversations 
+                    SET end_time = ? 
+                    WHERE session_id = ? AND end_time IS NULL
+                """, (current_time, self.current_session_id))
+                conn.commit()
+        
         self.current_state = DialogueState.IDLE
         self.current_npc_type = NPCType.UNKNOWN
         self.current_context = None

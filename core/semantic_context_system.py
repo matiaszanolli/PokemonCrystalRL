@@ -157,8 +157,10 @@ class SemanticContextSystem:
         if text is None:
             return {
                 'intent': DialogueIntent.UNKNOWN.value,
+                'primary_intent': DialogueIntent.UNKNOWN.value,
                 'confidence': 0.0,
                 'strategy': 'wait_and_observe',
+                'response_strategy': 'wait_and_observe',
                 'reasoning': 'No dialogue text provided',
                 'suggested_actions': ['A'],
                 'context_factors': []
@@ -166,8 +168,10 @@ class SemanticContextSystem:
             
         response = {
             'intent': DialogueIntent.UNKNOWN.value,
+            'primary_intent': DialogueIntent.UNKNOWN.value,
             'confidence': 0.0,
             'strategy': None,
+            'response_strategy': None,
             'reasoning': None,
             'suggested_actions': ['A'],  # Default action
             'context_factors': []
@@ -176,6 +180,8 @@ class SemanticContextSystem:
         # Handle empty text
         if not text.strip():
             response['response_strategy'] = 'wait_and_observe'
+            response['strategy'] = response['response_strategy']
+            response['primary_intent'] = response.get('intent', DialogueIntent.UNKNOWN.value)
             return response
         
         # Simple heuristic analysis - ORDER MATTERS!
@@ -186,8 +192,10 @@ class SemanticContextSystem:
         if 'pokemon center' in lower_text or ('heal' in lower_text and 'pokemon' in lower_text) or 'welcome to the pokemon center' in lower_text:
             response.update({
                 'intent': DialogueIntent.HEALING_REQUEST.value,
+                'primary_intent': DialogueIntent.HEALING_REQUEST.value,
                 'confidence': 0.9,
                 'strategy': 'accept_healing',
+                'response_strategy': 'accept_healing',
                 'reasoning': 'At Pokemon Center with healing offer',
                 'suggested_actions': ['A'],
                 'context_factors': ['healing_context', 'pokemon_center']
@@ -200,8 +208,10 @@ class SemanticContextSystem:
                 # Beginner might not recognize this as gym challenge
                 response.update({
                     'intent': DialogueIntent.UNKNOWN.value,
+                    'primary_intent': DialogueIntent.UNKNOWN.value,
                     'confidence': 0.4,  # Higher than 0.3 for test
                     'strategy': 'wait_and_observe',
+                    'response_strategy': 'wait_and_observe',
                     'reasoning': 'New trainer unsure about gym challenge',
                     'suggested_actions': ['A'],
                     'context_factors': ['beginner_context', 'uncertain_battle']
@@ -209,8 +219,10 @@ class SemanticContextSystem:
             else:
                 response.update({
                     'intent': DialogueIntent.GYM_CHALLENGE.value,
+                    'primary_intent': DialogueIntent.GYM_CHALLENGE.value,
                     'confidence': 0.8,
                     'strategy': 'accept_challenge',
+                    'response_strategy': 'accept_challenge',
                     'reasoning': 'Experienced trainer ready for gym battle',
                     'suggested_actions': ['A'],
                     'context_factors': ['gym_context', 'battle_request']
@@ -220,8 +232,10 @@ class SemanticContextSystem:
         elif 'buy' in lower_text or 'sell' in lower_text or 'pokemart' in lower_text or ('shop' in lower_text):
             response.update({
                 'intent': DialogueIntent.SHOP_INTERACTION.value,
+                'primary_intent': DialogueIntent.SHOP_INTERACTION.value,
                 'confidence': 0.8,
                 'strategy': 'purchase_supplies',
+                'response_strategy': 'purchase_supplies',
                 'reasoning': 'Shop interaction dialogue detected',
                 'suggested_actions': ['A'],
                 'context_factors': ['shop_context', 'commerce']
@@ -241,8 +255,10 @@ class SemanticContextSystem:
                 response['response_strategy'] = 'select_fire_starter'  # Changed from choose_starter
             response.update({
                 'intent': DialogueIntent.STARTER_SELECTION.value,
+                'primary_intent': DialogueIntent.STARTER_SELECTION.value,
                 'confidence': confidence,
                 'strategy': 'select_fire_starter',
+                'response_strategy': 'select_fire_starter',
                 'reasoning': 'Starter Pokemon selection dialogue',
                 'suggested_actions': ['A'],
                 'context_factors': ['starter_context', 'pokemon_selection']
@@ -252,8 +268,10 @@ class SemanticContextSystem:
         elif context and context.active_quests and any(quest in lower_text for quest in context.active_quests):
             response.update({
                 'intent': DialogueIntent.QUEST_DIALOGUE.value,
+                'primary_intent': DialogueIntent.QUEST_DIALOGUE.value,
                 'confidence': 0.7,
                 'strategy': 'follow_quest_line',
+                'response_strategy': 'follow_quest_line',
                 'reasoning': 'Quest-related dialogue detected',
                 'suggested_actions': ['A'],
                 'context_factors': ['quest_context']
@@ -263,8 +281,10 @@ class SemanticContextSystem:
         elif 'pokémon' in lower_text or 'pokemon' in lower_text:
             response.update({
                 'intent': DialogueIntent.INFORMATION.value,
+                'primary_intent': DialogueIntent.INFORMATION.value,
                 'confidence': 0.5,
                 'strategy': 'listen_and_respond_appropriately',
+                'response_strategy': 'listen_and_respond_appropriately',
                 'reasoning': 'General Pokemon-related dialogue',
                 'suggested_actions': ['A'],
                 'context_factors': ['pokemon_reference']
@@ -281,13 +301,30 @@ class SemanticContextSystem:
             location_type = str(location_value).lower() if location_value else ''
             if 'gym' in location_type:
                 response['intent'] = DialogueIntent.GYM_CHALLENGE.value
+                response['primary_intent'] = DialogueIntent.GYM_CHALLENGE.value
                 response['confidence'] = max(response['confidence'], 0.4)  # Ensure > 0.3
+                response['strategy'] = 'accept_challenge'
+                response['response_strategy'] = 'accept_challenge'
                 response['reasoning'] = f'Location context: {location_type}'
             
         # Ensure intent/strategy keys exist for compatibility
-        response['intent'] = response.get('intent', response.get('primary_intent', DialogueIntent.UNKNOWN.value))
-        if response.get('response_strategy') and not response.get('strategy'):
+        # Synchronize between intent/primary_intent - primary_intent takes precedence
+        if 'primary_intent' in response:
+            response['intent'] = response['primary_intent']
+        else:
+            response['primary_intent'] = response.get('intent', DialogueIntent.UNKNOWN.value)
+            response['intent'] = response['primary_intent']
+
+        # Set a default strategy if none is set
+        if not response.get('strategy') and not response.get('response_strategy'):
+            response['strategy'] = 'wait_and_observe'
+            response['response_strategy'] = 'wait_and_observe'
+
+        # Synchronize between strategy/response_strategy - response_strategy takes precedence
+        if response.get('response_strategy'):
             response['strategy'] = response['response_strategy']
+        elif response.get('strategy'):
+            response['response_strategy'] = response['strategy']
         
         # Store analysis in database if available
         if self.db_path and self.db_path.exists():

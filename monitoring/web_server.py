@@ -594,7 +594,9 @@ class TrainingWebServer:
         self.config = config
         self.trainer = trainer
         self.server = None
+        self._running = False
         self.port = self._find_available_port()
+        self._trainer = trainer # For backward compatibility
         
         # Register with data bus
         self.data_bus = get_data_bus()
@@ -620,12 +622,21 @@ class TrainingWebServer:
     
     def start(self):
         """Start the HTTP server."""
-        handler_factory = lambda *args: TrainingHandler(self.trainer, *args)
-        self.server = HTTPServer(
-            (getattr(self.config, 'web_host', 'localhost'), self.port),
-            handler_factory
-        )
-        return self.server
+        # Create partial function to capture trainer reference
+        def handler_factory(*args):
+            return TrainingHandler(self.trainer, *args)
+            
+        try:
+            self.server = HTTPServer(
+                (getattr(self.config, 'web_host', 'localhost'), self.port),
+                handler_factory
+            )
+            self._running = True
+            return self.server
+        except Exception as e:
+            self.server = None
+            self._running = False
+            return None
     
     def stop(self):
         """Stop the HTTP server."""

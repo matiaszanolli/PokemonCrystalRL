@@ -11,7 +11,7 @@ from .dialogue_state_machine import DialogueStateMachine, DialogueState
 from .game_state_detection import GameStateDetector
 from .llm_manager import LLMManager
 from .training_strategies import TrainingStrategy, CurriculumStrategy
-from .game_state_detection import GameStateDetector
+from core.choice_recognition import ChoiceRecognitionSystem, ChoiceType, ChoicePosition, ChoiceContext, RecognizedChoice
 
 __all__ = [
     'TrainingMode',

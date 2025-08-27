@@ -6,9 +6,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 from core.semantic_context_system import SemanticContextSystem, GameContext
-from trainer.choice_recognition_system import (
-    ChoiceRecognitionSystem, 
-    RecognizedChoice, 
+from core.choice_recognition import (
+    ChoiceRecognitionSystem,
+    RecognizedChoice,
     ChoiceContext,
     ChoiceType,
     ChoicePosition
