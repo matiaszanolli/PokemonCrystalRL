@@ -100,12 +100,23 @@ class GameStateDetector:
             return "stuck"
 
         # Detect loading/black screen
-        if np.mean(gray) < 20:
+        mean_brightness = np.mean(gray)
+        title_std = np.std(gray)
+        self.logger.debug(f"Screen stats - mean: {mean_brightness:.1f}, std: {title_std:.1f}")
+        
+        if mean_brightness < 20:
+            self.logger.debug("Detected loading screen")
             return "loading"
 
         # Detect intro/white screen
-        if np.mean(gray) > 240:
+        if mean_brightness > 240:
+            self.logger.debug("Detected intro sequence")
             return "intro_sequence"
+
+        # Detect title screen (characterized by medium-high uniform brightness)
+        if 180 <= mean_brightness <= 220 and title_std < 30:
+            self.logger.debug("Detected title screen")
+            return "title_screen"
 
         # Menu detection (check for brighter rectangular region)
         menu_regions = [
@@ -120,18 +131,22 @@ class GameStateDetector:
             if region_mean > 180 and region_std < 40:
                 return "menu"
 
-        # Dialogue detection (check for bright box at bottom with text-like variance)
+        # Dialogue detection (check for bright box at bottom)
+        # For dialogue screens, expect main screen to be darker (around 100)
+        # with a bright dialogue box at the bottom (around 220)
         bottom = gray[100:, :]
+        top = gray[:100, :]
         bottom_mean = np.mean(bottom)
-        bottom_std = np.std(bottom)
+        top_mean = np.mean(top)
         
-        # Dialogue boxes are bright and have text-like variance
-        if bottom_mean > 200 and 30 < bottom_std < 70:
-            # Validate with text-like pattern check
-            text_rows = np.mean(bottom[::2], axis=1)  # Sample alternate rows
-            text_variance = np.std(text_rows)
-            if text_variance > 20:  # Text creates consistent variance pattern
-                return "dialogue"
+        # Check for characteristic dialogue box appearance:
+        # - Bottom is significantly brighter than top
+        # - Top is relatively dark
+        # - Bottom is relatively bright
+        if (bottom_mean > top_mean * 1.5 and 
+            top_mean < 150 and 
+            bottom_mean > 180):
+            return "dialogue"
 
         # Check for battle screen characteristics
         if self._detect_battle_screen(gray):

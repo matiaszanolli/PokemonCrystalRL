@@ -188,23 +188,8 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         return self._ErrorHandler(self, operation, error_type)
     
     def _detect_game_state(self, screen: Optional[np.ndarray]) -> str:
-        """Detect current game state from screen data"""
-        if screen is None:
-            return "unknown"
-            
-        # Check for loading screen (black)
-        if np.mean(screen) < 10:
-            return "loading"
-            
-        # Check for intro sequence (bright/white)
-        if np.mean(screen) > 240:
-            return "intro_sequence"
-            
-        # Check for dialogue (bright bottom section)
-        if np.mean(screen[100:, :]) > 200:
-            return "dialogue"
-            
-        return "overworld"
+        """Detect current game state from screen data using the shared detector"""
+        return self.game_state_detector.detect_game_state(screen) if screen is not None else "unknown"
     
     def _get_screen_hash(self, screen: np.ndarray) -> int:
         """Calculate hash of screen for change detection"""

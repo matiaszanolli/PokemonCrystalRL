@@ -696,8 +696,8 @@ class TestTrainingModes:
         
         trainer_fast_monitored._execute_synchronized_action(5)
         
-        # Action count should increase
-        assert trainer_fast_monitored.stats['total_actions'] == initial_actions + 1
+        # Action count should NOT increase in _execute_synchronized_action - it's only incremented in the training loop
+        assert trainer_fast_monitored.stats['total_actions'] == initial_actions
         trainer_fast_monitored.pyboy.send_input.assert_called_with(5)
     
     def test_stats_updating(self, trainer_fast_monitored):
@@ -821,9 +821,9 @@ class TestIntegrationScenarios:
             trainer._run_synchronized_training = limited_run
             trainer._run_synchronized_training()
             
-            # Assertions
+            # Assertions - Fix: Use error_counts instead of error_count
             trainer._attempt_pyboy_recovery.assert_called()
-            assert trainer.error_count['total_errors'] > 0
+            assert trainer.error_counts['total_errors'] > 0
             
         finally:
             # Proper cleanup
