@@ -29,7 +29,9 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         self.screenshot_queue = []  # List for test compatibility
     def __init__(self, config: TrainingConfig):
         """Initialize the unified trainer with enhanced features"""
+        print("DEBUG: Starting UnifiedPokemonTrainer initialization...")
         # Call setup_queues first to prevent initialization order issues
+        print("DEBUG: Setting up queues...")
         self._setup_queues()
         # Initialize error tracking - CHANGED TO PLURAL
         self.error_counts: Dict[str, int] = {  # Changed from error_count to error_counts
@@ -42,7 +44,9 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         # Keep backward compatibility
         self.error_count = self.error_counts  # Alias for backward compatibility
         # Initialize base trainer
+        print("DEBUG: Calling parent class initialization...")
         super().__init__(config)
+        print("DEBUG: Parent class initialization completed")
         # Keep backward compatibility
         self.error_count = self.error_counts  # Alias for backward compatibility
         

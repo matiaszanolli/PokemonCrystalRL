@@ -69,6 +69,7 @@ class PokemonTrainer:
 
     def __init__(self, config: TrainingConfig):
         """Initialize the trainer with configuration."""
+        print("DEBUG: Starting PokemonTrainer initialization...")
         if not PYBOY_AVAILABLE and not config.headless and not getattr(config, 'mock_pyboy', False):
             raise RuntimeError("PyBoy not available - install with: pip install pyboy")
 
@@ -139,6 +140,7 @@ class PokemonTrainer:
 
     def setup_logging(self):
         """Setup logging system."""
+        print("DEBUG: Setting up logging...")
         self.logger = logging.getLogger("pokemon_trainer")
         # Reset existing handlers
         for handler in self.logger.handlers:
@@ -169,19 +171,43 @@ class PokemonTrainer:
 
     def setup_pyboy(self):
         """Setup PyBoy emulator."""
+        print("DEBUG: Setting up PyBoy...")
         try:
+            print("DEBUG: Checking PyBoy prerequisites...")
+            if not PYBOY_AVAILABLE:
+                print("DEBUG: PyBoy not available, skipping setup")
+                return
+            
+            print(f"DEBUG: Validating config rom_path={self.config.rom_path}")
+            if not self.config.rom_path:
+                print("DEBUG: No ROM path specified")
+                return
+                
+            print(f"DEBUG: Creating PyBoy instance with parameters:")
+            print(f"  - rom_path: {self.config.rom_path}")
+            print(f"  - window: {'null' if self.config.headless else 'SDL2'}")
+            print(f"  - debug: {self.config.debug_mode}")
+            
+            print("DEBUG: Attempting PyBoy instantiation...")
             self.pyboy = PyBoy(
                 self.config.rom_path,
                 window="null" if self.config.headless else "SDL2",
                 debug=self.config.debug_mode
             )
+            print("DEBUG: PyBoy instance created successfully")
             
+            print("DEBUG: Checking for save state...")
             # Load save state if provided
             if self.config.save_state_path and os.path.exists(self.config.save_state_path):
+                print(f"DEBUG: Loading save state from {self.config.save_state_path}")
                 with open(self.config.save_state_path, 'rb') as f:
                     self.pyboy.load_state(f)
+                print("DEBUG: Save state loaded successfully")
+            else:
+                print("DEBUG: No save state to load")
 
         except Exception as e:
+            print(f"DEBUG: PyBoy initialization failed with error: {str(e)}")
             self.logger.error(f"Failed to initialize PyBoy: {e}")
             raise
 

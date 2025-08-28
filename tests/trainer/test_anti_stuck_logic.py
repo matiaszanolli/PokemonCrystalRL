@@ -519,10 +519,11 @@ class TestAntiStuckIntegration:
         for state, actions in actions_by_state.items():
             assert len(actions) == 10, f"State {state} should produce all actions"
             assert all(1 <= a <= 8 for a in actions), f"State {state} actions should be valid"
-            
+
             # States should show some behavioral differences
-            unique_actions = len(set(actions))
-            assert unique_actions >= 2, f"State {state} should have action variety"
+            if len(actions) > 0:  # Only calculate if we have actions
+                unique_actions = len(set(actions))
+                assert unique_actions >= 2, f"State {state} should have action variety"
 
 
 if __name__ == "__main__":
