@@ -440,10 +440,11 @@ class DialogueStateMachine:
             table_exists = cursor.fetchone() is not None
             
             if table_exists:
-                # Check if session_id column exists
+                # Check current schema
                 cursor.execute("PRAGMA table_info(dialogue_sessions)")
                 columns = [col[1] for col in cursor.fetchall()]
                 
+                # If the table is missing structural columns, rebuild
                 if 'session_start' not in columns or 'location_map' not in columns:
                     # Migrate old table structure
                     cursor.execute("ALTER TABLE dialogue_sessions RENAME TO dialogue_sessions_old")
@@ -472,20 +473,59 @@ class DialogueStateMachine:
                         # If migration fails, just create empty table
                         pass
                     cursor.execute("DROP TABLE dialogue_sessions_old")
+                else:
+                    # Ensure end_time column exists (older schemas may be missing it)
+                    if 'end_time' not in columns:
+                        try:
+                            cursor.execute("ALTER TABLE dialogue_sessions ADD COLUMN end_time TEXT")
+                        except sqlite3.Error:
+                            pass
             else:
-                        # Create new table with correct schema
-                        cursor.execute("""
-                        CREATE TABLE dialogue_sessions (
-                            session_start TEXT NOT NULL,
-                            npc_type TEXT,
-                            location_map INTEGER,
-                            total_exchanges INTEGER DEFAULT 0,
-                            choices_made INTEGER DEFAULT 0,
-                            end_time TEXT,
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            session_id INTEGER UNIQUE
-                        )
-                        """)
+                # Create new table with correct schema
+                cursor.execute("""
+                    CREATE TABLE dialogue_sessions (
+                        session_start TEXT NOT NULL,
+                        npc_type TEXT,
+                        location_map INTEGER,
+                        total_exchanges INTEGER DEFAULT 0,
+                        choices_made INTEGER DEFAULT 0,
+                        end_time TEXT,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id INTEGER UNIQUE
+                    )
+                """)
+            
+            # Ensure conversations table exists and has required columns
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'")
+            conv_exists = cursor.fetchone() is not None
+            if not conv_exists:
+                cursor.execute("""
+                    CREATE TABLE conversations (
+                        session_start TEXT NOT NULL,
+                        npc_type TEXT,
+                        location_map INTEGER,
+                        total_exchanges INTEGER DEFAULT 0,
+                        choices_made INTEGER DEFAULT 0,
+                        end_time TEXT,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id INTEGER UNIQUE
+                    )
+                """)
+            else:
+                cursor.execute("PRAGMA table_info(conversations)")
+                conv_columns = [col[1] for col in cursor.fetchall()]
+                if 'session_id' not in conv_columns:
+                    try:
+                        cursor.execute("ALTER TABLE conversations ADD COLUMN session_id INTEGER")
+                    except sqlite3.Error:
+                        pass
+                if 'end_time' not in conv_columns:
+                    try:
+                        cursor.execute("ALTER TABLE conversations ADD COLUMN end_time TEXT")
+                    except sqlite3.Error:
+                        pass
+            
+            # Dialogue choices table
             
             # Dialogue choices table
             cursor.execute("""

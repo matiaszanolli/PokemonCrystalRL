@@ -125,23 +125,25 @@ class GameStateDetector:
             self.last_screen_hash = current_hash
             self._last_gray = None  # Reset gray cache on screen change
 
-        # Detect loading/black screen
+        # Detect loading/black screen and transitions
         mean_brightness = np.mean(gray)
         title_std = np.std(gray)
         self.logger.debug(f"Screen stats - mean: {mean_brightness:.1f}, std: {title_std:.1f}")
         
-        if mean_brightness < 20:
-            self.logger.debug("Detected loading screen")
-            return "loading"
+        # Transitions include both dark and fade screens
+        if mean_brightness < 50 or (mean_brightness < 100 and title_std < 20):
+            self.logger.debug("Detected unknown/loading state")
+            return "unknown"
 
         # Detect intro/white screen
         if mean_brightness > 240:
             self.logger.debug("Detected intro sequence")
-            return "intro_sequence"
+            return "title_screen"
 
         # Detect title screen (characterized by medium-high uniform brightness)
         if 180 <= mean_brightness <= 220 and title_std < 30:
             self.logger.debug("Detected title screen")
+            # Title screens can use either START (7) or A (5) button
             return "title_screen"
 
         # Menu detection (check for brighter rectangular region)

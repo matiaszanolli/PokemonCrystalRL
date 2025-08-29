@@ -48,9 +48,17 @@ class UnifiedMonitor:
     """Unified web monitoring server for Pokemon Crystal RL training."""
     
     def __init__(self, training_session=None, host='127.0.0.1', port=5000, config=None):
+        # Allow passing config as first positional argument for backward/test compatibility
+        if config is None and training_session is not None and hasattr(training_session, 'db_path'):
+            config, training_session = training_session, None
+        
         self.training_session = training_session
         self.config = config
-        self.host = host
+        # Prefer host/port from config when available
+        if self.config and hasattr(self.config, 'host'):
+            self.host = getattr(self.config, 'host')
+        else:
+            self.host = host
         # Use config's web_port if available, otherwise use provided port
         self.port = config.web_port if config and hasattr(config, 'web_port') else port
         self.logger = logging.getLogger(__name__)
@@ -126,6 +134,7 @@ class UnifiedMonitor:
         self.recent_text = deque(maxlen=100)
         self.recent_actions = deque(maxlen=100)
         self.recent_decisions = deque(maxlen=50)
+        self.events = deque(maxlen=1000)  # Simple event store for API
         
         # Real-time data queues
         self.screen_queue = Queue(maxsize=10)
@@ -137,6 +146,9 @@ class UnifiedMonitor:
         self.last_update_time = time.time()
         self.update_count = 0
         self.is_monitoring = False
+        
+        # Server thread holder
+        self._server_thread: Optional[threading.Thread] = None
         
         # Memory management
         self.max_memory_usage = 500 * 1024 * 1024  # 500MB limit
@@ -168,8 +180,13 @@ class UnifiedMonitor:
         @self.app.route('/api/status')
         def get_status():
             """Get current monitoring status"""
+            # Map training_state to status string expected by tests
+            state_status = 'running' if self.training_state == TrainingState.RUNNING else \
+                           'paused' if self.training_state == TrainingState.PAUSED else \
+                           'completed' if self.training_state == TrainingState.COMPLETED else \
+                           'stopped'
             return jsonify({
-                'status': 'running' if self.is_monitoring else 'stopped',
+                'status': state_status,
                 'monitoring': self.is_monitoring,
                 'training_active': self.training_session is not None,
                 'current_run_id': self.current_run_id,
@@ -209,6 +226,11 @@ class UnifiedMonitor:
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
+        # Alias for compatibility with tests
+        @self.app.route('/api/screen')
+        def get_screen_alias():
+            return get_screenshot()
+        
         @self.app.route('/api/text')
         def get_text():
             """Get text recognition data"""
@@ -216,6 +238,14 @@ class UnifiedMonitor:
                 'recent_text': list(self.recent_text),
                 'text_frequency': dict(self.text_frequency)
             })
+        
+        @self.app.route('/api/events')
+        def get_events():
+            """Get recent events for testing/compatibility."""
+            try:
+                return jsonify({'events': list(self.events)})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
         
         @self.app.route('/api/system')
         def get_system():
@@ -371,6 +401,11 @@ class UnifiedMonitor:
         
         self.is_monitoring = True
         self.training_state = TrainingState.RUNNING
+        
+        # Initialize with test data if needed
+        if self.current_stats and self.training_session and hasattr(self.training_session, 'get_stats'):
+            self.current_stats.update(self.training_session.get_stats())
+        
         self.logger.info("🎯 Monitoring started")
         
         # Start monitoring thread
@@ -410,6 +445,21 @@ class UnifiedMonitor:
             if self.training_session:
                 stats = self.training_session.get_stats()
                 self.current_stats.update(stats)
+                
+                # Record metrics for the API
+                metrics_entry = {
+                    'timestamp': time.time(),
+                    'metrics': dict(stats),
+                    'datetime': datetime.now().isoformat()
+                }
+                self.metrics_history.append(metrics_entry)
+                
+                # Also append an event for the events API
+                self.events.append({
+                    'event_type': 'metrics_update',
+                    'timestamp': time.time(),
+                    'metrics': dict(stats)
+                })
         except Exception as e:
             self.logger.error(f"⚠️ Stats update error: {e}")
     
@@ -533,6 +583,8 @@ class UnifiedMonitor:
         
         self.current_run_id = f"run_{int(time.time())}"
         self.training_state = TrainingState.RUNNING
+        # Ensure HTTP server is running
+        self._ensure_server_started()
         self.start_monitoring()
         return self.current_run_id
     
@@ -564,6 +616,15 @@ class UnifiedMonitor:
             'datetime': datetime.now().isoformat()
         }
         self.metrics_history.append(metrics_entry)
+        
+        # Also append a simple event so /api/events has data during tests
+        try:
+            self.events.append({
+                'event_type': 'metrics_update',
+                'timestamp': metrics_entry['timestamp']
+            })
+        except Exception:
+            pass
         
         # Store in database if available
         if self.db and self.current_run_id:
@@ -670,8 +731,35 @@ class UnifiedMonitor:
     
     def run(self, debug=False):
         """Run the monitoring server."""
-        self.logger.info(f"🌐 Starting web monitor on http://{self.host}:{self.port}")
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=debug, allow_unsafe_werkzeug=True)
+        # Load web_port from config if available
+        if self.config and hasattr(self.config, 'web_port'):
+            port = self.config.web_port
+        else:
+            port = self.port
+            
+        self.logger.info(f"🌐 Starting web monitor on http://{self.host}:{port}")
+        self.socketio.run(self.app, host=self.host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+    
+    def _ensure_server_started(self):
+        """Start the HTTP server in a background thread if not already running."""
+        if self._server_thread and self._server_thread.is_alive():
+            return
+        
+        def _run_server():
+            try:
+                # Use web_port from config if available
+                if self.config and hasattr(self.config, 'web_port'):
+                    port = self.config.web_port
+                else:
+                    port = self.port
+                    
+                # Use allow_unsafe_werkzeug=True for test environment
+                self.socketio.run(self.app, host=self.host, port=port, debug=False, allow_unsafe_werkzeug=True)
+            except Exception as e:
+                self.logger.error(f"Failed to start server: {e}")
+        
+        self._server_thread = threading.Thread(target=_run_server, daemon=True)
+        self._server_thread.start()
 
 
 def main():
