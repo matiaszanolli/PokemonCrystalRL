@@ -662,6 +662,20 @@ class PokemonTrainer:
                 self.trainer.error_counts[self.error_type] += 1
                 self.trainer.error_counts['total_errors'] += 1
             
+            # Publish error to data bus
+            if self.trainer.data_bus:
+                error_data = {
+                    'error_type': self.error_type,
+                    'operation': self.operation,
+                    'error': str(exc_value),
+                    'timestamp': time.time()
+                }
+                self.trainer.data_bus.publish(
+                    DataType.ERROR_EVENT,
+                    error_data,
+                    "trainer"
+                )
+            
             # Check if PyBoy needs recovery
             if self.error_type == 'pyboy_crashes' and not self.trainer._is_pyboy_alive():
                 self.needs_recovery = True
@@ -704,23 +718,53 @@ class PokemonTrainer:
 
     def _finalize_training(self):
         """Clean up resources after training."""
-        if self.pyboy:
+        # Stop capture threads first
+        if hasattr(self, 'capture_active') and self.capture_active:
             try:
-                self.pyboy.stop()
+                # Clear any blocked queues
+                try:
+                    while not self.screen_queue.empty():
+                        self.screen_queue.get_nowait()
+                except Exception:
+                    pass  # Ignore queue errors during cleanup
+                self._stop_screen_capture()
             except Exception as e:
-                self.logger.error(f"Error stopping PyBoy: {e}")
+                self.logger.error(f"Error stopping screen capture: {e}")
 
+        # Shutdown web server before unregistering from data bus
+        # to prevent requests during cleanup
         if self.web_server:
             try:
+                self.logger.debug("Stopping web server...")
+                # Force shutdown flag in case server is stuck
+                if hasattr(self.web_server, '_running'):
+                    self.web_server._running = False
+                # Call shutdown which should trigger thread cleanup
                 self.web_server.shutdown()
+                # Give thread time to stop
+                if hasattr(self, 'web_thread') and self.web_thread and self.web_thread.is_alive():
+                    self.web_thread.join(timeout=1.0)
+                self.logger.debug("Web server stopped")
             except Exception as e:
                 self.logger.error(f"Error stopping web server: {e}")
 
+        # Unregister from data bus
         if self.data_bus:
             try:
+                self.logger.debug("Unregistering trainer from data bus...")
                 self.data_bus.unregister_component("trainer")
+                self.logger.debug("Trainer unregistered")
             except Exception as e:
                 self.logger.error(f"Error unregistering trainer: {e}")
+
+        # Finally stop PyBoy
+        if self.pyboy:
+            try:
+                self.logger.debug("Stopping PyBoy...")
+                self.pyboy.stop()
+                self.logger.debug("PyBoy stopped")
+            except Exception as e:
+                self.logger.error(f"Error stopping PyBoy: {e}")
 
     def _is_pyboy_alive(self) -> bool:
         """Check if PyBoy instance is alive and functioning."""

@@ -28,6 +28,9 @@ import base64
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
 
+# Configure module logger
+logger = logging.getLogger(__name__)
+
 from aiohttp import web
 import aiohttp
 from aiohttp.web import (
@@ -611,7 +614,18 @@ class TrainingWebServer:
     def _find_available_port(self):
         """Find an available port starting from the configured port."""
         start_port = getattr(self.config, 'web_port', 8080)
-        for port in range(start_port, start_port + 10):
+        
+        # Try specified port first
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((getattr(self.config, 'web_host', 'localhost'), start_port))
+                return start_port
+        except OSError:
+            pass
+        
+        # Try port range
+        for port in range(start_port, start_port + 1000):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -619,6 +633,17 @@ class TrainingWebServer:
                     return port
             except OSError:
                 continue
+        
+        # Let OS pick a port
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((getattr(self.config, 'web_host', 'localhost'), 0))
+                _, port = s.getsockname()
+                return port
+        except OSError:
+            pass
+        
         raise RuntimeError(f"Could not find available port starting from {start_port}")
     
     def start(self):
@@ -628,28 +653,80 @@ class TrainingWebServer:
             return TrainingHandler(self.trainer, *args)
             
         try:
+            logger.debug(f"Starting server on {getattr(self.config, 'web_host', 'localhost')}:{self.port}")
+            
             self.server = HTTPServer(
                 (getattr(self.config, 'web_host', 'localhost'), self.port),
                 handler_factory
             )
             self._running = True
+            
+            # Start server in a thread
+            server_thread = threading.Thread(
+                target=self.server.serve_forever,
+                daemon=True
+            )
+            server_thread.start()
+            logger.debug(f"Server thread started on port {self.port}")
+            
             return self.server
         except Exception as e:
+            logger.error(f"Failed to start server: {e}")
             self.server = None
             self._running = False
+            self.data_bus.unregister_component("web_server")
             return None
     
     def stop(self):
         """Stop the HTTP server."""
-        if self.server:
-            self.server.shutdown()
-            self.server.server_close()
+        logger.debug("TrainingWebServer - Stopping HTTP server...")
+        
+        try:
+            # First unregister from data bus to prevent new messages
+            try:
+                if self.data_bus:
+                    logger.debug("TrainingWebServer - Unregistering from data bus")
+                    self.data_bus.unregister_component("web_server")
+                    logger.debug("TrainingWebServer - Unregistered from data bus")
+            except Exception as e:
+                logger.error(f"TrainingWebServer - Error unregistering from data bus: {e}")
+            
+            # Prevent further requests
+            self._running = False
+            logger.debug("TrainingWebServer - Marked as not running")
+            
+            # Shutdown server if running
+            if self.server:
+                try:
+                    logger.debug("TrainingWebServer - Shutting down HTTP server...")
+                    # In test mode, server might not be listening
+                    if hasattr(self.server, '_handle_request_noblock'):
+                        self.server._BaseServer__shutdown_request = True
+                    self.server.shutdown()
+                    self.server.server_close()
+                    logger.debug("TrainingWebServer - HTTP server shutdown complete")
+                except Exception as e:
+                    logger.error(f"TrainingWebServer - Error shutting down HTTP server: {e}")
+                    # Ensure we still clear the reference
+                    pass
+            
+            self.server = None
+            logger.debug("TrainingWebServer - Cleared server reference")
+            
+        except Exception as e:
+            logger.error(f"TrainingWebServer - Unexpected error during stop: {e}")
+            # Always ensure the server is marked as not running
+            self._running = False
+            self.server = None
     
     def shutdown(self):
-        """Shutdown and unregister from data bus."""
-        self.stop()
-        if self.data_bus:
-            self.data_bus.unregister_component("web_server")
+        """Shutdown and cleanup."""
+        logger.debug("TrainingWebServer - Starting shutdown sequence")
+        try:
+            self.stop()
+            logger.debug("TrainingWebServer - Shutdown completed successfully")
+        except Exception as e:
+            logger.error(f"TrainingWebServer - Error during shutdown: {e}")
 
 
 class TrainingHandler(BaseHTTPRequestHandler):

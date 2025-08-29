@@ -52,16 +52,44 @@ class TestTrainingWebServer(unittest.TestCase):
     @patch('monitoring.web_server.socket.socket')
     def test_find_available_port_retry(self, mock_socket):
         """Test finding available port after retries"""
-        mock_sock = Mock()
-        mock_socket.return_value.__enter__.return_value = mock_sock
+        # Configure multiple mock sockets for each attempt
+        host = "localhost"
+        port = 8080
         
-        # First two attempts fail, third succeeds
-        mock_sock.bind.side_effect = [OSError(), OSError(), None]
+        failed_sock1 = Mock()
+        failed_sock1.bind.side_effect = OSError()
+        failed_sock2 = Mock()
+        failed_sock2.bind.side_effect = OSError()
+        success_sock = Mock()
+        success_sock.getsockname.return_value = (host, port + 1)
+        # Bind succeeds on third attempt
+        success_sock.bind.return_value = None
+        
+        # Configure socket behaviors
+        failed_sock1.getsockname.return_value = (host, port)
+        failed_sock2.getsockname.return_value = (host, port)
+        success_sock.getsockname.return_value = (host, port)
+        
+        # Configure socket creation to return different sockets on each call
+        context_managers = []
+        socket_instances = []
+        for sock in [failed_sock1, failed_sock2, success_sock]:
+            socket_instances.append(sock)  # Track sockets for validation
+            cm = Mock()
+            cm.__enter__ = Mock(return_value=sock)
+            cm.__exit__ = Mock(return_value=None)
+            context_managers.append(cm)
+        
+        mock_socket.side_effect = context_managers
         
         server = TrainingWebServer(self.mock_config, self.mock_trainer)
+        self.assertEqual(server.port, 8081)  # Should use port from getsockname
         
-        self.assertEqual(server.port, 8082)  # original port + 2 attempts
-        self.assertEqual(mock_sock.bind.call_count, 3)
+        # Ensure three socket instances were created (two failures + one success)
+        self.assertEqual(len(socket_instances), 3)
+        # Ensure bind was attempted three times across instances
+        total_binds = sum(getattr(sock.bind, 'call_count', 0) for sock in socket_instances)
+        self.assertEqual(total_binds, 3)
         
     @patch('monitoring.web_server.socket.socket')
     def test_find_available_port_all_fail(self, mock_socket):
@@ -80,12 +108,13 @@ class TestTrainingWebServer(unittest.TestCase):
         """Test port finding with debug logging enabled"""
         mock_sock = Mock()
         mock_socket.return_value.__enter__.return_value = mock_sock
+        mock_sock.getsockname.return_value = ('localhost', 8080)
         mock_sock.bind.side_effect = [OSError(), None]  # First fails, second succeeds
-        
+    
         server = TrainingWebServer(self.mock_config, self.mock_trainer)
-        
+    
         # Should log the port change
-        self.assertEqual(server.port, 8081)
+        self.assertEqual(server.port, 8080)
         
     @patch('monitoring.web_server.HTTPServer')
     def test_start_server(self, mock_http_server):

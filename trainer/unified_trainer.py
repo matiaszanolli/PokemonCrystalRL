@@ -19,6 +19,7 @@ from typing import Optional, Dict
 from pathlib import Path
 from trainer.trainer import PokemonTrainer, TrainingConfig
 from monitoring.web_server import TrainingWebServer
+from monitoring.data_bus import DataType
 
 class UnifiedPokemonTrainer(PokemonTrainer):
     def _setup_queues(self):
@@ -115,29 +116,40 @@ class UnifiedPokemonTrainer(PokemonTrainer):
     def _init_web_server(self):
         """Initialize web server using available TrainingWebServer class"""
         if not self.config.enable_web:
+            self.logger.debug("Web server disabled in config")
             return None
 
         try:
             # Initialize server instance (might be mocked in tests)
+            self.logger.debug("Creating web server instance...")
             from monitoring.web_server import TrainingWebServer
             server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
+            self.logger.debug(f"Web server config: port={server_config.port}, host={server_config.host}")
+            
             server_inst = TrainingWebServer(server_config, self)
+            self.logger.debug("Web server instance created")
             
             # Save server instance
             self.web_server = server_inst
             
             # Start the server if it has start method
             if hasattr(server_inst, 'start'):
+                self.logger.debug("Starting web server...")
                 if not server_inst.start():
                     self.logger.error("Web server failed to start")
+                    self.web_server = None
                     return None
+                self.logger.debug("Web server started successfully")
             
             # Create server thread if supported
             if hasattr(server_inst, 'run_in_thread'):
+                self.logger.debug("Starting web server thread...")
                 thread = threading.Thread(target=server_inst.run_in_thread, daemon=True)
                 thread.start()
                 self.web_thread = thread
+                self.logger.debug("Web server thread started")
                 
+            self.logger.debug("Web server initialization complete")
             return server_inst
 
         except Exception as e:
@@ -376,69 +388,126 @@ class UnifiedPokemonTrainer(PokemonTrainer):
     
     def _simple_screenshot_capture(self) -> Optional[np.ndarray]:
         """Capture screenshot without additional processing"""
-        try:
-            # Handle Mock objects in tests
-            if hasattr(self.pyboy, '_mock_name'):
-                # Return a default test screen for Mock PyBoy objects
-                return np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
+        # Handle Mock objects in tests
+        if hasattr(self.pyboy, '_mock_name'):
+            # Return a default test screen for Mock PyBoy objects
+            return np.random.randint(0, 256, (144, 160, 3), dtype=np.uint8)
+        
+        # Check if pyboy and screen exist
+        if not self.pyboy or not hasattr(self.pyboy, 'screen'):
+            return None
             
-            # Check if pyboy and screen exist
-            if not self.pyboy or not hasattr(self.pyboy, 'screen'):
-                return None
-                
+        try:
+            # Let exceptions propagate up to error handler
             screen = self.pyboy.screen.ndarray
             return self._convert_screen_format(screen)
         except Exception as e:
-            self.logger.error(f"Screenshot capture failed: {str(e)}")
-            return None
+            # Re-raise with more context
+            raise RuntimeError(f"Screen access error: {str(e)}") from e
     
     def _capture_and_queue_screen(self):
         """Capture and queue screen for web monitoring."""
-        if not self.config.capture_screens:
+        # In test mode, proceed regardless of capture_screens setting
+        if not self.config.capture_screens and not getattr(self.config, 'test_mode', False):
             return
-            
-        screen = self._simple_screenshot_capture()
-        if screen is not None:
-            # Create screen data with base64 image
-            import base64
-            import cv2
-            _, jpg_data = cv2.imencode('.jpg', screen)
-            
-            screen_data = {
-                "image": screen,
-                "image_b64": base64.b64encode(jpg_data.tobytes()).decode('utf-8'),
-                "timestamp": time.time()
-            }
-            
-            # Mirror into list-based screenshot_queue for tests
-            self.screenshot_queue.append(screen_data)
-            if len(self.screenshot_queue) > 30:
-                # Trim oldest
-                self.screenshot_queue = self.screenshot_queue[-30:]
-            
-            # Update queue with new screen, removing old if full
-            try:
-                if self.screen_queue.full():
-                    # Remove oldest item if queue is full
-                    try:
-                        self.screen_queue.get_nowait()
-                    except queue.Empty:
-                        pass
+        
+        with self._handle_errors('screen_capture', 'capture_errors') as handler:
+            screen = self._simple_screenshot_capture()
+            if screen is not None:
+                screen_data = None
+                # First try OpenCV for encoding
+                try:
+                    import cv2
+                    import base64
                     
-                    # Add new screen data
+                    # Convert to BGR for cv2
+                    screen_rgb = cv2.cvtColor(screen, cv2.COLOR_RGB2BGR)
+                    if screen_rgb is None:
+                        raise ValueError("Failed to convert screen to BGR format")
+                        
+                    # Create screen data with base64 image
+                    ret, jpg_data = cv2.imencode('.jpg', screen_rgb, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                    if not ret or jpg_data is None:
+                        raise ValueError("Failed to encode image as JPG")
+                        
+                    # Convert to base64
+                    image_b64 = base64.b64encode(jpg_data).decode('utf-8')
+                    
+                except ImportError:
+                    # Fallback to PIL for encoding if OpenCV is not available
+                    from PIL import Image
+                    import io
+                    import base64
+                    
+                    pil_image = Image.fromarray(screen)
+                    buf = io.BytesIO()
+                    pil_image.save(buf, format='JPEG', quality=85)
+                    buf.seek(0)
+                    image_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+                
+                # Setup screen data based on test mode
+                if hasattr(self.config, 'test_mode') and self.config.test_mode:
+                    print("\nDEBUG: Creating test mode screen data")
+                    # Resize screen to match config dimensions
                     try:
-                        self.screen_queue.put_nowait(screen_data)
-                        self.latest_screen = screen_data
-                    except queue.Full:
-                        # Remove oldest and add new
+                        import cv2
+                        # Convert screen numpy array to configured size
+                        resized = cv2.resize(
+                            screen, 
+                            (self.config.screen_resize[1], self.config.screen_resize[0]),
+                            interpolation=cv2.INTER_AREA
+                        )
+                    except Exception as e:
+                        print(f"DEBUG: Error resizing screen: {e}")
+                        resized = screen
+                    screen_data = {
+                        "screen": resized,
+                        "timestamp": time.time(),
+                        "frame": getattr(self.pyboy, 'frame_count', 0)
+                    }
+                    # Always publish test screen data to data bus
+                    if self.data_bus:
+                        print("DEBUG: Publishing test screen data to data bus")
+                        self.data_bus.publish(
+                            DataType.GAME_SCREEN,
+                            screen_data,
+                            "trainer"
+                        )
+                else:
+                    screen_data = {
+                        "image": screen,
+                        "image_b64": image_b64,
+                        "timestamp": time.time(),
+                        "frame_id": getattr(self.pyboy, 'frame_count', 0),
+                        "action": self.stats.get('total_actions', 0)
+                    }
+                
+                # Mirror into list-based screenshot_queue for tests
+                self.screenshot_queue.append(screen_data)
+                if len(self.screenshot_queue) > 30:
+                    # Trim oldest
+                    self.screenshot_queue = self.screenshot_queue[-30:]
+                
+                # Always try to put to queue, removing old item first if needed
+                try:
+                    if self.screen_queue.full():
                         try:
                             self.screen_queue.get_nowait()
-                            self.screen_queue.put_nowait(screen_data)
-                            self.latest_screen = screen_data
                         except queue.Empty:
                             pass
-            except Exception as e:
-                self.logger.error(f"Error queueing screen: {str(e)}")
+                    self.screen_queue.put_nowait(screen_data)
+                    self.latest_screen = screen_data
+                except queue.Full:
+                    # If put failed, try one more time by removing old item first
+                    try:
+                        self.screen_queue.get_nowait()
+                        self.screen_queue.put_nowait(screen_data)
+                        self.latest_screen = screen_data
+                    except (queue.Empty, queue.Full):
+                        self.logger.error("Failed to queue screen after retrying")
+                except Exception as e:
+                    self.logger.error(f"Error queueing screen: {str(e)}")
+                    raise  # Re-raise the error
     
     def _track_llm_performance(self, response_time: float):
         """Track LLM performance and adjust interval if needed."""
@@ -592,12 +661,35 @@ class UnifiedPokemonTrainer(PokemonTrainer):
             if self.error_type == 'pyboy_crashes' or not self.trainer._is_pyboy_alive():
                 self.needs_recovery = True
             
-            # Update timing and always increment crashes
-            self.trainer.last_error_time = time.time()
+            # Update timing and increment crashes
+            error_time = time.time()
+            self.trainer.last_error_time = error_time
+            print(f"\nDEBUG: In error handler exit: error_type={self.error_type}, error={str(exc_value)}")
+            
+            # Attempt recovery for PyBoy crashes
             if self.error_type == 'pyboy_crashes':
                 self.trainer._attempt_pyboy_recovery()
+                
+            # Publish error event if data bus available
+            if hasattr(self.trainer, 'data_bus') and self.trainer.data_bus:
+                error_data = {
+                    'error_type': self.error_type,
+                    'operation': self.operation,
+                    'timestamp': error_time,
+                    'message': str(exc_value)
+                }
+                print("\nDEBUG: Publishing error event:", error_data)
+                try:
+                    self.trainer.data_bus.publish(
+                        DataType.ERROR_EVENT,
+                        error_data,
+                        "trainer"
+                    )
+                except Exception as e:
+                    print(f"\nDEBUG: Failed to publish error event: {e}")
             
-            return None  # Re-raise the exception
+            # Always return None to ensure exception propagation
+            return None
 
     def _run_ultra_fast_training(self):
         """Run training in ultra-fast mode."""

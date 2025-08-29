@@ -238,6 +238,7 @@ class UnifiedMonitor:
                 return jsonify({'error': str(e)}), 500
         
         @self.app.route('/api/metrics')
+        @self.app.route('/api/metrics/current')
         def get_metrics():
             """Get current training metrics"""
             return jsonify({

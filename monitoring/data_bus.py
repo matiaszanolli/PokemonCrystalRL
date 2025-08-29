@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List
 import threading
 import time
 import queue
+import logging
 from dataclasses import dataclass, asdict
 
 
@@ -52,6 +53,8 @@ class DataBus:
         self._queues = {}
         self._active = True
         self._running = True  # Alias for test compatibility
+        self._logger = logging.getLogger("data_bus")
+        self._logger.debug("DataBus initialized")
         
     def register_component(self, component_id: str, metadata: Dict[str, Any]) -> None:
         """Register a component with the data bus.
@@ -60,11 +63,13 @@ class DataBus:
             component_id: Unique identifier for the component
             metadata: Component metadata dictionary
         """
+        self._logger.debug(f"Registering component {component_id} with metadata {metadata}")
         with self._lock:
             self._components[component_id] = {
                 "metadata": metadata,
                 "last_seen": time.time()
             }
+        self._logger.debug(f"Component {component_id} registered")
             
     def unregister_component(self, component_id: str) -> None:
         """Remove a component from the data bus.
@@ -72,16 +77,23 @@ class DataBus:
         Args:
             component_id: ID of component to remove
         """
+        self._logger.debug(f"Unregistering component {component_id}")
         with self._lock:
             if component_id in self._components:
+                self._logger.debug(f"Removing {component_id} from components")
                 del self._components[component_id]
                 
             # Remove any subscriptions
             for data_type in self._subscribers:
+                before_len = len(self._subscribers[data_type])
                 self._subscribers[data_type] = [
                     s for s in self._subscribers[data_type] 
                     if s['component_id'] != component_id
                 ]
+                after_len = len(self._subscribers[data_type])
+                if before_len != after_len:
+                    self._logger.debug(f"Removed {before_len - after_len} subscriptions for {component_id}")
+        self._logger.debug(f"Component {component_id} unregistered")
                 
     def subscribe(self, data_type: DataType, component_id: str, 
                  callback: Optional[callable] = None,
@@ -179,12 +191,33 @@ class DataBus:
             
     def shutdown(self) -> None:
         """Shutdown the data bus."""
+        self._logger.debug("Starting data bus instance shutdown...")
+        
+        # First mark as inactive to prevent new messages
         with self._lock:
             self._active = False
             self._running = False
-            # Clear subscribers and components
+            remaining = list(self._components.keys())
+            self._logger.debug(f"Data bus marked as inactive. Remaining components: {remaining}")
+        
+        # Give components a chance to unregister
+        time.sleep(0.1)
+
+        # Unregister remaining components outside the lock to avoid deadlocks
+        if remaining:
+            self._logger.debug(f"Cleaning up {len(remaining)} remaining components: {remaining}")
+            for component_id in remaining:
+                try:
+                    self.unregister_component(component_id)
+                except Exception as e:
+                    self._logger.error(f"Error unregistering {component_id}: {e}")
+        
+        # Clear remaining data structures under the lock
+        with self._lock:
             self._subscribers = {}
             self._components = {}
+            
+        self._logger.debug("Data bus shutdown complete")
 
 
 # Global data bus instance (singleton pattern)
@@ -208,7 +241,63 @@ def shutdown_data_bus() -> None:
     """Shutdown the global data bus"""
     global _global_data_bus
     
-    with _data_bus_lock:
-        if _global_data_bus is not None:
-            _global_data_bus.shutdown()
+    logger = logging.getLogger("data_bus")
+    logger.setLevel(logging.DEBUG)  # Ensure debug is enabled
+    
+    logger.debug("Starting data bus shutdown sequence...")
+    
+    # Setup a watchdog timer for safety
+    def watchdog():
+        logger.warning("Data bus shutdown watchdog timeout - forcing cleanup")
+        global _global_data_bus
+        with _data_bus_lock:
+            if _global_data_bus:
+                logger.debug("Watchdog forcing data bus cleanup...")
+                _global_data_bus._active = False
+                _global_data_bus._running = False
+                _global_data_bus._components.clear()
+                _global_data_bus._subscribers.clear()
+                logger.debug("Watchdog cleanup complete")
             _global_data_bus = None
+            logger.debug("Watchdog cleared global reference")
+    
+    watchdog_timer = threading.Timer(3.0, watchdog)
+    watchdog_timer.daemon = True
+    watchdog_timer.start()
+    logger.debug("Started 3s watchdog timer")
+    
+    try:
+        # First get reference to data bus if it exists
+        data_bus = None
+        with _data_bus_lock:
+            data_bus = _global_data_bus
+            if data_bus is None:
+                logger.debug("No data bus instance found")
+                watchdog_timer.cancel()
+                return
+        
+        # Get list of components to help with debugging
+        try:
+            components = data_bus.get_component_status()
+            logger.debug(f"Components before shutdown: {components}")
+        except Exception as e:
+            logger.debug(f"Could not get component status: {e}")
+        
+        # If data bus exists, shut it down outside the lock
+        # to prevent deadlocks with component unregistration
+        try:
+            data_bus.shutdown()
+            logger.debug("Data bus shutdown completed")
+        except Exception as e:
+            logger.error(f"Error during data bus shutdown: {e}")
+        
+        # Clear global reference
+        # Success - cancel watchdog and clear reference
+        watchdog_timer.cancel()
+        with _data_bus_lock:
+            _global_data_bus = None
+            logger.debug("Global data bus reference cleared")
+            
+    except Exception as e:
+        logger.error(f"Unexpected error during data bus shutdown: {e}")
+        # Let watchdog handle cleanup in case of failure

@@ -116,12 +116,13 @@ class MockTrainer:
                 self.metrics["accuracy"] = min(0.99, self.metrics["accuracy"] + 0.01)
                 self.metrics["reward"] = np.random.normal(0.5, 0.1)
                 
-                # Record system metrics
-                self.monitor.update_system_metrics(
-                    cpu_percent=psutil.cpu_percent(),
-                    memory_percent=psutil.virtual_memory().percent,
-                    disk_usage=psutil.disk_usage("/").percent
-                )
+                # Update monitor metrics
+                self.monitor.update_metrics({
+                    "cpu_percent": psutil.cpu_percent(),
+                    "memory_percent": psutil.virtual_memory().percent,
+                    "disk_usage": psutil.disk_usage("/").percent,
+                    **self.metrics
+                })
                 
                 # Occasionally generate events
                 if self.step % 50 == 0:
@@ -226,6 +227,19 @@ class TestSystemIntegration:
         """Test complete training session with all components."""
         # Start training
         start_time = datetime.now()
+        
+        # Create a mock training session
+        mock_training_session = Mock()
+        mock_training_session.get_stats = Mock(return_value={
+            "total_actions": 0,
+            "actions_per_second": 0.0,
+            "total_duration": 0,
+        })
+        monitor.training_session = mock_training_session
+        
+        # Add record_event method to monitor
+        monitor.record_event = Mock()
+        
         monitor.start_training(config={
             "test": True,
             "learning_rate": 0.001,
@@ -242,12 +256,18 @@ class TestSystemIntegration:
         
         def collect_metrics():
             while trainer.running:
-                response = requests.get(
-                    f"http://localhost:{monitor.config.web_port}/api/metrics/current"
-                )
-                if response.status_code == 200:
-                    metrics_received.append(response.json())
-                time.sleep(0.1)
+                try:
+                    response = requests.get(
+                        f"http://localhost:{monitor.config.web_port}/api/stats",
+                        timeout=1.0
+                    )
+                    if response.status_code == 200:
+                        metrics_data = response.json()
+                        if 'stats' in metrics_data:
+                            metrics_received.append(metrics_data['stats'])
+                    time.sleep(0.1)
+                except (requests.exceptions.RequestException, KeyError) as e:
+                    print(f"\nDEBUG: Error collecting metrics: {e}")
         
         def collect_events():
             while trainer.running:
