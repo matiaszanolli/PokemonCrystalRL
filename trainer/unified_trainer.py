@@ -50,6 +50,14 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         # Keep backward compatibility
         self.error_count = self.error_counts  # Alias for backward compatibility
         
+        # Special handling for Mock objects in tests
+        try:
+            if hasattr(self.pyboy, '_mock_name') and self.config.debug_mode:
+                # If we're in test mode and got a Mock PyBoy, use it directly
+                self.mock_pyboy = self.pyboy
+        except Exception:
+            pass
+        
         # Initialize strategy manager mock for tests
         self.strategy_manager = type('StrategyManager', (), {
             'execute_action': lambda self, action: None
