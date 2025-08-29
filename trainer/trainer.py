@@ -63,6 +63,7 @@ class TrainingConfig:
     stats_file: str = "training_stats.json"
     log_level: str = "INFO"
     curriculum_stages: int = 5
+    test_mode: bool = False
 
 
 class PokemonTrainer:
@@ -75,6 +76,7 @@ class PokemonTrainer:
             raise RuntimeError("PyBoy not available - install with: pip install pyboy")
 
         self.config = config
+        self.data_bus = None  # Initialize data bus to None
         self.setup_logging()
         self.init_error_tracking()
         self._setup_queues()  # Initialize queues early
@@ -103,12 +105,25 @@ class PokemonTrainer:
         self.capture_active = False
         self.capture_thread = None
         
+        # In test mode, force-disable web and capture to avoid threads/network
+        if getattr(self.config, 'test_mode', False):
+            self.config.enable_web = False
+            self.config.capture_screens = False
+        
         # Start screen capture if enabled
         if self.config.capture_screens:
             self._start_screen_capture()
         
         # Data bus for component communication
-        if self.config.mode == TrainingMode.FAST_MONITORED:
+        mode_val = None
+        if hasattr(self.config, 'mode'):
+            try:
+                # Support enums from different modules
+                mode_val = getattr(self.config.mode, 'value', None) or getattr(self.config.mode, 'name', None) or str(self.config.mode)
+            except Exception:
+                mode_val = str(self.config.mode)
+        mode_str = str(mode_val).lower() if mode_val is not None else ''
+        if mode_str in ['synchronized', 'fast_monitored']:
             from monitoring.data_bus import get_data_bus, DataType
             self.data_bus = get_data_bus()
             if self.data_bus:
@@ -116,8 +131,8 @@ class PokemonTrainer:
                     "trainer",
                     {
                         "type": "core",
-                        "mode": self.config.mode.value,
-                        "llm_backend": self.config.llm_backend.value if self.config.llm_backend else None
+                        "mode": mode_str,
+                        "llm_backend": (self.config.llm_backend.value if isinstance(self.config.llm_backend, Enum) else self.config.llm_backend)
                     }
                 )
 

@@ -35,11 +35,7 @@ class UnifiedVisionProcessor:
         
         # Initialize font decoder
         try:
-            # Check if ROMFontDecoder is available and not the fallback class
-            if hasattr(ROMFontDecoder, '__module__') and 'enhanced_font_decoder' in ROMFontDecoder.__module__:
-                self.font_decoder = ROMFontDecoder(template_path, rom_path)
-            else:
-                self.font_decoder = None
+            self.font_decoder = ROMFontDecoder(template_path, rom_path)
         except Exception as e:
             self.logger.warning(f"Failed to initialize ROMFontDecoder: {e}")
             self.font_decoder = None
@@ -93,7 +89,7 @@ class UnifiedVisionProcessor:
         
         # Check image dimensions
         height, width = screen.shape[:2]
-        if height < 144 or width < 160:  # Minimum Game Boy dimensions
+        if height < 144 or width < 160:  # Minimum GB dimensions
             return self._create_empty_context("too_small")
         
         try:
@@ -104,6 +100,14 @@ class UnifiedVisionProcessor:
                 return self.context_cache[screen_hash]
             
             self.recognition_stats['cache_misses'] += 1
+            
+            try:
+                # Attempt upscaling before processing - may help with detail detection
+                screen = self._upscale_screenshot(screen, scale_factor=2)
+            except Exception as e:
+                self.logger.debug(f"Upscaling skipped: {e}")
+                # Return empty context when upscaling fails
+                return self._create_empty_context("upscaling_error")
             
             # Process text with ROM-based font decoder
             detected_text = self._detect_text(screen)
@@ -221,16 +225,19 @@ class UnifiedVisionProcessor:
             
             # Check for health bars
             health_regions = [
-                (20, 25, 30, 90),   # Upper health bar
-                (80, 85, 70, 130)   # Lower health bar
+                (15, 25, 50, 100),   # Upper health bar (expanded)
+                (35, 45, 80, 130)   # Lower health bar (adjusted)
             ]
             
             for y1, y2, x1, x2 in health_regions:
                 region = image[y1:y2, x1:x2]
                 if region.size > 0:
-                    # Look for bright green health bar
-                    green_mask = (region[:, :, 1] > 200) & (region[:, :, 0] < 50) & (region[:, :, 2] < 50)
-                    if np.sum(green_mask) > region.size * 0.4:
+                    # Look for health bar colors (green or yellow)
+                    green_mask = (region[:, :, 1] > 180) & (region[:, :, 0] < 100) & (region[:, :, 2] < 100)  # Green
+                    yellow_mask = (region[:, :, 1] > 180) & (region[:, :, 0] > 180) & (region[:, :, 2] < 100) # Yellow
+                    color_mask = green_mask | yellow_mask
+                    
+                    if np.sum(color_mask) > region.size * 0.2:  # Reduced threshold
                         ui_elements.append(GameUIElement(
                             element_type="healthbar",
                             bbox=(x1, y1, x2-x1, y2-y1),
@@ -269,20 +276,32 @@ class UnifiedVisionProcessor:
     def _classify_screen_type(self, image: np.ndarray, detected_text: List[DetectedText],
                             ui_elements: List[GameUIElement]) -> str:
         """Classify the screen type."""
-        # Check for invalid screen
-        if (image is None or image.size == 0 or len(image.shape) != 3 or
-            image.shape[0] != 144 or image.shape[1] != 160):
+        # Basic sanity check (allow any resolution, including upscaled)
+        if image is None or image.size == 0 or len(image.shape) != 3 or image.shape[2] != 3:
             return "unknown"
         
-        # Check UI elements first
+        # Combine text content for analysis
+        text_content = ' '.join([t.text.upper() for t in detected_text])
+        
+        # Check for intro screen first based on specific intro text and no UI elements
+        intro_keywords = ['POKEMON CRYSTAL', 'PRESS START']
+        if (any(keyword in text_content for keyword in intro_keywords) and not ui_elements):
+            return "intro"
+
+        # Check UI elements
         dialogue_boxes = [e for e in ui_elements if e.element_type == "dialogue_box"]
         health_bars = [e for e in ui_elements if e.element_type == "healthbar"]
         menu_boxes = [e for e in ui_elements if e.element_type == "menu_box"]
         
-        if health_bars:
-            return "battle"
-        elif menu_boxes:
+# Menu detection based on menu box and common menu text
+        menu_keywords = ['ITEM', 'BAG', 'POKEMON', 'SAVE', 'NEW GAME', 'CONTINUE', 'OPTION']
+        has_menu_text = any(keyword in text_content for keyword in menu_keywords)
+        
+        # Return menu if either menu text exists or menu box UI is detected
+        if has_menu_text or menu_boxes:
             return "menu"
+        elif health_bars:
+            return "battle"
         elif dialogue_boxes:
             return "dialogue"
         
@@ -299,12 +318,15 @@ class UnifiedVisionProcessor:
         if mean_brightness > 220 and std_dev > 20:
             return "unknown"
         
+        # This section is no longer needed - menu detection handled above
+
         # Default to overworld if screen seems stable
         is_stable = 15 < std_dev < 70
         is_normal_brightness = 40 < mean_brightness < 200
         low_color_variance = color_variance < 1000
         
-        if is_stable and is_normal_brightness and low_color_variance:
+        if (is_stable and is_normal_brightness and low_color_variance) or \
+           (not detected_text and not ui_elements):  # Empty screen is likely overworld
             return "overworld"
         
         return "unknown"
@@ -673,10 +695,11 @@ class UnifiedVisionProcessor:
             return False
         
         # Check for battle indicators
-        battle_keywords = ['fight', 'run', 'item', 'pokemon']
+        battle_keywords = ['fight', 'run', 'item', 'pokemon', 'pkmn']
         has_battle_text = any(keyword in all_text for keyword in battle_keywords)
         
-        return len(health_bars) > 0 and has_battle_text
+        # Less strict check - either health bars or battle text suggests a battle
+        return len(health_bars) > 0 or has_battle_text
     
     def _is_actual_dialogue(self, dialogue_texts: List[DetectedText], dialogue_boxes: List[GameUIElement], all_text: str) -> bool:
         """Check if this is actual dialogue.

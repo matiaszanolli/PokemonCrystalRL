@@ -51,6 +51,7 @@ class DataBus:
         self._lock = threading.Lock()
         self._queues = {}
         self._active = True
+        self._running = True  # Alias for test compatibility
         
     def register_component(self, component_id: str, metadata: Dict[str, Any]) -> None:
         """Register a component with the data bus.
@@ -137,7 +138,8 @@ class DataBus:
         for subscription in self._subscribers[data_type]:
             try:
                 if subscription['callback']:
-                    subscription['callback'](data, publisher_id)
+                    # Tests expect callback(data) signature
+                    subscription['callback'](data)
                 elif subscription['queue']:
                     try:
                         subscription['queue'].put_nowait({
@@ -177,11 +179,12 @@ class DataBus:
             
     def shutdown(self) -> None:
         """Shutdown the data bus."""
-        self._active = False
-        # Clear subscribers
-        self._subscribers = {}
-        # Clear components
-        self._components = {}
+        with self._lock:
+            self._active = False
+            self._running = False
+            # Clear subscribers and components
+            self._subscribers = {}
+            self._components = {}
 
 
 # Global data bus instance (singleton pattern)

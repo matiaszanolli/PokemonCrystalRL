@@ -476,6 +476,29 @@ class TrainerMonitorBridge:
         elif event_type == 'checkpoint_save':
             self.on_checkpoint_save = callback
     
+    def start_bridge(self) -> None:
+        """Start the bridge processing threads."""
+        self.start_processing()
+    
+    def stop_bridge(self) -> None:
+        """Stop the bridge processing threads."""
+        self.stop_processing()
+    
+    def get_bridge_stats(self) -> Dict[str, Union[int, float, bool]]:
+        """Get bridge statistics.
+        
+        Returns:
+            Dict containing metrics about bridge operation.
+        """
+        total = self.stats_collector.get_total_records()
+        errors = len(self.error_handler.get_recent_errors())
+        return {
+            'screenshots_transferred': total,
+            'total_errors': errors,
+            'success_rate': (total - errors) / total if total > 0 else 1.0,
+            'is_active': self.is_processing
+        }
+    
     def __del__(self):
         """Cleanup on deletion."""
         self.stop_processing()

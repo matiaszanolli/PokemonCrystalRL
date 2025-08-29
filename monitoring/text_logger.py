@@ -48,6 +48,18 @@ class TextLogger:
     """
     Logs and manages all text transcriptions from Pokemon Crystal gameplay
     """
+
+    def debug(self, msg: str):
+        print(f"DEBUG: {msg}")
+
+    def info(self, msg: str):
+        print(f"INFO: {msg}")
+
+    def warning(self, msg: str):
+        print(f"WARNING: {msg}")
+
+    def error(self, msg: str):
+        print(f"ERROR: {msg}")
     
     def __init__(self, log_dir: str = "text_logs"):
         """Initialize the text logger"""

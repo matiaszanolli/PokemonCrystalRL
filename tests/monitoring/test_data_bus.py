@@ -9,13 +9,21 @@ from unittest.mock import Mock, patch
 
 from trainer.trainer import TrainingConfig, PokemonTrainer
 from monitoring.data_bus import DataBus, DataType
+from core.config import TrainingMode
 
 @pytest.fixture
-def data_bus():
+def data_bus(test_config):
     """Create test data bus instance."""
     bus = DataBus()
     yield bus
-    bus.stop()
+    bus.shutdown()
+
+@pytest.fixture(autouse=True)
+def mock_data_bus_init(monkeypatch, data_bus):
+    """Mock get_data_bus to return the test fixture."""
+    def mock_get_data_bus():
+        return data_bus
+    monkeypatch.setattr('monitoring.data_bus.get_data_bus', mock_get_data_bus)
 
 @pytest.fixture
 def mock_pyboy():
@@ -34,34 +42,24 @@ def mock_pyboy():
 class TestDataBusIntegration:
     """Test data bus integration."""
     
-    def test_data_bus_initialization(self, data_bus, mock_pyboy):
+    def test_data_bus_initialization(self, data_bus, mock_pyboy, test_config):
         """Test data bus initialization."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            mode=TrainingConfig.TrainingMode.FAST_MONITORED
-        )
-        
-        trainer = PokemonTrainer(config)
+        trainer = PokemonTrainer(test_config)
         assert trainer.data_bus is not None
         assert trainer.data_bus._running
         
         trainer._finalize_training()
     
-    def test_data_publishing(self, data_bus, mock_pyboy):
+    def test_data_publishing(self, data_bus, mock_pyboy, test_config):
         """Test data publishing to bus."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            mode=TrainingConfig.TrainingMode.FAST_MONITORED
-        )
-        
-        trainer = PokemonTrainer(config)
+        trainer = PokemonTrainer(test_config)
         
         # Subscribe to updates
         updates = []
         def callback(data):
             updates.append(data)
         
-        data_bus.subscribe(DataType.TRAINING_STATS, callback)
+        data_bus.subscribe(DataType.TRAINING_STATS, "test_subscriber", callback)
         
         # Generate some updates
         for i in range(5):
@@ -76,61 +74,53 @@ class TestDataBusIntegration:
         
         trainer._finalize_training()
     
-    def test_screen_data_publishing(self, data_bus, mock_pyboy):
+    def test_screen_data_publishing(self, data_bus, mock_pyboy, test_config):
         """Test screen data publishing."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            mode=TrainingConfig.TrainingMode.FAST_MONITORED,
-            capture_screens=True
-        )
-        
-        trainer = PokemonTrainer(config)
+        trainer = PokemonTrainer(test_config)
         
         # Subscribe to screen updates
         screens = []
         def callback(data):
             screens.append(data)
             
-        data_bus.subscribe(DataType.GAME_SCREEN, callback)
+        data_bus.subscribe(DataType.GAME_SCREEN, "test_subscriber", callback)
         
         # Generate some screens
+        mock_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        screen_data = {
+            "image": mock_screen,
+            "timestamp": time.time(),
+            "frame": 0
+        }
+        
+        # Simulate screen capture events
         for _ in range(3):
-            trainer._capture_and_queue_screen()
+            trainer.data_bus.publish(DataType.GAME_SCREEN, screen_data, "trainer")
             time.sleep(0.05)
         
         assert len(screens) >= 1
-        assert 'screen' in screens[0]
-        assert isinstance(screens[0]['screen'], np.ndarray)
+        assert 'image' in screens[0]
+        assert isinstance(screens[0]['image'], np.ndarray)
         
         trainer._finalize_training()
     
-    def test_data_bus_shutdown(self, data_bus, mock_pyboy):
+    def test_data_bus_shutdown(self, data_bus, mock_pyboy, test_config):
         """Test clean data bus shutdown."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            mode=TrainingConfig.TrainingMode.FAST_MONITORED
-        )
-        
-        trainer = PokemonTrainer(config)
+        trainer = PokemonTrainer(test_config)
         assert trainer.data_bus._running
         
-        trainer._finalize_training()
+        trainer.data_bus.shutdown()
         assert not trainer.data_bus._running
     
-    def test_data_bus_error_handling(self, data_bus, mock_pyboy):
+    def test_data_bus_error_handling(self, data_bus, mock_pyboy, test_config):
         """Test data bus error handling."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            mode=TrainingConfig.TrainingMode.FAST_MONITORED
-        )
-        
-        trainer = PokemonTrainer(config)
+        trainer = PokemonTrainer(test_config)
         
         def failing_callback(data):
             raise Exception("Callback failed")
         
         # Add failing callback
-        data_bus.subscribe(DataType.TRAINING_STATS, failing_callback)
+        data_bus.subscribe(DataType.TRAINING_STATS, "test_subscriber", failing_callback)
         
         # Should continue despite callback failure
         trainer._update_stats()

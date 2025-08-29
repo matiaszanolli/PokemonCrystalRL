@@ -75,7 +75,9 @@ class TestUnifiedVisionProcessorInitialization(unittest.TestCase):
         
     def test_initialization_without_font_decoder(self):
         """Test initialization without font decoder"""
-        with patch('vision.vision_processor.ROMFontDecoder'):
+        # Mock that font decoder raises an exception during initialization
+        with patch('vision.vision_processor.ROMFontDecoder') as mock_font:
+            mock_font.side_effect = Exception("mock initialization error")
             processor = UnifiedVisionProcessor()
             self.assertIsNone(processor.font_decoder)
             self.assertIsInstance(processor.pokemon_colors, dict)

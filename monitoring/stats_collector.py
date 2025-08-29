@@ -270,6 +270,15 @@ class StatsCollector:
         
         self.logger.info("✅ StatsCollector shutdown complete")
     
+    def get_total_records(self) -> int:
+        """Get total number of records collected across all metrics.
+        
+        Returns:
+            Total number of data points collected.
+        """
+        with self._lock:
+            return self._collection_count
+    
     # Internal methods
     
     def _record_metric(self, name: str, metric_type: MetricType, value: float, tags: Dict[str, str]) -> None:

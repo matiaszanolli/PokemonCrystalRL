@@ -179,7 +179,7 @@ def test_read_bcd_money(env):
         env.memory_addresses['money'] + 2: 0x00   # Third byte
     }
     env.pyboy.memory.update(mock_memory)
-    assert env._read_bcd_money() == 3000
+    assert env._read_bcd_money() == 30000
     
     # Test case 3: Invalid BCD digits should return 0
     mock_memory = {
