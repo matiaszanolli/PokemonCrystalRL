@@ -18,9 +18,13 @@ class TestTrainingWebServer(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.mock_config = Mock()
+        # Use correct attribute names that match the implementation
+        self.mock_config.host = "localhost"
+        self.mock_config.port = 8080
+        self.mock_config.debug_mode = True
+        # Keep legacy names for backward compatibility tests
         self.mock_config.web_host = "localhost"
         self.mock_config.web_port = 8080
-        self.mock_config.debug_mode = True
         
         self.mock_trainer = Mock()
         self.mock_trainer.config = self.mock_config

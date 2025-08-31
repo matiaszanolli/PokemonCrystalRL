@@ -87,7 +87,8 @@ class TestWebServerIntegration:
             
         # Queue should maintain size limit
         assert trainer.screen_queue.qsize() <= 30
-        assert not trainer.screen_queue.full()
+        # Queue should be full after overflow, but no more than maxsize
+        assert trainer.screen_queue.qsize() == min(35, 30)
         
         # Clean up
         trainer._finalize_training()

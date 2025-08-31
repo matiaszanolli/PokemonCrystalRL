@@ -600,6 +600,8 @@ class TrainingWebServer:
         self.server = None
         self._running = False
         self.port = self._find_available_port()
+        # Update config port to reflect the actually used port
+        self.config.port = self.port
         self._trainer = trainer # For backward compatibility
         
         # Register with data bus
@@ -608,18 +610,18 @@ class TrainingWebServer:
             self.data_bus.register_component("web_server", {
                 "type": "monitoring",
                 "port": self.port,
-                "host": getattr(self.config, 'web_host', 'localhost')
+                "host": getattr(self.config, 'host', 'localhost')
             })
         
     def _find_available_port(self):
         """Find an available port starting from the configured port."""
-        start_port = getattr(self.config, 'web_port', 8080)
+        start_port = getattr(self.config, 'port', 8080)
         
         # Try specified port first
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind((getattr(self.config, 'web_host', 'localhost'), start_port))
+                s.bind((getattr(self.config, 'host', 'localhost'), start_port))
                 return start_port
         except OSError:
             pass
@@ -629,7 +631,7 @@ class TrainingWebServer:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    s.bind((getattr(self.config, 'web_host', 'localhost'), port))
+                    s.bind((getattr(self.config, 'host', 'localhost'), port))
                     return port
             except OSError:
                 continue
@@ -638,7 +640,7 @@ class TrainingWebServer:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind((getattr(self.config, 'web_host', 'localhost'), 0))
+                s.bind((getattr(self.config, 'host', 'localhost'), 0))
                 _, port = s.getsockname()
                 return port
         except OSError:
@@ -653,10 +655,10 @@ class TrainingWebServer:
             return TrainingHandler(self.trainer, *args)
             
         try:
-            logger.debug(f"Starting server on {getattr(self.config, 'web_host', 'localhost')}:{self.port}")
+            logger.debug(f"Starting server on {getattr(self.config, 'host', 'localhost')}:{self.port}")
             
             self.server = HTTPServer(
-                (getattr(self.config, 'web_host', 'localhost'), self.port),
+                (getattr(self.config, 'host', 'localhost'), self.port),
                 handler_factory
             )
             self._running = True

@@ -188,7 +188,26 @@ class TrainerWebBridge:
             if not hasattr(self.trainer, 'latest_screen') or self.trainer.latest_screen is None:
                 return None
             
-            screen = np.array(self.trainer.latest_screen)
+            # Handle new screen data format (dictionary with metadata)
+            screen_data = self.trainer.latest_screen
+            if isinstance(screen_data, dict):
+                # If screen data already has base64 encoded image, use it directly
+                if 'image_b64' in screen_data and screen_data.get('data_length', 0) > 0:
+                    self.transfer_stats['screenshots_sent'] += 1
+                    self.last_screen_update = time.time()
+                    return screen_data['image_b64']
+                
+                # Otherwise extract raw image for processing
+                screen = screen_data.get('image')
+                if screen is None:
+                    return None
+            else:
+                # Legacy format - raw numpy array
+                screen = screen_data
+            
+            # Convert to numpy array if needed
+            if not isinstance(screen, np.ndarray):
+                screen = np.array(screen)
             
             # Validate screen content
             valid = self._validate_screenshot(screen)
@@ -346,6 +365,23 @@ class TrainerWebBridge:
             if time.time() - self.last_screen_update > 300:  # 5 minutes
                 self.error_count = 0
                 self.logger.info("Reset error count")
+    
+    def get_bridge_stats(self):
+        """Get bridge statistics for testing compatibility."""
+        return {
+            'screenshots_transferred': self.transfer_stats['screenshots_sent'],
+            'total_errors': self.transfer_stats['errors'],
+            'success_rate': (100.0 * (self.transfer_stats['screenshots_sent'] / max(1, self.transfer_stats['screenshots_sent'] + self.transfer_stats['errors']))),
+            'is_active': self.active
+        }
+    
+    def start_bridge(self):
+        """Start the bridge (compatibility alias)."""
+        self.start()
+    
+    def stop_bridge(self):
+        """Stop the bridge (compatibility alias)."""
+        self.stop()
     
     def _log_final_stats(self):
         """Log final statistics."""

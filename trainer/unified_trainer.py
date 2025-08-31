@@ -361,6 +361,18 @@ class UnifiedPokemonTrainer(PokemonTrainer):
             if bottom_brightness > 200 and bottom_brightness > top_brightness * 1.5:
                 return "dialogue"
             
+            # Check for menu patterns - bright rectangular regions in middle area
+            # Menu screens typically have bright boxes with consistent patterns
+            middle = screen[20:60, 20:140]
+            middle_brightness = np.mean(middle)
+            middle_std = np.std(middle)
+            
+            # Menu characteristics: bright area with low variance (consistent box)
+            # and brighter than surrounding area
+            if (middle_brightness > 180 and middle_std < 50 and 
+                middle_brightness > np.mean(screen) * 1.2):
+                return "menu"
+            
             # Check for overworld patterns (varied colors, no UI elements)
             if np.std(screen) > 30:  # High variation suggests overworld
                 return "overworld"

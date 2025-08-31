@@ -15,8 +15,7 @@ sys.path.insert(0, parent_dir)
 
 from trainer.trainer import PokemonTrainer
 from trainer.trainer import TrainingConfig, TrainingMode
-from monitoring.trainer_monitor_bridge import TrainerMonitorBridge
-from monitoring.web_monitor import WebMonitor, MonitorConfig
+from monitoring.bridge import TrainerWebBridge
 
 
 def create_fixed_trainer(pyboy_mock):
@@ -98,28 +97,47 @@ def test_fixed_streaming(mock_pyboy_class):
     # Test with bridge
     print("\n🌉 Testing with bridge...")
     
-    # Create web monitor and bridge
-    config = MonitorConfig(
-        web_port=8000,
-        update_interval=0.1,
-        snapshot_interval=0.5,
-        db_path=":memory:",
-        max_events=1000,
-        max_snapshots=10,
-        debug=True
+    # Create TrainerWebBridge connected to trainer
+    bridge = TrainerWebBridge(
+        trainer=trainer,
+        host='127.0.0.1',
+        port=8000,
+        debug=False
     )
-    web_monitor = WebMonitor(config)
-    bridge = TrainerMonitorBridge()
     
     # Start bridge
     bridge.start_bridge()
     
-    # Test bridge transfer
+    # Give bridge time to start up
+    time.sleep(1)
+    
+    # Test bridge transfer by making HTTP requests
     print("⏳ Testing bridge transfers...")
-    time.sleep(5)
+    import requests
+    
+    # Make several screenshot requests to the bridge
+    bridge_url = f"http://{bridge.host}:{bridge.port}"
+    for i in range(5):
+        try:
+            response = requests.get(f"{bridge_url}/api/screenshot/current", timeout=1.0)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('screenshot'):
+                    print(f"   Screenshot request {i+1}: Success ({len(data['screenshot'])} chars)")
+                else:
+                    print(f"   Screenshot request {i+1}: No screenshot data")
+            else:
+                print(f"   Screenshot request {i+1}: HTTP {response.status_code}")
+        except Exception as e:
+            print(f"   Screenshot request {i+1}: Error - {e}")
+        
+        time.sleep(0.5)
+    
+    # Give time for processing
+    time.sleep(1)
     
     bridge_stats = bridge.get_bridge_stats()
-    print(f"📊 Bridge Statistics:")
+    print(f"📀 Bridge Statistics:")
     print(f"   Screenshots transferred: {bridge_stats['screenshots_transferred']}")
     print(f"   Total errors: {bridge_stats['total_errors']}")
     print(f"   Success rate: {bridge_stats['success_rate']:.1f}%")

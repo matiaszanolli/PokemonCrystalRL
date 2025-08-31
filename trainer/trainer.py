@@ -973,13 +973,57 @@ class PokemonTrainer:
                     # Capture current screen
                     screen = self._simple_screenshot_capture()
                     if screen is not None:
-                        # Create screen data with metadata
+                        # Process and encode the image for bridge compatibility
+                        image_b64 = None
+                        data_length = 0
+                        
+                        try:
+                            # Try OpenCV first for encoding
+                            import cv2
+                            import base64
+                            
+                            # Convert to BGR for cv2 if needed
+                            if len(screen.shape) == 3 and screen.shape[2] == 3:
+                                screen_bgr = cv2.cvtColor(screen, cv2.COLOR_RGB2BGR)
+                            else:
+                                screen_bgr = screen
+                                
+                            # Encode as JPEG
+                            ret, jpg_data = cv2.imencode('.jpg', screen_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                            if ret and jpg_data is not None:
+                                image_b64 = base64.b64encode(jpg_data).decode('utf-8')
+                                data_length = len(image_b64)
+                        except ImportError:
+                            # Fallback to PIL if OpenCV not available
+                            try:
+                                from PIL import Image
+                                import io
+                                import base64
+                                
+                                # Convert numpy array to PIL Image
+                                pil_image = Image.fromarray(screen.astype('uint8'))
+                                buf = io.BytesIO()
+                                pil_image.save(buf, format='JPEG', quality=85)
+                                buf.seek(0)
+                                image_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+                                data_length = len(image_b64)
+                            except Exception as pil_e:
+                                self.logger.error(f"PIL encoding failed: {pil_e}")
+                        except Exception as cv_e:
+                            self.logger.error(f"OpenCV encoding failed: {cv_e}")
+                        
+                        # Create screen data with metadata and encoded image
                         screen_data = {
                             'frame_id': getattr(self.pyboy, 'frame_count', 0),
                             'timestamp': time.time(),
-                            'image': screen,
+                            'image': screen,  # Keep raw image for compatibility
                             'action': self.stats.get('total_actions', 0),
+                            'data_length': data_length,  # For bridge compatibility
                         }
+                        
+                        # Add base64 encoded image if available
+                        if image_b64:
+                            screen_data['image_b64'] = image_b64
                         
                         # Update queues with thread safety
                         with threading.Lock():
