@@ -577,6 +577,28 @@ class ErrorHandler:
                     'stats': self.get_error_stats()
                 }
                 
+                # Try to publish error data to data bus first
+                if self.data_bus:
+                    try:
+                        for error in error_data['errors']:
+                            error_event = ErrorEvent(
+                                timestamp=error['timestamp'],
+                                component=error['component'],
+                                error_type=error['error_type'],
+                                message=error['message'],
+                                severity=ErrorSeverity(error['severity']),
+                                traceback=error['traceback'],
+                                recovery_strategy=RecoveryStrategy.RETRY
+                            )
+                            self.data_bus.publish(
+                                DataType.ERROR_EVENT,
+                                error_event,
+                                'error_handler'
+                            )
+                    except Exception as e:
+                        self.logger.error(f"Failed to publish errors: {e}")
+                
+                # Save to file
                 with open(filepath, 'w') as f:
                     json.dump(error_data, f, indent=2)
                 

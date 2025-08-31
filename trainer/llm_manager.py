@@ -75,13 +75,22 @@ class LLMManager:
         except Exception as e:
             raise RuntimeError(f"Failed to load model {model}: {e}")
 
+    # Pre-computed state-specific actions for ultra-fast fallback
+    _FAST_ACTIONS = {
+        "dialogue": 5,     # A button
+        "menu": 2,        # DOWN
+        "battle": 5,      # A button
+        "title_screen": 7, # START
+        "overworld": 5    # Default to A
+    }
+
     def get_action(self, screenshot: Optional[np.ndarray] = None, game_state: str = "overworld", step: int = 0, stuck_counter: int = 0) -> Optional[int]:
         """Get next action from LLM model."""
         try:
-            # Check if LLM has consistently failed (more than 5 consecutive failures)
-            if self.stats['failures'] > 5 and self.stats['failures'] == self.stats['calls']:
-                # LLM is not available, return fallback immediately
-                return self._get_fallback_action(game_state, stuck_counter)
+            # Fast path - if LLM has consistently failed, use ultra-fast lookup
+            if self.stats.get('failures', 0) > 5 and self.stats.get('failures', 0) == self.stats.get('calls', 0):
+                # Use direct dictionary lookup for maximum speed
+                return self._FAST_ACTIONS.get(game_state, 5)
 
             start_time = time.time()
             # Get state-specific prompt and temperature
@@ -213,6 +222,14 @@ class LLMManager:
         
         return prompt
         
+    # Pre-computed fallback actions
+    _FALLBACKS = {
+        "dialogue": 5,     # A button
+        "menu": 2,        # DOWN
+        "battle": 5,      # A button
+        "title_screen": 7 # START
+    }
+    
     def _get_fallback_action(self, game_state: str, stuck_counter: int) -> int:
         """Get fallback action when LLM fails.
         
@@ -223,19 +240,11 @@ class LLMManager:
         Returns:
             Fallback action number
         """
-        # State-specific fallbacks
-        fallbacks = {
-            "dialogue": 5,     # A button
-            "menu": 2,        # DOWN
-            "battle": 5,      # A button
-            "title_screen": 7 # START
-        }
-        
         if stuck_counter > 0:
             # When stuck, cycle through movement actions
             return (stuck_counter % 4) + 1  # 1-4 for UP, DOWN, LEFT, RIGHT
         
-        return fallbacks.get(game_state, 5)  # Default to A button
+        return self._FALLBACKS.get(game_state, 5)  # Default to A button
         
     def _track_prompt_effectiveness(self, prompt: str, success: bool) -> None:
         """Track effectiveness of prompts for optimization.
@@ -259,6 +268,12 @@ class LLMManager:
 
     def get_llm_action(self, screenshot: Optional[np.ndarray] = None) -> Optional[int]:
         """Get LLM action with screenshot (for compatibility with tests)."""
+        # For title screen, ensure we use the correct state
+        if hasattr(self, 'game_state_detector') and self.game_state_detector:
+            state = self.game_state_detector.detect_game_state(screenshot) if screenshot is not None else None
+            if state == "title_screen":
+                # Ensure we press START on title screen
+                return 7  # START button
         return self.get_action(screenshot=screenshot)
 
     def get_llm_action_with_vision(self, screenshot: np.ndarray, step: int) -> int:

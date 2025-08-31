@@ -12,67 +12,66 @@ def test_env_creation():
     """Test environment creation with debug_mode parameter"""
     print("🧪 Testing PyBoyPokemonCrystalEnv creation...")
     
-    try:
-        # Test with debug_mode=True
-        env = PyBoyPokemonCrystalEnv(
-            rom_path="/mnt/data/src/pokemon_crystal_rl/roms/pokemon_crystal.gbc",
-            save_state_path=None,
-            debug_mode=True,
-            headless=True
-        )
-        print("✅ Environment created successfully with debug_mode=True")
-        
-        # Test basic properties
-        print(f"Action space: {env.action_space}")
-        print(f"Observation space: {env.observation_space}")
-        
-        # Test methods exist
-        print(f"Has get_game_state: {hasattr(env, 'get_game_state')}")
-        print(f"Has get_screenshot: {hasattr(env, 'get_screenshot')}")
-        
-        # Test screenshot method (should return empty array without ROM)
+    # Test with debug_mode=True
+    env = PyBoyPokemonCrystalEnv(
+        rom_path="/mnt/data/src/pokemon_crystal_rl/roms/pokemon_crystal.gbc",
+        save_state_path=None,
+        debug_mode=True,
+        headless=True
+    )
+    print("✅ Environment created successfully with debug_mode=True")
+    
+    # Test basic properties
+    print(f"Action space: {env.action_space}")
+    print(f"Observation space: {env.observation_space}")
+    
+    # Test methods exist
+    print(f"Has get_game_state: {hasattr(env, 'get_game_state')}")
+    print(f"Has get_screenshot: {hasattr(env, 'get_screenshot')}")
+    
+    # Test basic environment properties exist
+    assert hasattr(env, 'action_space'), "Environment should have action_space"
+    assert hasattr(env, 'observation_space'), "Environment should have observation_space"
+    
+    # Test screenshot method if available
+    if hasattr(env, 'get_screenshot'):
         screenshot = env.get_screenshot()
         print(f"Screenshot shape: {screenshot.shape}")
         print(f"Screenshot dtype: {screenshot.dtype}")
-        
-        # Test game state method (should return empty dict without ROM)
+        assert isinstance(screenshot, np.ndarray), "Screenshot should be a numpy array"
+    
+    # Test game state method if available
+    if hasattr(env, 'get_game_state'):
         game_state = env.get_game_state()
         print(f"Game state type: {type(game_state)}")
         print(f"Game state keys: {list(game_state.keys()) if game_state else 'Empty'}")
-        
-        print("✅ All environment methods work correctly")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Environment creation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        assert isinstance(game_state, dict), "Game state should be a dictionary"
+    
+    print("✅ All environment methods work correctly")
 
 def test_env_compatibility():
     """Test environment compatibility with training system"""
     print("\n🧪 Testing environment compatibility with training system...")
     
-    try:
-        from core.pyboy_env import PyBoyPokemonCrystalEnv
-        from vision.vision_enhanced_training import VisionEnhancedTrainingSession
-        
-        # This should not raise any parameter errors
-        session = VisionEnhancedTrainingSession(
-            rom_path="/mnt/data/src/pokemon_crystal_rl/roms/pokemon_crystal.gbc",
-            save_state_path=None,
-            model_name="llama3.2:3b",
-            max_steps_per_episode=100,
-            screenshot_interval=10
-        )
-        
-        print("✅ Training session created successfully")
-        print("✅ No debug_mode parameter errors")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Training session creation failed: {e}")
-        return False
+    from core.pyboy_env import PyBoyPokemonCrystalEnv
+    from vision.vision_enhanced_training import VisionEnhancedTrainingSession
+    
+    # This should not raise any parameter errors
+    session = VisionEnhancedTrainingSession(
+        rom_path="/mnt/data/src/pokemon_crystal_rl/roms/pokemon_crystal.gbc",
+        save_state_path=None,
+        model_name="llama3.2:3b",
+        max_steps_per_episode=100,
+        screenshot_interval=10
+    )
+    
+    print("✅ Training session created successfully")
+    print("✅ No debug_mode parameter errors")
+    assert session is not None, "Training session should be created successfully"
+    # Check for some expected methods/attributes
+    expected_attrs = ['model_name', 'max_steps', 'screenshot_interval']
+    for attr in expected_attrs:
+        assert hasattr(session, attr), f"Training session should have {attr} attribute"
 
 def main():
     """Run all tests"""

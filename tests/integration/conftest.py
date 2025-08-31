@@ -4,6 +4,8 @@ import pytest
 import tempfile
 import os
 import sqlite3
+import warnings
+import numpy as np
 from pathlib import Path
 
 
@@ -139,3 +141,47 @@ def temp_choice_db():
         os.unlink(temp_db_path)
     except OSError:
         pass  # File might already be deleted
+
+
+@pytest.fixture(autouse=True)
+def suppress_numpy_warnings():
+    """Suppress known numpy runtime warnings during tests."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
+        warnings.filterwarnings("ignore", message="Mean of empty slice")
+        warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide")
+        warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice")
+        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        yield
+
+
+@pytest.fixture(autouse=True)
+def suppress_sdl2_warnings():
+    """Suppress SDL2 warnings during tests."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module="sdl2")
+        warnings.filterwarnings("ignore", message="Using SDL2 binaries")
+        yield
+
+
+def pytest_configure(config):
+    """Configure pytest to suppress certain warnings globally."""
+    warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
+    warnings.filterwarnings("ignore", category=UserWarning, module="sdl2")
+    warnings.filterwarnings("ignore", message="Mean of empty slice")
+    warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide")
+    warnings.filterwarnings("ignore", message="Degrees of freedom <= 0 for slice")
+    warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+    warnings.filterwarnings("ignore", message="Using SDL2 binaries")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Add markers to tests based on their names or paths."""
+    for item in items:
+        # Add slow marker to tests that might take longer
+        if "extended_play" in item.name or "stability" in item.name:
+            item.add_marker(pytest.mark.slow)
+        
+        # Add performance marker to benchmark tests
+        if "performance" in item.name or "benchmark" in item.name:
+            item.add_marker(pytest.mark.performance)

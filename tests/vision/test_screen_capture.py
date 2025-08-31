@@ -79,7 +79,7 @@ def test_fixed_streaming(mock_pyboy_class):
     else:
         print("❌ No screenshot captured within timeout")
         trainer._finalize_training()
-        return False
+        assert False, "No screenshot captured within timeout"
     
     # Test continuous capture
     print("\n📸 Testing continuous capture...")
@@ -134,10 +134,9 @@ def test_fixed_streaming(mock_pyboy_class):
     # Results
     if bridge_stats['screenshots_transferred'] > 0:
         print(f"\n✅ SUCCESS! Bridge transferred {bridge_stats['screenshots_transferred']} screenshots")
-        return True
     else:
         print(f"\n❌ FAILED! No screenshots transferred")
-        return False
+        assert bridge_stats['screenshots_transferred'] > 0, "No screenshots were transferred"
 
 
 def main():
@@ -147,28 +146,25 @@ def main():
     print()
     
     try:
-        success = test_fixed_streaming()
-        
-        if success:
-            print("\n🎯 FIX VERIFICATION COMPLETE!")
-            print("✅ The issue was that screen capture thread wasn't started")
-            print("✅ Screenshots are now being captured and transferred")
-            print()
-            print("💡 TO APPLY THE FIX:")
-            print("1. Ensure trainer.config.capture_screens = True")
-            print("2. Make sure trainer._start_screen_capture() is called")
-            print("3. Or call trainer.start_training() to start everything properly")
-            print()
-            print("📋 ORIGINAL ISSUE:")
-            print("   - Bridge was working correctly")
-            print("   - Web monitor was working correctly") 
-            print("   - The trainer just wasn't capturing screenshots!")
-            print("   - PyBoy screen access works fine")
+        test_fixed_streaming()
+        print("\n🎯 FIX VERIFICATION COMPLETE!")
+        print("✅ The issue was that screen capture thread wasn't started")
+        print("✅ Screenshots are now being captured and transferred")
+        print()
+        print("💡 TO APPLY THE FIX:")
+        print("1. Ensure trainer.config.capture_screens = True")
+        print("2. Make sure trainer._start_screen_capture() is called")
+        print("3. Or call trainer.start_training() to start everything properly")
+        print()
+        print("📋 ORIGINAL ISSUE:")
+        print("   - Bridge was working correctly")
+        print("   - Web monitor was working correctly") 
+        print("   - The trainer just wasn't capturing screenshots!")
+        print("   - PyBoy screen access works fine")
             
-        else:
-            print("\n❌ FIX VERIFICATION FAILED")
-            print("The issue may be more complex than screen capture initialization")
-            
+    except AssertionError as e:
+        print(f"\n❌ FIX VERIFICATION FAILED: {e}")
+        print("The issue may be more complex than screen capture initialization")
     except Exception as e:
         print(f"\n💥 TEST ERROR: {e}")
         import traceback

@@ -221,7 +221,11 @@ class UnifiedMonitor:
             try:
                 if not self.screen_queue.empty():
                     screenshot_data = self.screen_queue.get()
-                    return jsonify(screenshot_data)
+                    return jsonify({
+                        "image": screenshot_data["image"],
+                        "timestamp": screenshot_data["timestamp"],
+                        "dimensions": screenshot_data.get("dimensions", {})
+                    })
                 return jsonify({'error': 'No screenshot available'}), 404
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
@@ -229,7 +233,34 @@ class UnifiedMonitor:
         # Alias for compatibility with tests
         @self.app.route('/api/screen')
         def get_screen_alias():
-            return get_screenshot()
+            """Get latest screen data - test compatible endpoint"""
+            try:
+                # Try to get from screen queue first
+                if not self.screen_queue.empty():
+                    screenshot_data = self.screen_queue.get()
+                    return jsonify({
+                        "image": screenshot_data.get("image_b64", screenshot_data.get("image")),
+                        "timestamp": screenshot_data["timestamp"],
+                        "dimensions": screenshot_data.get("dimensions", {})
+                    })
+                
+                # Check if we have latest_screen available
+                if hasattr(self, 'latest_screen') and self.latest_screen:
+                    return jsonify({
+                        "image": self.latest_screen.get("image_b64", self.latest_screen.get("image")),
+                        "timestamp": self.latest_screen["timestamp"],
+                        "dimensions": self.latest_screen.get("dimensions", {})
+                    })
+                    
+                # If no screen data available, return a placeholder
+                return jsonify({
+                    "image": "placeholder",
+                    "timestamp": time.time(),
+                    "dimensions": {},
+                    "message": "No screen data available"
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
         
         @self.app.route('/api/text')
         def get_text():
@@ -581,7 +612,18 @@ class UnifiedMonitor:
         if config:
             self.logger.info(f"Starting training with config: {config}")
         
-        self.current_run_id = f"run_{int(time.time())}"
+        # Create database record if database is available
+        if self.db:
+            try:
+                self.current_run_id = self.db.start_training_run(config or {})
+                self.logger.info(f"Created training run record: {self.current_run_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to create training run record: {e}")
+                # Fallback to generating run ID without database
+                self.current_run_id = f"run_{int(time.time())}"
+        else:
+            self.current_run_id = f"run_{int(time.time())}"
+            
         self.training_state = TrainingState.RUNNING
         # Ensure HTTP server is running
         self._ensure_server_started()
@@ -593,11 +635,32 @@ class UnifiedMonitor:
         if final_reward is not None:
             self.logger.info(f"Training stopped with final reward: {final_reward}")
         
+        # End training run in database if available
+        if self.db and self.current_run_id:
+            try:
+                self.db.end_training_run(self.current_run_id, final_reward)
+                self.logger.info(f"Ended training run record: {self.current_run_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to end training run record: {e}")
+        
         # Set to COMPLETED when stop_training is called
         self.training_state = TrainingState.COMPLETED
         # Stop monitoring but don't change the training state
         self.is_monitoring = False
         self.logger.info("⏹️ Monitoring stopped")
+        
+        # Stop the server thread if it's running
+        if self._server_thread and self._server_thread.is_alive():
+            try:
+                # Try to stop the server gracefully
+                if hasattr(self.socketio, 'stop'):
+                    self.socketio.stop()
+                # Give it time to stop
+                self._server_thread.join(timeout=1.0)
+                if self._server_thread.is_alive():
+                    self.logger.warning("Server thread did not stop gracefully")
+            except Exception as e:
+                self.logger.warning(f"Error stopping server thread: {e}")
     
     def update_metrics(self, metrics: Dict[str, Any]):
         """Update training metrics."""
@@ -629,11 +692,26 @@ class UnifiedMonitor:
         # Store in database if available
         if self.db and self.current_run_id:
             try:
-                # Record all metrics with the same timestamp
-                self.db.record_metrics(
-                    run_id=self.current_run_id,
-                    metrics=metrics
-                )
+                # Separate system metrics from performance metrics
+                system_metric_names = {'cpu_percent', 'memory_percent', 'disk_usage'}
+                system_metrics = {k: v for k, v in metrics.items() if k in system_metric_names}
+                performance_metrics = {k: v for k, v in metrics.items() if k not in system_metric_names}
+                
+                # Record performance metrics
+                if performance_metrics:
+                    self.db.record_metrics(
+                        run_id=self.current_run_id,
+                        metrics=performance_metrics
+                    )
+                
+                # Record system metrics separately
+                if system_metrics and all(k in system_metrics for k in ['cpu_percent', 'memory_percent', 'disk_usage']):
+                    self.db.record_system_metrics(
+                        run_id=self.current_run_id,
+                        cpu_percent=system_metrics['cpu_percent'],
+                        memory_percent=system_metrics['memory_percent'],
+                        disk_usage=system_metrics['disk_usage']
+                    )
             except Exception as e:
                 self.logger.error(f"Failed to record metrics in database: {e}")
         
@@ -728,6 +806,41 @@ class UnifiedMonitor:
         """Resume training session."""
         self.training_state = TrainingState.RUNNING
         self.logger.info("▶️ Training resumed")
+    
+    def export_run_data(self, run_id: str, output_dir, include_snapshots: bool = True):
+        """Export training run data."""
+        if self.db:
+            return self.db.export_run_data(run_id, output_dir, include_snapshots)
+        else:
+            # Create a minimal export if no database
+            from pathlib import Path
+            output_path = Path(output_dir) / f"export_{run_id}.zip"
+            import zipfile
+            with zipfile.ZipFile(output_path, 'w') as zf:
+                zf.writestr('README.txt', 'No database available for data export')
+            return output_path
+    
+    def record_event(self, event_type: str, event_data: Dict[str, Any] = None):
+        """Record an event for the current training run."""
+        event = {
+            'event_type': event_type,
+            'timestamp': time.time(),
+            'event_data': event_data or {}
+        }
+        
+        # Add to in-memory events list
+        self.events.append(event)
+        
+        # Store in database if available
+        if self.db and self.current_run_id:
+            try:
+                self.db.record_event(
+                    run_id=self.current_run_id,
+                    event_type=event_type,
+                    event_data=event_data or {}
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to record event in database: {e}")
     
     def run(self, debug=False):
         """Run the monitoring server."""

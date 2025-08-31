@@ -484,9 +484,9 @@ class UnifiedVisionProcessor:
         try:
             # Convert numpy array to PIL Image
             if len(screenshot.shape) == 3:
-                image = Image.fromarray(screenshot, 'RGB')
+                image = Image.fromarray(screenshot)
             else:
-                image = Image.fromarray(screenshot, 'L')
+                image = Image.fromarray(screenshot)
             
             # Save to bytes buffer
             buffer = io.BytesIO()

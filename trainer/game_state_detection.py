@@ -72,7 +72,7 @@ class GameStateDetector:
     
     def is_stuck(self) -> bool:
         """Check if the game appears to be stuck."""
-        return self.consecutive_same_screens >= 30 or self.stuck_counter > 0
+        return self.consecutive_same_screens >= 15 or self.stuck_counter > 0
 
     def detect_game_state(self, screen: np.ndarray) -> str:
         """Detect game state from screen content."""
@@ -112,33 +112,34 @@ class GameStateDetector:
             self.consecutive_same_screens += 1
             
             # Update stuck counter if threshold reached
-            if self.consecutive_same_screens >= 30:
+            if self.consecutive_same_screens >= 15:
                 self.stuck_counter += 1
                 return "stuck"
         else:
-            # Different screen - only reset if substantially different
+            # Different screen - reset counters immediately
             self.last_screen_hash = current_hash
-            if self.consecutive_same_screens >= 15:
-                self.consecutive_same_screens = 0
-                self.stuck_counter = 0
+            self.consecutive_same_screens = 0
+            self.stuck_counter = 0
             self._last_gray = None  # Reset gray cache on change
-            self.last_screen_hash = current_hash
-            self._last_gray = None  # Reset gray cache on screen change
 
         # Detect loading/black screen and transitions
         mean_brightness = np.mean(gray)
         title_std = np.std(gray)
         self.logger.debug(f"Screen stats - mean: {mean_brightness:.1f}, std: {title_std:.1f}")
         
-        # Transitions include both dark and fade screens
-        if mean_brightness < 50 or (mean_brightness < 100 and title_std < 20):
-            self.logger.debug("Detected unknown/loading state")
-            return "unknown"
+        # Loading/black screens
+        if mean_brightness < 40 and title_std < 20:
+            self.logger.debug("Detected loading state")
+            return "loading"
+        # Very dark transition but not fully loading
+        if mean_brightness < 60 and title_std < 25:
+            self.logger.debug("Detected black/dim screen")
+            return "black_screen"
 
         # Detect intro/white screen
-        if mean_brightness > 240:
+        if mean_brightness > 245:
             self.logger.debug("Detected intro sequence")
-            return "title_screen"
+            return "intro_sequence"
 
         # Detect title screen (characterized by medium-high uniform brightness)
         if 180 <= mean_brightness <= 220 and title_std < 30:
@@ -150,32 +151,23 @@ class GameStateDetector:
         menu_regions = [
             gray[20:60, 20:140],  # Standard menu
             gray[30:90, 30:130],  # Battle menu
-            gray[100:140, 10:150]  # Options menu
+            gray[100:140, 10:150]  # Options/menu bottom
         ]
         for region in menu_regions:
             region_mean = np.mean(region)
             region_std = np.std(region)
-            # Menu regions are bright and uniform
+            # Menu regions are bright and relatively uniform
             if region_mean > 180 and region_std < 40:
                 return "menu"
 
         # Dialogue detection with optimized checks
-        # Only compute bottom region first for performance
         try:
-            bottom = gray[100:140, 10:150]  # Focused dialogue box region
+            bottom = gray[100:140, 10:150]  # Dialogue box region
             bottom_mean = np.mean(bottom)
-
-            # Quick check for bright bottom region first
             if bottom_mean > 170:  # Dialog boxes are brighter than background
-                top = gray[20:90, 10:150]  # Check game area
+                top = gray[20:90, 10:150]  # Game area
                 top_mean = np.mean(top)
                 top_std = np.std(top)
-
-                # Enhanced dialogue box criteria:
-                # - Very bright bottom region
-                # - Game area is significantly darker
-                # - Game area has reasonable variation
-                # - Game area not too dark (to avoid menus)
                 if (bottom_mean > 200 and
                     bottom_mean > top_mean * 1.5 and
                     top_std > 20 and

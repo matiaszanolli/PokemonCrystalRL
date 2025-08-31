@@ -762,11 +762,14 @@ class TestEdgeCasesAndErrorHandling(unittest.TestCase):
         # Empty array
         empty_array = np.array([], dtype=np.uint8)
         
-        # Should not crash
-        try:
-            analysis = self.gbc_palette.analyze_text_region_colors(empty_array.reshape(0, 0))
-        except:
-            pass  # Expected to fail gracefully
+        # Should not crash - suppress expected warnings
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            try:
+                analysis = self.gbc_palette.analyze_text_region_colors(empty_array.reshape(0, 0))
+            except:
+                pass  # Expected to fail gracefully
             
     def test_single_pixel_operations(self):
         """Test operations on single pixel images"""

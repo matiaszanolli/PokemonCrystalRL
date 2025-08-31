@@ -1117,7 +1117,7 @@ class TestEnhancedStateDetection:
         
         state = trainer._detect_game_state(menu_screen)
         # Menu detection may need more sophisticated logic
-        assert state in ["menu", "dialogue", "unknown"]
+        assert state == "menu"
     
     def test_state_detection_performance(self, trainer):
         """Test state detection performance"""

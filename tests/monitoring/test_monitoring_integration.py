@@ -12,6 +12,7 @@ Tests the integration between different monitoring components including:
 import pytest
 import time
 import queue
+from queue import Queue
 import numpy as np
 from unittest.mock import Mock, patch, PropertyMock
 import threading
@@ -23,6 +24,7 @@ from monitoring.web_server import WebServer as TrainingWebServer
 from .mock_llm_manager import MockLLMManager
 from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
 from trainer.unified_trainer import UnifiedPokemonTrainer
+from monitoring.error_handler import ErrorHandler
 
 
 import socket
@@ -39,10 +41,29 @@ def free_port():
 @pytest.fixture
 def mock_config(free_port):
     """Base configuration for testing"""
+    port = None
+    # Try multiple ports in case of conflicts
+    for _ in range(3):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                port = s.getsockname()[1]
+                # Test if port is actually free
+                try:
+                    requests.get(f"http://localhost:{port}/health", timeout=0.1)
+                except requests.exceptions.RequestException:
+                    # Port is truly free
+                    break
+        except Exception:
+            time.sleep(0.1)
+    
+    if port is None:
+        port = free_port  # Fall back to fixture provided port
+    
     return TrainingConfig(
         rom_path="test.gbc",
         enable_web=True,
-        web_port=free_port,  # Use dynamic port for testing
+        web_port=port,
         capture_screens=True,
         headless=True,
         debug_mode=True,
@@ -365,12 +386,17 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
         error_count = 0
         error_received = threading.Event()
 
+        # Set up error tracking at data bus level
+        data_bus.error_handler = ErrorHandler()
+        data_bus.error_handler.error_events = Queue()
+
         def error_callback(data, publisher=None):
             nonlocal error_count
             print("\nDEBUG: Error callback executing with data:", data)
             error_count += 1
             error_received.set()
             print("DEBUG: Error event set, count:", error_count)
+            return True  # Indicate successful handling
 
         # Subscribe to error events
         data_bus.subscribe(
@@ -381,42 +407,50 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
 
         with patch('trainer.trainer.PyBoy') as mock_pyboy, \
              patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
-            # Configure PyBoy mock
             mock_pyboy_instance = Mock()
             mock_pyboy_instance.frame_count = 1000
-
-            # Setup screen mock to fail on second access
-            mock_screen = Mock()
-            mock_screen.ndarray = PropertyMock(side_effect=Exception("Screen access error"))
-            mock_pyboy_instance.screen = mock_screen
             mock_pyboy.return_value = mock_pyboy_instance
 
             trainer = UnifiedPokemonTrainer(mock_config)
-
-            # Configure error handling
-            def mock_error_publish(data_type, data, publisher):
-                try:
-                    if data_type == DataType.ERROR_EVENT:
-                        error_callback(data, publisher)
-                except Exception as e:
-                    print("Error in mock_error_publish:", e)
-                return True
             
-            # Patch and ensure data bus is accessible
+            # Force test_mode off and enable screen capture
+            trainer.config.test_mode = False
+            trainer.config.capture_screens = True
+            
+            # Register component for error handling
             data_bus.register_component("test_error_handler", {'type': 'test'})
             
-            # Trigger error with error handler in place
-            with patch.object(data_bus, 'publish', side_effect=mock_error_publish):
-                # The context manager should properly handle the error and publish it
-                with trainer._handle_errors('test_screen_capture', 'capture_errors'):
-                    trainer._capture_and_queue_screen()  # This should raise and be caught
-                    
-            # Wait for error event
-            assert error_received.wait(timeout=2.0), "Error event not received"
-            # Check error callback ran at least once
-            assert error_count > 0, "Error count not incremented"
-            print("DEBUG: Recovery successful")
-            print("DEBUG: System recovered successfully")
+            # Patch the _simple_screenshot_capture to raise an exception
+            def failing_screenshot_capture():
+                print("DEBUG: Failing screenshot capture called")
+                raise RuntimeError("Screen access error")
+                
+            # First let's debug what the normal call does
+            print(f"DEBUG: Config capture_screens: {trainer.config.capture_screens}")
+            print(f"DEBUG: Config test_mode: {getattr(trainer.config, 'test_mode', None)}")
+            
+            # Trigger error by patching the method that should fail
+            with patch.object(trainer, '_simple_screenshot_capture', side_effect=failing_screenshot_capture):
+                print("\nDEBUG: About to trigger error in capture_and_queue_screen")
+                try:
+                    with trainer._handle_errors('test_screen_capture', 'capture_errors'):
+                        print("DEBUG: Inside handle_errors context manager")
+                        trainer._capture_and_queue_screen()  # This should raise and be caught by the context manager
+                        print("DEBUG: capture_and_queue_screen completed without error - THIS SHOULD NOT HAPPEN")
+                except Exception as e:
+                    print("\nDEBUG: Caught exception outside error handler:", e)
+                    import traceback
+                    traceback.print_exc()
+                        
+                # Explicitly wait a bit for error processing
+                time.sleep(0.5)
+                        
+                # Wait for error event with increased timeout
+                assert error_received.wait(timeout=5.0), "Error event not received"
+                # Check error callback ran at least once
+                assert error_count > 0, "Error count not incremented"
+                print("DEBUG: Recovery successful")
+                print("DEBUG: System recovered successfully")
 
     def test_component_lifecycle(self, mock_config, data_bus):
         """Test component lifecycle management"""

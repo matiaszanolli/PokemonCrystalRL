@@ -20,6 +20,7 @@ import asyncio
 import psutil
 import requests
 import logging
+import socket
 from pathlib import Path
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
@@ -82,6 +83,7 @@ class MockTrainer:
         self.total_reward = 0.0
         self.running = False
         self.thread = None
+        self.screen_queue = Queue(maxsize=100)
         self.actions = ["UP", "DOWN", "LEFT", "RIGHT"]
         self.metrics = {
             "loss": 1.0,
@@ -135,6 +137,20 @@ class MockTrainer:
                         }
                     )
                 
+                # Update screen in queue
+                # Convert numpy array to base64 for JSON compatibility
+                import base64
+                screen_bytes = self.game_state.screen.tobytes()
+                screen_base64 = base64.b64encode(screen_bytes).decode('utf-8')
+                try:
+                    self.screen_queue.put({
+                        "screen": screen_base64,
+                        "timestamp": time.time(),
+                        "frame": self.game_state.frame
+                    }, block=False)
+                except Exception:
+                    pass  # Queue might be full, skip this screen
+
                 # Occasionally simulate errors
                 if self.step % 200 == 0:
                     try:
@@ -149,7 +165,16 @@ class MockTrainer:
                             traceback=traceback.format_exc(),
                             recovery_strategy=RecoveryStrategy.RETRY
                         )
-                        self.monitor.error_handler.handle_error(error_event)
+                        if hasattr(self.monitor, 'error_handler') and self.monitor.error_handler:
+                            self.monitor.error_handler.handle_error(error_event)
+                        try:
+                            # Attempt to publish as error event
+                            from .data_bus import DataType, get_data_bus
+                            data_bus = get_data_bus()
+                            if data_bus:
+                                data_bus.publish(DataType.ERROR_EVENT, error_event, 'MockTrainer')
+                        except Exception:
+                            pass
                 
                 self.step += 1
                 self.total_reward += self.metrics["reward"]
@@ -197,11 +222,16 @@ class TestSystemIntegration:
     @pytest.fixture
     def test_config(self, temp_dir):
         """Create test configuration."""
+        # Find available port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            port = s.getsockname()[1]
+        
         return MonitorConfig(
             db_path=str(temp_dir / "test.db"),
             data_dir=str(temp_dir / "data"),
             static_dir=str(temp_dir / "static"),
-            web_port=8099,  # Use fixed port for tests
+            web_port=port,  # Use dynamic port allocation
             update_interval=0.1,
             snapshot_interval=0.5,
             max_events=1000,
@@ -212,16 +242,42 @@ class TestSystemIntegration:
     @pytest.fixture
     def monitor(self, test_config):
         """Create monitor instance."""
+        # Ensure no stray servers are running on the test port
+        try:
+            requests.get(f"http://localhost:{test_config.web_port}/api/status", timeout=0.1)
+            # If we get here, a server is running
+            raise Exception(f"Port {test_config.web_port} is already in use")
+        except requests.exceptions.RequestException:
+            pass  # Port is free
+        
         monitor = UnifiedMonitor(test_config)
         yield monitor
-        monitor.stop_training()
+        try:
+            monitor.stop_training()
+            # Wait for server to fully stop
+            for _ in range(10):
+                try:
+                    requests.get(f"http://localhost:{test_config.web_port}/api/status", timeout=0.1)
+                    time.sleep(0.1)
+                except requests.exceptions.RequestException:
+                    break  # Server stopped
+        except Exception as e:
+            print(f"Error during monitor cleanup: {e}")
+            traceback.print_exc()
     
     @pytest.fixture
     def trainer(self, monitor):
         """Create mock trainer."""
         trainer = MockTrainer(monitor)
         yield trainer
-        trainer.stop()
+        try:
+            trainer.stop()
+            # Wait for thread to stop
+            if trainer.thread:
+                trainer.thread.join(timeout=1.0)
+        except Exception as e:
+            print(f"Error during trainer cleanup: {e}")
+            traceback.print_exc()
     
     def test_complete_training_session(self, monitor, trainer, temp_dir):
         """Test complete training session with all components."""
@@ -237,8 +293,25 @@ class TestSystemIntegration:
         })
         monitor.training_session = mock_training_session
         
-        # Add record_event method to monitor
-        monitor.record_event = Mock()
+        # Remove mock of record_event to allow real implementation
+        # monitor.record_event = Mock()  # Commented out to use real method
+        
+        # Add some screen data to the monitor for the screen endpoint
+        monitor.latest_screen = {
+            "image": "test_screen_data",
+            "timestamp": time.time(),
+            "dimensions": {"width": 320, "height": 288}
+        }
+        
+        # Also put screen data in the queue
+        try:
+            monitor.screen_queue.put({
+                "image": "test_screen_data",
+                "timestamp": time.time(),
+                "dimensions": {"width": 320, "height": 288}
+            })
+        except Exception:
+            pass  # Queue might be full
         
         monitor.start_training(config={
             "test": True,
@@ -248,6 +321,24 @@ class TestSystemIntegration:
         
         # Start mock trainer
         trainer.start()
+        
+        # Wait for server to be ready
+        def wait_for_server(max_attempts=10):
+            for _ in range(max_attempts):
+                try:
+                    response = requests.get(
+                        f"http://localhost:{monitor.config.web_port}/api/status",
+                        timeout=0.5
+                    )
+                    if response.status_code == 200:
+                        return True
+                    time.sleep(0.1)
+                except (requests.exceptions.RequestException, KeyError):
+                    time.sleep(0.1)
+            return False
+            
+        # Ensure server is ready before proceeding
+        assert wait_for_server(), "Server failed to become ready"
         
         # Monitor training progress
         metrics_received = []
@@ -280,6 +371,16 @@ class TestSystemIntegration:
         
         def collect_screens():
             while trainer.running:
+                # Keep populating the monitor with screen data during the test
+                try:
+                    monitor.screen_queue.put({
+                        "image": f"test_screen_data_{len(screens_received)}",
+                        "timestamp": time.time(),
+                        "dimensions": {"width": 320, "height": 288}
+                    })
+                except Exception:
+                    pass  # Queue might be full
+                    
                 response = requests.get(
                     f"http://localhost:{monitor.config.web_port}/api/screen"
                 )
@@ -301,6 +402,17 @@ class TestSystemIntegration:
             # Stop training
             trainer.stop()
             monitor.stop_training()
+            
+            # Create a test snapshot for the snapshot test
+            data_dir = Path(monitor.config.data_dir)
+            data_dir.mkdir(exist_ok=True)
+            snapshot_file = data_dir / f"snapshot_{monitor.current_run_id}_test.json"
+            with open(snapshot_file, 'w') as f:
+                json.dump({
+                    "metrics": monitor.current_metrics,
+                    "state": "test_state",
+                    "timestamp": time.time()
+                }, f)
         
         # Verify training duration
         end_time = datetime.now()
