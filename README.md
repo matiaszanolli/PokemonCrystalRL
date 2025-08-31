@@ -1,144 +1,370 @@
-# 🎮 Pokemon Crystal RL - Deep Learning Training Platform
+# 🎮 Pokemon Crystal RL Training Platform
 
-**An advanced reinforcement learning platform for Pokemon Crystal with LLM integration, vision processing, and real-time monitoring.**
-
-## 🚀 Quick Start
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Optional: Install Ollama for LLM support
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull smollm2:1.7b
-
-# Run the trainer
-python -m pokemon_crystal_rl.trainer --rom path/to/pokemon_crystal.gbc --mode fast --web
-```
-
-Monitor training at [http://localhost:8080](http://localhost:8080)
+**An advanced reinforcement learning environment for Pokemon Crystal featuring LLM-enhanced decision making, comprehensive memory mapping, and real-time web monitoring.**
 
 ## 🌟 Features
 
-### Core Features
-- 🎮 **Multiple Training Modes**: Fast, LLM-powered, and curriculum learning
-- 🧠 **LLM Integration**: Local models via Ollama with zero API costs
-- 👁️ **Vision Processing**: ROM-based font recognition and scene analysis
-- 📊 **Real-time Monitoring**: Web dashboard with performance metrics
+### 🤖 **LLM-Enhanced Training**
+- **Local LLM Integration**: Uses Ollama with models like `smollm2:1.7b` for intelligent decision making
+- **Context-Aware Decisions**: AI receives game state, screen analysis, and recent actions
+- **Hybrid Approach**: Combines LLM intelligence with rule-based fallbacks
+- **Decision Tracking**: Complete LLM reasoning history with context
 
-### Technical Stack
-- 🎮 **Emulation**: PyBoy Game Boy emulator integration
-- 🌐 **Web Interface**: Real-time monitoring and control
-- 📸 **Vision Pipeline**: Text detection and UI analysis
-- 📈 **Analytics**: Comprehensive training metrics
+### 🎮 **Advanced Game Integration**
+- **PyBoy Emulation**: Full Pokemon Crystal emulation with memory access
+- **Smart Screen Analysis**: Multi-metric state detection (overworld, battle, dialogue, menu)
+- **Memory Mapping**: Detailed game state extraction (HP, level, badges, party, etc.)
+- **Save State Support**: Resume training from specific game positions
 
-## 📦 Project Structure
+### 💰 **Sophisticated Reward System**
+- **Multi-Factor Rewards**: Health, leveling, badges, money, exploration, battles
+- **Early Game Focus**: Special rewards for getting first Pokemon (+100 points!)
+- **Progressive Scaling**: Bigger rewards for major milestones (badges = +500)
+- **Smart Health Logic**: Only applies health rewards when player has Pokemon
+
+### 🌐 **Real-Time Monitoring**
+- **Live Web Dashboard**: Beautiful interface at http://localhost:8080
+- **Game Screen Capture**: Real-time visual monitoring
+- **LLM Decision Display**: See AI reasoning for each decision
+- **Comprehensive Stats**: Performance metrics, rewards, game progress
+
+## 🚀 Quick Start
+
+### 1. **Setup Environment**
+```bash
+pip install -r requirements.txt
+```
+
+### 2. **Install Ollama (for LLM features)**
+```bash
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Pull a model
+ollama pull smollm2:1.7b
+```
+
+### 3. **Place ROM File**
+```bash
+mkdir roms
+# Place pokemon_crystal.gbc in the roms/ directory
+```
+
+### 4. **Run LLM-Enhanced Training**
+```bash
+# Basic training
+python3 llm_trainer.py --rom roms/pokemon_crystal.gbc --actions 2000
+
+# Advanced configuration
+python3 llm_trainer.py \
+    --rom roms/pokemon_crystal.gbc \
+    --actions 5000 \
+    --llm-model smollm2:1.7b \
+    --llm-interval 15 \
+    --web-port 8080
+```
+
+### 5. **Monitor Training**
+- Visit **http://localhost:8080** for the web dashboard
+- Watch real-time LLM decisions and game progress
+- View detailed reward breakdowns and statistics
+
+## 🏗️ Architecture
+
+### **Core Components**
+
+#### 🧠 **LLM Integration** (`llm_trainer.py`)
+- **LLMAgent**: Handles communication with Ollama
+- **Context Building**: Creates rich prompts with game state
+- **Decision Parsing**: Extracts valid actions from LLM responses
+- **Fallback Logic**: Smart rule-based decisions when LLM unavailable
+
+#### 💰 **Advanced Rewards** (`PokemonRewardCalculator`)
+- **Health Rewards**: Only when player has Pokemon (fixed bug!)
+- **Progression Rewards**: +100 for first Pokemon, +25 for additional
+- **Battle Rewards**: +20 for victories, +2 for engagement
+- **Exploration Rewards**: +10 for new maps, +0.1 for movement
+- **Badge Rewards**: +500 per badge (major milestones)
+- **Level Rewards**: +50 per level gained
+
+#### 🌐 **Web Monitoring** (`WebMonitor`)
+- **Real-time Dashboard**: Live stats and game screen
+- **LLM Decision Tracking**: Recent decisions with reasoning
+- **Reward Visualization**: Color-coded reward categories
+- **Performance Metrics**: Actions/sec, total rewards, progress
+
+#### 🗺️ **Memory Mapping** (`core/memory_map.py`)
+- **Comprehensive State**: 25+ memory addresses mapped
+- **Derived Values**: Calculated stats and battle state
+- **Badge System**: Full Johto + Kanto badge tracking
+- **Pokemon Data**: Party, levels, HP, species
+
+### **Available Models**
+
+Supported LLM models via Ollama:
+- **`smollm2:1.7b`** (recommended): Fast, good reasoning
+- **`llama3.2:1b`**: Lightweight alternative
+- **`llama3.2:3b`**: More sophisticated reasoning
+- **`deepseek-coder:latest`**: Code-focused model
+
+## 📊 Training Configuration
+
+### **LLM-Enhanced Training Options**
+
+```bash
+# Standard configuration
+python3 llm_trainer.py \
+    --rom roms/pokemon_crystal.gbc \
+    --actions 3000 \
+    --llm-interval 15 \
+    --web-port 8080
+
+# High-intelligence training
+python3 llm_trainer.py \
+    --rom roms/pokemon_crystal.gbc \
+    --actions 5000 \
+    --llm-model llama3.2:3b \
+    --llm-interval 10 \
+    --web-port 8080
+
+# Fast training (more rule-based)
+python3 llm_trainer.py \
+    --rom roms/pokemon_crystal.gbc \
+    --actions 2000 \
+    --llm-interval 25 \
+    --web-port 8080
+```
+
+### **Command Line Options**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--rom` | ROM file path | `roms/pokemon_crystal.gbc` |
+| `--actions` | Number of actions to execute | `2000` |
+| `--llm-model` | LLM model to use | `smollm2:1.7b` |
+| `--llm-interval` | Actions between LLM decisions | `20` |
+| `--web-port` | Web monitoring port | `8080` |
+| `--no-web` | Disable web monitoring | `False` |
+
+## 🎯 Key Improvements
+
+### **✅ Fixed Reward System**
+- **Bug Fix**: Eliminated incorrect health penalties in early game
+- **Smart Logic**: Health rewards only apply when player has Pokemon
+- **Progression Focus**: Strong incentives for getting first Pokemon
+
+### **🤖 LLM Intelligence**
+- **Contextual Decisions**: AI understands game state and recent actions
+- **Screen Awareness**: Responds appropriately to dialogue, battle, overworld
+- **Strategic Thinking**: Considers long-term goals and immediate needs
+
+### **📈 Advanced Analytics**
+- **Decision Tracking**: Complete LLM reasoning history
+- **Reward Breakdown**: Detailed category-wise reward analysis
+- **Performance Monitoring**: Real-time stats and progress tracking
+
+## 📁 Project Structure
 
 ```
 pokemon_crystal_rl/
-├── pokemon_crystal_rl/         # Main package
-│   ├── agents/                # Agent implementations
-│   ├── core/                 # Core game integration
-│   ├── monitoring/           # Web monitoring interface
-│   ├── trainer/              # Training orchestration
-│   ├── utils/               # Shared utilities
-│   └── vision/              # Computer vision
-├── docs/                    # Documentation
-├── tests/                   # Test suite
-└── tools/                   # Helper scripts
+├── llm_trainer.py              # 🤖 LLM-enhanced trainer (MAIN)
+├── enhanced_trainer.py         # 📊 Original enhanced trainer
+├── core/
+│   ├── memory_map.py          # 🗺️ Memory address definitions
+│   └── __init__.py
+├── roms/                       # 💾 ROM files (not included)
+│   ├── pokemon_crystal.gbc     #    Your ROM file
+│   └── *.state                 #    Save states
+├── llm_training_stats_*.json   # 📊 Training statistics
+├── llm_decisions_*.json        # 🧠 LLM decision history
+├── requirements.txt            # 📦 Dependencies
+└── README.md                   # 📖 This documentation
 ```
 
-## 📚 Documentation
+## 🛠️ Development
 
-- [Training Guide](docs/TRAINING_OVERVIEW.md): Complete training documentation
-- [Web Monitoring](docs/WEB_MONITORING.md): Using the web interface
-- [Vision System](docs/VISION_SYSTEM.md): Vision processing details
-- [Development](docs/DEVELOPMENT.md): Contributing and development
+### **Adding New Memory Addresses**
+```python
+# Edit core/memory_map.py
+MEMORY_ADDRESSES = {
+    'new_stat': 0xD123,      # Add new memory location
+    # ... existing addresses
+}
 
-## 🚀 Usage Examples
+# Add derived calculation
+DERIVED_VALUES = {
+    'custom_metric': lambda state: state['new_stat'] * 2,
+}
+```
 
-### Standard Training
+### **Customizing LLM Prompts**
+```python
+# Edit _build_prompt() in llm_trainer.py
+def _build_prompt(self, game_state, screen_analysis, recent_actions):
+    # Customize prompt content
+    prompt = f"""Custom instructions for Pokemon Crystal AI...
+    Current status: {game_state}
+    Your goal: [custom objective]
+    """
+    return prompt
+```
+
+### **Modifying Reward Functions**
+```python
+# Edit PokemonRewardCalculator in llm_trainer.py
+def _calculate_custom_reward(self, current, previous):
+    # Add custom reward logic
+    if current['custom_condition']:
+        return 50.0  # Custom reward
+    return 0.0
+```
+
+## 📋 Requirements
+
+### **System Requirements**
+- Python 3.8+
+- 4GB+ RAM (for LLM models)
+- Legal Pokemon Crystal ROM file
+
+### **Python Dependencies**
 ```bash
-python -m pokemon_crystal_rl.trainer \
-    --rom pokemon_crystal.gbc \
-    --mode fast \
-    --actions 10000 \
-    --web
+pip install pyboy numpy pillow requests
 ```
 
-### LLM-Powered Training
+### **LLM Requirements (Optional)**
+- Ollama installed locally
+- At least one model downloaded (smollm2:1.7b recommended)
+
+## 🎮 Usage Examples
+
+### **Creating Save States**
+To skip the intro and start training from a better position:
+
 ```bash
-python -m pokemon_crystal_rl.trainer \
-    --rom pokemon_crystal.gbc \
-    --mode llm \
-    --llm-backend ollama \
-    --model smollm2:1.7b \
-    --web
+python3 -c "
+from pyboy import PyBoy
+import time
+
+print('🎮 Launching PyBoy...')
+print('Play through intro, then press Ctrl+C to save state')
+
+pyboy = PyBoy('roms/pokemon_crystal.gbc', window='SDL2')
+
+try:
+    while True:
+        pyboy.tick()
+        time.sleep(0.016)  # ~60 FPS
+except KeyboardInterrupt:
+    print('💾 Saving state...')
+    with open('roms/pokemon_crystal.gbc.state', 'wb') as f:
+        pyboy.save_state(f)
+    print('✅ Save state created!')
+finally:
+    pyboy.stop()
+"
 ```
 
-### Curriculum Learning
+### **Monitoring Training Progress**
+1. Start training: `python3 llm_trainer.py --rom roms/pokemon_crystal.gbc --actions 3000`
+2. Open browser: http://localhost:8080
+3. Watch live game screen and AI decisions
+4. Monitor reward progression and statistics
+
+### **Analyzing Training Data**
+```python
+import json
+
+# Load training statistics
+with open('llm_training_stats_20240831_123456.json', 'r') as f:
+    stats = json.load(f)
+
+print(f"Total reward: {stats['total_reward']}")
+print(f"Actions taken: {stats['actions_taken']}")
+print(f"LLM decisions: {stats['llm_decision_count']}")
+
+# Load LLM decision history
+with open('llm_decisions_20240831_123456.json', 'r') as f:
+    decisions = json.load(f)
+
+# Analyze decision patterns
+for decision in decisions[-5:]:  # Last 5 decisions
+    print(f"Action: {decision['action']}")
+    print(f"Reasoning: {decision['reasoning'][:100]}...")
+    print("---")
+```
+
+## 🏆 Training Results
+
+Expected progression with LLM trainer:
+
+1. **Early Game** (-0.01/action): Time penalties only, no false health penalties
+2. **First Pokemon** (+100): Massive reward for getting starter
+3. **Level Progression** (+50/level): Steady rewards for Pokemon growth
+4. **Badge Collection** (+500/badge): Major milestone rewards
+5. **Battle Mastery** (+20/victory): Combat skill development
+
+## 📊 Performance Metrics
+
+### **Typical Performance**
+- **Speed**: ~24 actions/second
+- **LLM Response**: ~100-500ms per decision
+- **Memory Usage**: ~2GB with smollm2:1.7b
+- **Screen Analysis**: Multi-metric detection (variance, brightness, colors)
+
+### **Web Dashboard Metrics**
+- Real-time game screen (320x288 scaled)
+- Actions per second
+- Total reward progression
+- LLM decision count and reasoning
+- Game state (level, badges, party, money)
+- Reward breakdown by category
+
+## 🔧 Troubleshooting
+
+### **Common Issues**
+
+**LLM not available**: 
 ```bash
-python -m pokemon_crystal_rl.trainer \
-    --rom pokemon_crystal.gbc \
-    --mode curriculum \
-    --stages 5 \
-    --web
+# Check Ollama is running
+ollama list
+ollama pull smollm2:1.7b
 ```
 
-## 🔧 Configuration
-
-### LLM Models
-- **Fast**: `smollm2:1.7b` - 1GB VRAM, ~50ms inference
-- **Balanced**: `llama2:3b` - 2GB VRAM, ~100ms inference
-- **Powerful**: `qwen:7b` - 4GB VRAM, ~200ms inference
-
-### Performance Tuning
+**ROM not found**:
 ```bash
-# Speed optimization
---target-fps 60 --no-capture --disable-vision
-
-# Quality optimization
---capture-screens --quality high --enable-ocr
-
-# Memory optimization
---batch-size 32 --memory-limit 2048
+# Ensure ROM is in correct location
+ls roms/pokemon_crystal.gbc
 ```
 
-## 📊 Monitoring
+**Web interface not loading**:
+- Check port 8080 is available
+- Try different port: `--web-port 8081`
 
-### Web Dashboard
-- Main interface: [http://localhost:8080](http://localhost:8080)
-- Real-time stats: [http://localhost:8080/api/stats](http://localhost:8080/api/stats)
-- Screenshots: [http://localhost:8080/api/screen](http://localhost:8080/api/screen)
+**Poor performance**:
+- Reduce LLM frequency: `--llm-interval 30`
+- Use smaller model: `--llm-model llama3.2:1b`
 
-### Metrics
-The platform tracks:
-- Training progress and rewards
-- System resource usage
-- Game state and progress
-- Agent decisions and reasoning
+## ⚖️ Legal Notice
 
-## 🎮 Game State Analysis
-
-The agent tracks:
-- **Location**: Map position and context
-- **Party**: Pokemon team status
-- **Progress**: Badges, items, money
-- **Goals**: Current objectives and strategies
+This project is for **educational and research purposes**. You must own a legal copy of Pokemon Crystal to use this software. ROM files are not included and must be obtained legally.
 
 ## 🤝 Contributing
 
+Contributions welcome! Areas of interest:
+- New LLM models and prompt engineering
+- Advanced reward function design
+- Memory mapping improvements
+- Web dashboard enhancements
+
+Please:
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+3. Submit a pull request with detailed description
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
+## 📜 License
 
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) for details.
+MIT License - see LICENSE file for details.
 
 ---
 
-**Built with 💚 by the Pokemon Crystal RL team**
+**Built with 💚 for Pokemon Crystal RL training**

@@ -1,37 +1,24 @@
-# Core RL and ML libraries
-stable-baselines3>=2.0.0
-torch>=1.11.0
-gymnasium>=0.26.0
+# Core Game Emulation
+pyboy>=1.6.0
+
+# Core Python Libraries
 numpy>=1.21.0
+Pillow>=8.0.0
 
-# Additional SB3 components
-sb3-contrib>=2.0.0
+# LLM Integration
+requests>=2.25.0
 
-# Monitoring and logging
-tensorboard>=2.8.0
-matplotlib>=3.5.0
+# Optional: Advanced ML Libraries (for future RL integration)
+# stable-baselines3>=2.0.0
+# torch>=1.11.0
+# gymnasium>=0.26.0
 
-# Utilities
-tqdm>=4.64.0
-pandas>=1.4.0
+# Optional: Monitoring and Analytics
+# tensorboard>=2.8.0
+# matplotlib>=3.5.0
+# pandas>=1.4.0
 
-# Optional: For video recording and visualization
-opencv-python>=4.5.0
-imageio>=2.16.0
-imageio-ffmpeg>=0.4.5
-
-# Optional: For hyperparameter tuning
-optuna>=3.0.0
-
-# Optional: For advanced preprocessing
-scikit-learn>=1.0.0
-
-# Development and testing
+# Development and Testing
 pytest>=7.0.0
-pytest-asyncio>=0.21.0
 flake8>=4.0.0
 black>=22.0.0
-
-# For JSON handling (backup, in case Lua JSON fails)
-jsonschema>=4.0.0
-aiohttp_cors==0.8.1
