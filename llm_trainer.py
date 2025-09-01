@@ -36,6 +36,9 @@ from core.memory_map import (
     get_badges_earned
 )
 
+# Import game intelligence system
+from core.game_intelligence import GameIntelligence, GameContext, ActionPlan
+
 class LLMAgent:
     """Local LLM agent for Pokemon Crystal decision making"""
     
@@ -44,6 +47,9 @@ class LLMAgent:
         self.base_url = base_url
         self.decision_history = []
         self.last_decision_time = 0
+        
+        # Initialize game intelligence system
+        self.game_intelligence = GameIntelligence()
         
         # Test LLM availability
         self.available = self._test_llm_connection()
@@ -100,11 +106,16 @@ class LLMAgent:
             return self._fallback_decision(game_state), f"LLM error: {str(e)}"
     
     def _build_prompt(self, game_state: Dict, screen_analysis: Dict, recent_actions: List[str]) -> str:
-        """Build context-aware prompt for LLM"""
+        """Build context-aware prompt for LLM with game intelligence"""
+        
+        # Use game intelligence to analyze context
+        game_context = self.game_intelligence.analyze_game_context(game_state, screen_analysis)
+        action_plans = self.game_intelligence.get_action_plan(game_context, game_state)
+        contextual_advice = self.game_intelligence.get_contextual_advice(game_context, recent_actions)
         
         # Game state summary
         player_info = f"Player: Level {game_state.get('player_level', '?')}, HP {game_state.get('player_hp', 0)}/{game_state.get('player_max_hp', 1)}"
-        location_info = f"Map: {game_state.get('player_map', 'unknown')} at ({game_state.get('player_x', 0)}, {game_state.get('player_y', 0)})"
+        location_info = f"Location: {game_context.location_name} ({game_context.location_type.name})"
         badges_info = f"Badges: {game_state.get('badges_total', 0)}/16"
         money_info = f"Money: ¥{game_state.get('money', 0)}"
         party_info = f"Party: {game_state.get('party_count', 0)} Pokemon"
@@ -116,12 +127,31 @@ class LLMAgent:
         # Recent actions context
         recent = " → ".join(recent_actions[-5:]) if recent_actions else "None"
         
+        # Game phase and progress information
+        phase_info = f"Game Phase: {game_context.phase.name}"
+        
+        # Health and urgency context
+        health_info = f"Health Status: {game_context.health_status} (Urgency: {game_context.urgency_level}/5)"
+        
         # Battle context
         battle_context = ""
         if game_state.get('in_battle', 0) == 1:
             enemy_level = game_state.get('enemy_level', 0)
             enemy_species = game_state.get('enemy_species', 0)
             battle_context = f"\n🔥 IN BATTLE: Enemy Level {enemy_level} (Species {enemy_species})"
+        
+        # Build recommended actions list
+        recommended_actions_text = "\n".join([f"- {action}" for action in game_context.recommended_actions])
+        
+        # Format immediate goals
+        immediate_goals_text = "\n".join([f"- {goal}" for goal in game_context.immediate_goals])
+        
+        # Format action plans if available
+        action_plan_text = ""
+        if action_plans:
+            top_plan = action_plans[0]  # Get highest priority plan
+            action_plan_text = f"\n\nCURRENT PLAN: {top_plan.goal}\nSteps:\n"
+            action_plan_text += "\n".join([f"{i+1}. {step}" for i, step in enumerate(top_plan.steps)])
         
         prompt = f"""You are an AI playing Pokemon Crystal. Make the best action choice based on the current situation.
 
@@ -131,9 +161,21 @@ CURRENT STATUS:
 {badges_info}
 {money_info}
 {party_info}
+{phase_info}
+{health_info}
 Screen State: {screen_state} (variance: {screen_variance:.1f})
 Recent Actions: {recent}
 {battle_context}
+
+GAME CONTEXT:
+{contextual_advice}
+
+IMMEDIATE GOALS:
+{immediate_goals_text}
+
+RECOMMENDED ACTIONS:
+{recommended_actions_text}
+{action_plan_text}
 
 AVAILABLE ACTIONS:
 up, down, left, right - Movement
@@ -163,7 +205,7 @@ STRATEGY PRIORITIES:
 2. If in battle: Use 'a' to attack
 3. If in dialogue: Use 'a' to progress
 4. If in unwanted menu: Use 'b' to exit
-5. If in overworld: Explore and interact
+5. If in overworld: Follow IMMEDIATE GOALS and RECOMMENDED ACTIONS
 
 Choose ONE action and briefly explain why. Format: ACTION: [action]
 Reasoning: [brief explanation]
