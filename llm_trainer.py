@@ -115,6 +115,10 @@ class LLMAgent:
     def _build_prompt(self, game_state: Dict, screen_analysis: Dict, recent_actions: List[str]) -> str:
         """Build context-aware prompt for LLM with game intelligence"""
         
+        # Check if failsafe intervention is active
+        failsafe_context = getattr(self, 'failsafe_context', {})
+        is_failsafe_active = failsafe_context.get('stuck_detected', False)
+        
         # Use game intelligence to analyze context
         game_context = self.game_intelligence.analyze_game_context(game_state, screen_analysis)
         action_plans = self.game_intelligence.get_action_plan(game_context, game_state)
@@ -136,7 +140,13 @@ class LLMAgent:
             player_info = f"Player: Level {game_state.get('player_level', '?')}, HP {game_state.get('player_hp', 0)}/{game_state.get('player_max_hp', 1)}"
         else:
             player_info = f"Player: NO POKEMON YET (HP display shows 0/0 but this is normal)"
-        location_info = f"Location: {game_context.location_name} ({game_context.location_type.name})"
+        
+        # Enhanced location context with coordinates
+        current_map = game_state.get('player_map', 0)
+        current_x = game_state.get('player_x', 0)
+        current_y = game_state.get('player_y', 0)
+        location_info = f"Location: {game_context.location_name} (Map {current_map}, Position {current_x},{current_y})"
+        
         badges_info = f"Badges: {game_state.get('badges_total', 0)}/16"
         money_info = f"Money: ¥{game_state.get('money', 0)}"
         party_info = f"Party: {party_count} Pokemon" + (" - YOU NEED TO GET YOUR FIRST POKEMON!" if party_count == 0 else "")
@@ -161,15 +171,50 @@ class LLMAgent:
             enemy_species = game_state.get('enemy_species', 0)
             battle_context = f"\n🔥 IN BATTLE: Enemy Level {enemy_level} (Species {enemy_species})"
         
+        # Build failsafe-specific guidance
+        failsafe_guidance = ""
+        if is_failsafe_active:
+            stuck_location = failsafe_context.get('stuck_location', (0, 0, 0))
+            actions_without_reward = failsafe_context.get('actions_without_reward', 0)
+            
+            failsafe_guidance = f"""\n🚨 FAILSAFE INTERVENTION ACTIVE! 🚨
+You are STUCK at Map {stuck_location[0]}, Position ({stuck_location[1]},{stuck_location[2]})
+Actions without progress: {actions_without_reward}
+
+SPECIFIC MOVEMENT INSTRUCTIONS:
+- If you're in the bedroom (Map 24) at positions (0,0), (1,0), or (2,0):
+  * The door is DOWN and to the RIGHT from the starting position
+  * Try: DOWN → DOWN → RIGHT → DOWN to exit the room
+  * Avoid pressing 'A' near the radio (top-left area)
+- If stuck repeating same movements: try the OPPOSITE direction
+- If coordinates aren't changing: you might be hitting walls - try a different direction
+- Priority: GET OUT OF THIS ROOM by moving to new map coordinates
+
+CONCRETE ACTION PLAN:
+1. If at (0,0) or (1,0): Move DOWN or RIGHT
+2. If at (2,0): Move DOWN then RIGHT
+3. Look for doorways and transitions to new areas
+4. Press 'A' only when you see NPCs or objects to interact with
+
+FAILSAFE OVERRIDE: Ignore vague goals. Focus ONLY on changing your coordinates!"""
+        
         # Build recommended actions list
         recommended_actions_text = "\n".join([f"- {action}" for action in game_context.recommended_actions])
         
-        # Format immediate goals
-        immediate_goals_text = "\n".join([f"- {goal}" for goal in game_context.immediate_goals])
+        # Format immediate goals - make them more specific if failsafe is active
+        if is_failsafe_active and party_count == 0:
+            immediate_goals_text = "\n".join([
+                "- MOVE to different coordinates (change position numbers)",
+                "- EXIT the current room/area",
+                "- Find NPCs or doorways by exploring systematically",
+                "- Get to a NEW map ID (currently Map 24 = bedroom)"
+            ])
+        else:
+            immediate_goals_text = "\n".join([f"- {goal}" for goal in game_context.immediate_goals])
         
         # Format action plans if available
         action_plan_text = ""
-        if action_plans:
+        if action_plans and not is_failsafe_active:  # Skip complex plans during failsafe
             top_plan = action_plans[0]  # Get highest priority plan
             action_plan_text = f"\n\nCURRENT PLAN: {top_plan.goal}\nSteps:\n"
             action_plan_text += "\n".join([f"{i+1}. {step}" for i, step in enumerate(top_plan.steps)])
@@ -180,6 +225,25 @@ class LLMAgent:
             experience_text = f"\n\nLEARNED EXPERIENCE: In similar situations, these actions worked well: {' → '.join(learned_actions)}"
             memory_stats = self.experience_memory.get_memory_stats()
             experience_text += f"\n(Based on {memory_stats['total_experiences']} past experiences)"
+        
+        # Modify guidelines based on failsafe state
+        movement_guidelines = ""
+        if is_failsafe_active:
+            movement_guidelines = """\nFAILSAFE MOVEMENT STRATEGY:
+🎯 PRIMARY GOAL: Change your position coordinates!
+- Current coordinates: ({current_x},{current_y}) on Map {current_map}
+- Target: ANY different coordinates or map
+- Method: Try each direction (up/down/left/right) systematically
+- If hitting walls: coordinates won't change, try different direction
+- If coordinates change: GOOD! Continue in that direction
+- Look for map transitions (screen changes, loading)""".format(current_x=current_x, current_y=current_y, current_map=current_map)
+        else:
+            movement_guidelines = """\nSTRATEGY PRIORITIES:
+1. If stuck in settings_menu: Press 'b' immediately
+2. If in battle: Use 'a' to attack
+3. If in dialogue: Use 'a' to progress
+4. If in unwanted menu: Use 'b' to exit
+5. If in overworld: Follow IMMEDIATE GOALS and RECOMMENDED ACTIONS"""
         
         prompt = f"""You are an AI playing Pokemon Crystal. Make the best action choice based on the current situation.
 
@@ -194,6 +258,7 @@ CURRENT STATUS:
 Screen State: {screen_state} (variance: {screen_variance:.1f})
 Recent Actions: {recent}
 {battle_context}
+{failsafe_guidance}
 
 GAME CONTEXT:
 {contextual_advice}
@@ -210,8 +275,8 @@ AVAILABLE ACTIONS:
 up, down, left, right - Movement
 a - Interact/Confirm/Attack
 b - Cancel/Back/Exit Menu
-start - Open Menu
-select - Select button
+start - Open Menu (FORBIDDEN until you have Pokemon!)
+select - Select button (FORBIDDEN until you have Pokemon!)
 
 CRITICAL SCREEN STATE RULES:
 🔥 BATTLE: Use 'a' to attack
@@ -233,18 +298,19 @@ IMPORTANT GUIDELINES:
 - If recent actions show 'START' but you're in 'settings_menu': use 'b' to exit
 - Only use 'start' when you specifically need to access menu for healing/items
 - 'b' is your escape key - use it liberally to exit unwanted screens
+{movement_guidelines}
 
-STRATEGY PRIORITIES:
-1. If stuck in settings_menu: Press 'b' immediately
-2. If in battle: Use 'a' to attack
-3. If in dialogue: Use 'a' to progress
-4. If in unwanted menu: Use 'b' to exit
-5. If in overworld: Follow IMMEDIATE GOALS and RECOMMENDED ACTIONS
-
-Choose ONE action and briefly explain why. Format: ACTION: [action]
+Choose ONE action and briefly explain why. Focus on CONCRETE movement if coordinates aren't changing!
+Format: ACTION: [action]
 Reasoning: [brief explanation]
 
 Your choice:"""
+        
+        # Clear failsafe context after use
+        if hasattr(self, 'failsafe_context'):
+            self.failsafe_context = {}
+            
+        return prompt
 
         return prompt
     
@@ -318,27 +384,37 @@ class PokemonRewardCalculator:
         rewards['money'] = money_reward
         total_reward += money_reward
         
-        # 5. Exploration rewards
+        # 5. Coordinate movement rewards (small rewards for any position change)
+        movement_reward = self._calculate_movement_reward(current_state, previous_state)
+        rewards['movement'] = movement_reward
+        total_reward += movement_reward
+        
+        # 6. Exploration rewards (larger rewards for completely new areas)
         exploration_reward = self._calculate_exploration_reward(current_state, previous_state)
         rewards['exploration'] = exploration_reward
         total_reward += exploration_reward
         
-        # 6. Battle performance rewards
+        # 7. Battle performance rewards
         battle_reward = self._calculate_battle_reward(current_state, previous_state)
         rewards['battle'] = battle_reward
         total_reward += battle_reward
         
-        # 7. Progress and efficiency penalties
+        # 8. Progress and efficiency penalties
         efficiency_penalty = self._calculate_efficiency_penalty(current_state)
         rewards['efficiency'] = efficiency_penalty
         total_reward += efficiency_penalty
         
-        # 7. Early game progression rewards (getting first Pokemon, etc.)
+        # 9. Early game progression rewards (getting first Pokemon, etc.)
         progression_reward = self._calculate_progression_reward(current_state, previous_state)
         rewards['progression'] = progression_reward
         total_reward += progression_reward
         
-        # 8. Time-based small negative reward to encourage efficiency
+        # 10. Dialogue and interaction rewards (to guide toward first Pokemon)
+        dialogue_reward = self._calculate_dialogue_reward(current_state, previous_state)
+        rewards['dialogue'] = dialogue_reward
+        total_reward += dialogue_reward
+        
+        # 11. Time-based small negative reward to encourage efficiency
         time_penalty = -0.01  # Small penalty each step
         rewards['time'] = time_penalty
         total_reward += time_penalty
@@ -385,14 +461,41 @@ class PokemonRewardCalculator:
         curr_level = current.get('player_level', 0)
         prev_level = previous.get('player_level', curr_level)
         
+        # Get screen state and party count for validation
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        curr_party_count = current.get('party_count', 0)
+        prev_party_count = previous.get('party_count', 0)
+        
+        # CRITICAL FIX: Only award level rewards if we have Pokemon
+        # Level changes without Pokemon are memory glitches
+        if curr_party_count == 0 or prev_party_count == 0:
+            return 0.0  # No Pokemon = no level rewards possible
+        
+        # CRITICAL FIX: Only award level rewards in overworld state
+        # This prevents menu operations from triggering false level changes
+        if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
+            return 0.0
+        
         # Guard against impossible level spikes (>100 or huge jumps)
         if curr_level > 100 or prev_level > 100:
+            return 0.0
+        
+        # Additional validation: levels must be reasonable (1-100)
+        if not (1 <= curr_level <= 100 and 1 <= prev_level <= 100):
             return 0.0
         
         if curr_level > prev_level:
             level_gain = curr_level - prev_level
             # Cap level gain to prevent huge memory spike rewards
             level_gain = min(level_gain, 5)  # Max 5 levels per step
+            
+            # Additional validation: require HP values to be reasonable for this level
+            curr_hp = current.get('player_hp', 0)
+            curr_max_hp = current.get('player_max_hp', 0)
+            if curr_max_hp < 10 or curr_hp > curr_max_hp:
+                return 0.0  # Suspicious HP values, likely memory glitch
+            
             return level_gain * 50.0  # Big reward for leveling up
             
         return 0.0
@@ -419,20 +522,73 @@ class PokemonRewardCalculator:
         return 0.0
     
     def _calculate_money_reward(self, current: Dict, previous: Dict) -> float:
-        """Reward for earning money"""
-        curr_money = current.get('money', 0)
-        prev_money = previous.get('money', curr_money)
+        """Reward for earning money - with ULTRA strict validation to prevent SELECT button spam"""
+        # Get screen state to prevent menu-state false rewards
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
         
-        money_change = curr_money - prev_money
-        if money_change > 0:
-            return min(money_change * 0.01, 5.0)  # Cap money rewards
-        elif money_change < 0:
-            return max(money_change * 0.005, -2.0)  # Small penalty for spending
-            
+        # Get the last action to prevent SELECT button spam
+        last_action = getattr(self, 'last_action', 'unknown')
+        
+        # ULTRA FIX: NEVER give money rewards - they are too unreliable
+        # Money changes are often caused by memory glitches, BCD parsing issues,
+        # and SELECT button spam. Disable all money rewards completely.
         return 0.0
+        
+        # The rest of this code is commented out as money rewards are disabled
+        # 
+        # # CRITICAL FIX: Only award money rewards in overworld or battle states
+        # # This prevents SELECT button in menus from causing BCD parsing fluctuations
+        # if curr_screen_state not in ['overworld', 'battle']:
+        #     return 0.0
+        # if prev_screen_state not in ['overworld', 'battle']:
+        #     return 0.0
+        # 
+        # # ADDITIONAL FIX: Never reward money changes caused by SELECT button
+        # # SELECT button can cause memory read issues leading to false money changes
+        # if last_action and last_action.lower() == 'select':
+        #     return 0.0
+        # 
+        # curr_money = current.get('money', 0)
+        # prev_money = previous.get('money', curr_money)
+        # 
+        # # Additional validation: money values must be reasonable (0 to 999999)
+        # if not (0 <= curr_money <= 999999 and 0 <= prev_money <= 999999):
+        #     return 0.0
+        # 
+        # money_change = curr_money - prev_money
+        # 
+        # # Additional validation: money changes should be reasonable
+        # # No single action should give more than 50 (very conservative)
+        # if abs(money_change) > 50:
+        #     return 0.0  # Suspicious money change, likely memory glitch
+        # 
+        # if money_change > 0:
+        #     # Only reward genuine money gains (winning battles, finding items)
+        #     # Must be in overworld with reasonable change and not SELECT action
+        #     return min(money_change * 0.01, 0.5)  # Very small cap on money rewards
+        # elif money_change < 0:
+        #     # Small penalty for spending money (buying items)
+        #     return max(money_change * 0.005, -0.2)  # Very small penalty for spending
+        #     
+        # return 0.0
     
     def _calculate_exploration_reward(self, current: Dict, previous: Dict) -> float:
-        """Reward for exploring new areas"""
+        """Reward for exploring new areas - ONLY in overworld state"""
+        # CRITICAL FIX: Only reward exploration when actually in overworld
+        # This prevents menu state coordinate fluctuations from giving false rewards
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        
+        # Only consider exploration rewards in overworld state
+        if curr_screen_state != 'overworld':
+            return 0.0
+        
+        # Also require previous state to be overworld to prevent menu->overworld transitions
+        # from giving false rewards due to coordinate resets
+        if prev_screen_state != 'overworld':
+            return 0.0
+        
         curr_map = current.get('player_map', 0)
         curr_x = current.get('player_x', 0)
         curr_y = current.get('player_y', 0)
@@ -441,23 +597,93 @@ class PokemonRewardCalculator:
         prev_x = previous.get('player_x', curr_x)
         prev_y = previous.get('player_y', curr_y)
         
+        # Additional validation: coordinates must be reasonable (0-255 range)
+        if not (0 <= curr_x <= 255 and 0 <= curr_y <= 255 and 0 <= curr_map <= 255):
+            return 0.0
+        if not (0 <= prev_x <= 255 and 0 <= prev_y <= 255 and 0 <= prev_map <= 255):
+            return 0.0
+        
         # Current location tuple
         current_location = (curr_map, curr_x, curr_y)
+        previous_location = (prev_map, prev_x, prev_y)
         
-        # New map reward
+        # Skip if coordinates are exactly the same (no movement)
+        if current_location == previous_location:
+            return 0.0
+        
+        # New map reward - but only if it's a reasonable map change (adjacent maps)
         if curr_map != prev_map:
-            # Add the new location to visited set
-            self.visited_locations.add(current_location)
-            return 10.0  # Reward for entering new area
+            map_diff = abs(curr_map - prev_map)
+            # Only reward reasonable map transitions (not huge jumps that indicate glitches)
+            if map_diff <= 10:  # Adjacent or nearby maps
+                self.visited_locations.add(current_location)
+                return 10.0  # Reward for entering new area
+            else:
+                # Suspicious map jump - likely a glitch, no reward
+                return 0.0
         
         # Check if this location has been visited before
         if current_location not in self.visited_locations:
-            # New unvisited location! Add to visited set and give reward
-            self.visited_locations.add(current_location)
-            return 0.1  # Small reward for discovering new tile
+            # Validate this is actual movement (not coordinate glitch)
+            coord_diff = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+            if 1 <= coord_diff <= 5:  # Reasonable movement distance
+                # New unvisited location! Add to visited set and give reward
+                self.visited_locations.add(current_location)
+                return 0.1  # Small reward for discovering new tile
         
-        # No reward for revisiting locations - prevents farming
+        # No reward for revisiting locations or suspicious movements
         return 0.0
+    
+    def _calculate_movement_reward(self, current: Dict, previous: Dict) -> float:
+        """Small reward for any coordinate movement - helps break stuck patterns"""
+        # CRITICAL: Only reward movement when actually in overworld
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        
+        # Only consider movement rewards in overworld state
+        if curr_screen_state != 'overworld':
+            return 0.0
+        
+        # Also require previous state to be overworld to prevent false rewards
+        if prev_screen_state != 'overworld':
+            return 0.0
+        
+        curr_map = current.get('player_map', 0)
+        curr_x = current.get('player_x', 0)
+        curr_y = current.get('player_y', 0)
+        
+        prev_map = previous.get('player_map', curr_map)
+        prev_x = previous.get('player_x', curr_x)
+        prev_y = previous.get('player_y', curr_y)
+        
+        # Validate coordinates are reasonable
+        if not (0 <= curr_x <= 255 and 0 <= curr_y <= 255 and 0 <= curr_map <= 255):
+            return 0.0
+        if not (0 <= prev_x <= 255 and 0 <= prev_y <= 255 and 0 <= prev_map <= 255):
+            return 0.0
+        
+        # Check if coordinates changed
+        position_changed = (curr_x != prev_x) or (curr_y != prev_y)
+        map_changed = (curr_map != prev_map)
+        
+        # Reward any position change
+        if position_changed or map_changed:
+            # Validate this is reasonable movement (not huge coordinate jumps)
+            if map_changed:
+                map_diff = abs(curr_map - prev_map)
+                if map_diff <= 10:  # Reasonable map transition
+                    return 0.05  # Small reward for changing maps
+                else:
+                    return 0.0  # Skip suspicious map jumps
+            else:
+                # Same map, different coordinates
+                coord_diff = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+                if 1 <= coord_diff <= 3:  # Reasonable single-step movement
+                    return 0.02  # Small reward for moving within same map
+                else:
+                    return 0.0  # Skip suspicious coordinate jumps
+        
+        return 0.0  # No movement, no reward
     
     def _calculate_battle_reward(self, current: Dict, previous: Dict) -> float:
         """Reward for battle performance"""
@@ -485,16 +711,85 @@ class PokemonRewardCalculator:
         return 0.0  # Placeholder for now
     
     def _calculate_progression_reward(self, current: Dict, previous: Dict) -> float:
-        """Reward for early game progression milestones"""
+        """Reward for early game progression milestones - with strict validation"""
         curr_party_count = current.get('party_count', 0)
         prev_party_count = previous.get('party_count', 0)
         
-        # Huge reward for getting first Pokemon (major early game milestone)
+        # Get screen state to prevent menu-state false rewards
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        
+        # CRITICAL FIX: Only award progression rewards in consistent overworld states
+        # This prevents menu operations from triggering false party_count changes
+        if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
+            return 0.0
+        
+        # Additional validation: party count must be reasonable and stable
+        if not (0 <= curr_party_count <= 6 and 0 <= prev_party_count <= 6):
+            return 0.0
+        
+        # Require multiple corroborating signals for genuine Pokemon acquisition
         if curr_party_count > prev_party_count:
+            # Check if we have corroborating evidence of genuine progression
+            curr_level = current.get('player_level', 0)
+            prev_level = previous.get('player_level', 0)
+            curr_hp = current.get('player_hp', 0)
+            curr_max_hp = current.get('player_max_hp', 0)
+            
+            # First Pokemon: require level > 0 and reasonable HP values
             if prev_party_count == 0 and curr_party_count == 1:
-                return 100.0  # First Pokemon is a huge milestone!
-            else:
-                return 25.0  # Additional Pokemon also rewarded
+                if curr_level > 0 and curr_max_hp > 0 and curr_hp <= curr_max_hp:
+                    # Track this as a major milestone to prevent repeated rewards
+                    milestone_key = f"first_pokemon_{curr_level}_{curr_max_hp}"
+                    if not hasattr(self, 'progression_milestones'):
+                        self.progression_milestones = set()
+                    
+                    if milestone_key not in self.progression_milestones:
+                        self.progression_milestones.add(milestone_key)
+                        return 100.0  # First Pokemon is a huge milestone!
+                    else:
+                        return 0.0  # Already rewarded this milestone
+                else:
+                    return 0.0  # Invalid Pokemon data, likely memory glitch
+            
+            # Additional Pokemon: require reasonable level progression
+            elif prev_party_count > 0 and curr_party_count <= 6:
+                # Require stable level values (not memory glitches)
+                if 1 <= curr_level <= 100 and abs(curr_level - prev_level) <= 5:
+                    party_milestone_key = f"party_{curr_party_count}_{curr_level}"
+                    if not hasattr(self, 'progression_milestones'):
+                        self.progression_milestones = set()
+                    
+                    if party_milestone_key not in self.progression_milestones:
+                        self.progression_milestones.add(party_milestone_key)
+                        return 25.0  # Additional Pokemon rewarded
+                    else:
+                        return 0.0  # Already rewarded this milestone
+        
+        return 0.0
+    
+    def _calculate_dialogue_reward(self, current: Dict, previous: Dict) -> float:
+        """Reward for dialogue progression to guide toward first Pokemon"""
+        # Get screen state to determine if we're in dialogue
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        
+        # Only reward dialogue progression before getting first Pokemon
+        party_count = current.get('party_count', 0)
+        if party_count > 0:
+            return 0.0  # No dialogue rewards after getting first Pokemon
+        
+        # Small reward for being in dialogue state (encourages talking to NPCs)
+        if curr_screen_state == 'dialogue':
+            return 0.05  # Small positive reward for dialogue engagement
+        
+        # Small reward for transitioning into dialogue (finding NPCs to talk to)
+        if prev_screen_state == 'overworld' and curr_screen_state == 'dialogue':
+            return 0.1  # Reward for initiating dialogue
+        
+        # Small reward for progressing through dialogue sequences
+        if prev_screen_state == 'dialogue' and curr_screen_state == 'dialogue':
+            return 0.02  # Small reward for progressing dialogue
         
         return 0.0
     
@@ -1134,6 +1429,12 @@ class LLMPokemonTrainer:
         self.total_reward = 0.0
         self.last_llm_decision_action = 0
         
+        # Failsafe mechanism for stuck detection
+        self.last_positive_reward_action = 0
+        self.actions_without_reward = 0
+        self.stuck_threshold = 100  # Actions without reward before intervention
+        self.location_stuck_tracker = {}  # Track how long we've been in same location
+        
         # Statistics
         self.stats = {
             'actions_taken': 0,
@@ -1349,6 +1650,13 @@ class LLMPokemonTrainer:
         game_state = self.get_game_state()
         screen_analysis = self.analyze_screen()
         
+        # CRITICAL: Forbid START and SELECT until first Pokemon is obtained
+        party_count = game_state.get('party_count', 0)
+        forbidden_actions = set()
+        if party_count == 0:
+            forbidden_actions.add('start')
+            forbidden_actions.add('select')
+        
         # If DQN is enabled and available, use hybrid approach
         if self.enable_dqn and self.hybrid_agent:
             # Use hybrid agent that combines LLM reasoning with DQN experience
@@ -1359,6 +1667,12 @@ class LLMPokemonTrainer:
                 action, reasoning = self.hybrid_agent.get_hybrid_action(
                     game_state, screen_analysis, self.recent_actions
                 )
+                
+                # Override forbidden actions
+                if action in forbidden_actions:
+                    action = self._get_allowed_alternative_action(action, game_state, screen_analysis)
+                    reasoning = f"Forbidden {action} -> using allowed alternative"
+                
                 self.last_llm_decision_action = self.actions_taken
                 self.stats['llm_decision_count'] += 1
                 
@@ -1377,6 +1691,11 @@ class LLMPokemonTrainer:
             else:
                 # Use DQN-only action selection between LLM decisions
                 action, q_value = self.dqn_agent.get_action(game_state, screen_analysis, training=True)
+                
+                # Override forbidden actions
+                if action in forbidden_actions:
+                    action = self._get_allowed_alternative_action(action, game_state, screen_analysis)
+                
                 dqn_info = self.hybrid_agent.get_info()
                 return action, f"DQN (Q={q_value:.3f}) - {dqn_info}"
         
@@ -1387,6 +1706,12 @@ class LLMPokemonTrainer:
             
             if use_llm:
                 action, reasoning = self.llm_agent.get_decision(game_state, screen_analysis, self.recent_actions)
+                
+                # Override forbidden actions
+                if action in forbidden_actions:
+                    action = self._get_allowed_alternative_action(action, game_state, screen_analysis)
+                    reasoning = f"Forbidden action -> using {action}"
+                
                 self.last_llm_decision_action = self.actions_taken
                 self.stats['llm_decision_count'] += 1
                 
@@ -1404,10 +1729,41 @@ class LLMPokemonTrainer:
                 return action, f"LLM: {reasoning[:50]}..."
             else:
                 # Fallback rule-based action
-                return self._get_rule_based_action(game_state, screen_analysis), "Rule-based fallback"
+                action = self._get_rule_based_action(game_state, screen_analysis)
+                
+                # Override forbidden actions
+                if action in forbidden_actions:
+                    action = self._get_allowed_alternative_action(action, game_state, screen_analysis)
+                
+                return action, "Rule-based fallback"
         else:
             # No LLM available, use rule-based fallback
-            return self._get_rule_based_action(game_state, screen_analysis), "Rule-based fallback"
+            action = self._get_rule_based_action(game_state, screen_analysis)
+            
+            # Override forbidden actions
+            if action in forbidden_actions:
+                action = self._get_allowed_alternative_action(action, game_state, screen_analysis)
+            
+            return action, "Rule-based fallback"
+    
+    def _get_allowed_alternative_action(self, forbidden_action: str, game_state: Dict, screen_analysis: Dict) -> str:
+        """Get an allowed alternative when an action is forbidden (START/SELECT before first Pokemon)"""
+        state_type = screen_analysis.get('state', 'unknown')
+        
+        # Context-aware alternatives based on screen state
+        if game_state.get('in_battle', 0) == 1:
+            return 'a'  # Always attack in battle
+        elif state_type == 'dialogue':
+            return 'a'  # Progress dialogue
+        elif state_type == 'menu':
+            return 'b'  # Exit menus when we can't use START
+        elif state_type == 'loading':
+            return 'a'  # Wait during loading
+        else:
+            # In overworld - focus on exploration and interaction
+            # Priority order: interact with objects/NPCs, then explore
+            exploration_priority = ['a', 'up', 'down', 'left', 'right']
+            return exploration_priority[self.actions_taken % len(exploration_priority)]
     
     def _get_rule_based_action(self, game_state: Dict, screen_analysis: Dict) -> str:
         """Rule-based fallback action with improved screen state handling"""
@@ -1433,8 +1789,80 @@ class LLMPokemonTrainer:
             exploration_actions = ['up', 'up', 'a', 'right', 'right', 'a', 'down', 'down', 'a', 'left', 'left', 'a']
             return exploration_actions[self.actions_taken % len(exploration_actions)]
     
+    def _update_stuck_detection(self, current_state: Dict, reward: float):
+        """Update stuck detection mechanism and trigger failsafe if needed"""
+        # Track positive rewards
+        if reward > 0.05:  # Any positive reward (excluding tiny dialogue rewards)
+            self.last_positive_reward_action = self.actions_taken
+            self.actions_without_reward = 0
+        else:
+            self.actions_without_reward += 1
+        
+        # Track location-based stuck detection
+        current_location = (
+            current_state.get('player_map', 0),
+            current_state.get('player_x', 0),
+            current_state.get('player_y', 0)
+        )
+        
+        if current_location not in self.location_stuck_tracker:
+            self.location_stuck_tracker[current_location] = 0
+        self.location_stuck_tracker[current_location] += 1
+        
+        # Clean up old location tracking (keep only recent 50 actions worth)
+        if len(self.location_stuck_tracker) > 50:
+            # Remove locations with low visit counts
+            min_visits = min(self.location_stuck_tracker.values())
+            self.location_stuck_tracker = {
+                loc: count for loc, count in self.location_stuck_tracker.items() 
+                if count > min_visits
+            }
+        
+        # Check if we're stuck and need intervention
+        self._check_failsafe_intervention(current_state, current_location)
+    
+    def _check_failsafe_intervention(self, current_state: Dict, current_location: Tuple):
+        """Check if failsafe intervention is needed and modify LLM prompts accordingly"""
+        # Detect stuck conditions
+        stuck_too_long = self.actions_without_reward >= self.stuck_threshold
+        stuck_at_location = self.location_stuck_tracker.get(current_location, 0) > 20
+        
+        if stuck_too_long or stuck_at_location:
+            # Modify LLM behavior to break out of stuck pattern
+            self._trigger_failsafe_intervention(current_state, current_location, stuck_too_long, stuck_at_location)
+    
+    def _trigger_failsafe_intervention(self, current_state: Dict, current_location: Tuple, 
+                                     stuck_too_long: bool, stuck_at_location: bool):
+        """Trigger failsafe intervention to break stuck patterns"""
+        
+        # Force next LLM decision with explicit stuck-breaking prompt
+        self.last_llm_decision_action = self.actions_taken - self.llm_interval + 1
+        
+        # Add failsafe context to the LLM agent for next decision
+        if not hasattr(self.llm_agent, 'failsafe_context'):
+            self.llm_agent.failsafe_context = {}
+        
+        self.llm_agent.failsafe_context = {
+            'stuck_detected': True,
+            'stuck_location': current_location,
+            'actions_without_reward': self.actions_without_reward,
+            'stuck_reason': 'no_reward' if stuck_too_long else 'same_location',
+            'intervention_action': self.actions_taken
+        }
+        
+        print(f"🚨 FAILSAFE: Detected stuck behavior!")
+        print(f"   📍 Location: Map {current_location[0]}, Pos ({current_location[1]},{current_location[2]})")
+        print(f"   ⏱️ Actions without reward: {self.actions_without_reward}")
+        print(f"   🎯 INTERVENTION: Providing concrete movement instructions...")
+        
+        # Reset some stuck tracking to prevent immediate re-triggering
+        self.actions_without_reward = max(0, self.actions_without_reward - 20)
+        if current_location in self.location_stuck_tracker:
+            self.location_stuck_tracker[current_location] = max(1, 
+                self.location_stuck_tracker[current_location] - 10)
+    
     def execute_action(self, action: str):
-        """Execute action and calculate rewards"""
+        """Execute action and calculate rewards with smart movement handling"""
         if not self.running or not self.pyboy:
             return
             
@@ -1442,27 +1870,39 @@ class LLMPokemonTrainer:
         previous_state = self.previous_game_state.copy()
         previous_screen_analysis = self.analyze_screen()
         
-        # Execute the action
-        self.pyboy.button_press(action)
+        # Check if this is a directional movement in overworld
+        is_directional = action.lower() in ['up', 'down', 'left', 'right']
+        screen_state = previous_screen_analysis.get('state', 'unknown')
+        is_overworld = screen_state == 'overworld'
         
-        # Hold button for several frames
-        for _ in range(8):
-            if not self.running:
-                break
-            self.pyboy.tick()
+        if is_directional and is_overworld:
+            # Smart directional movement: try twice if first attempt doesn't move
+            current_state = self._execute_smart_movement(action, previous_state)
+            current_screen_analysis = self.analyze_screen()
+        else:
+            # Normal action execution for non-directional actions or non-overworld
+            self._execute_single_action(action)
+            current_state = self.get_game_state()
+            current_screen_analysis = self.analyze_screen()
         
-        self.pyboy.button_release(action)
+        # Pass screen state info to reward calculator for BOTH exploration AND progression reward filtering
+        self.reward_calculator.last_screen_state = current_screen_analysis.get('state', 'unknown')
+        self.reward_calculator.prev_screen_state = previous_screen_analysis.get('state', 'unknown')
         
-        # Wait a few more frames
-        for _ in range(4):
-            if not self.running:
-                break
-            self.pyboy.tick()
+        # Pass action info to prevent SELECT button false rewards
+        self.reward_calculator.last_action = action
         
-        # Get new state and calculate rewards
-        current_state = self.get_game_state()
-        current_screen_analysis = self.analyze_screen()
         reward, reward_breakdown = self.reward_calculator.calculate_reward(current_state, previous_state)
+        
+        # DEBUG: Print all reward components if there's a significant reward
+        if abs(reward) > 1.0:
+            print(f"🔍 DEBUG REWARD: Total={reward:+.2f} | Action: {action}")
+            for category, value in reward_breakdown.items():
+                if abs(value) > 0.01:
+                    print(f"   {category}: {value:+.2f}")
+            print(f"   Party count: {previous_state.get('party_count', 0)} -> {current_state.get('party_count', 0)}")
+            print(f"   Level: {previous_state.get('player_level', 0)} -> {current_state.get('player_level', 0)}")
+            print(f"   Screen: {getattr(self.reward_calculator, 'prev_screen_state', '?')} -> {getattr(self.reward_calculator, 'last_screen_state', '?')}")
         
         # DQN experience storage and training
         if self.enable_dqn and self.dqn_agent:
@@ -1502,6 +1942,9 @@ class LLMPokemonTrainer:
         if len(self.recent_actions) > 10:
             self.recent_actions.pop(0)
         
+        # FAILSAFE: Track stuck detection
+        self._update_stuck_detection(current_state, reward)
+        
         # Update stats
         self.stats['actions_taken'] = self.actions_taken
         self.stats['total_reward'] = float(self.total_reward)
@@ -1517,6 +1960,68 @@ class LLMPokemonTrainer:
             self.stats['dqn_memory_size'] = dqn_stats['memory_size']
         
         return reward, reward_breakdown
+    
+    def _execute_single_action(self, action: str):
+        """Execute a single action press"""
+        self.pyboy.button_press(action)
+        
+        # Hold button for several frames
+        for _ in range(8):
+            if not self.running:
+                break
+            self.pyboy.tick()
+        
+        self.pyboy.button_release(action)
+        
+        # Wait a few more frames
+        for _ in range(4):
+            if not self.running:
+                break
+            self.pyboy.tick()
+    
+    def _execute_smart_movement(self, direction: str, previous_state: Dict) -> Dict:
+        """Execute directional movement with automatic retry logic"""
+        # Get initial position
+        prev_x = previous_state.get('player_x', 0)
+        prev_y = previous_state.get('player_y', 0)
+        prev_map = previous_state.get('player_map', 0)
+        
+        # First attempt: press direction key
+        self._execute_single_action(direction)
+        
+        # Check if we moved
+        intermediate_state = self.get_game_state()
+        curr_x = intermediate_state.get('player_x', 0)
+        curr_y = intermediate_state.get('player_y', 0)
+        curr_map = intermediate_state.get('player_map', 0)
+        
+        # Check if position changed (either coordinates or map)
+        position_changed = (curr_x != prev_x) or (curr_y != prev_y) or (curr_map != prev_map)
+        
+        if not position_changed:
+            # First press likely just changed facing direction, try again
+            self._execute_single_action(direction)
+            
+            # Get final state after second attempt
+            final_state = self.get_game_state()
+            final_x = final_state.get('player_x', 0)
+            final_y = final_state.get('player_y', 0)
+            final_map = final_state.get('player_map', 0)
+            
+            # Check if second attempt moved us
+            second_attempt_moved = (final_x != curr_x) or (final_y != curr_y) or (final_map != curr_map)
+            
+            if not second_attempt_moved:
+                # Still didn't move - likely blocked by wall or edge
+                print(f"🚧 Movement blocked: {direction.upper()} at ({curr_x},{curr_y}) on Map {curr_map}")
+            else:
+                print(f"↔️ Smart movement: {direction.upper()} → ({prev_x},{prev_y}) → ({final_x},{final_y})")
+            
+            return final_state
+        else:
+            # First press actually moved us (unusual but possible)
+            print(f"⚡ Direct movement: {direction.upper()} → ({prev_x},{prev_y}) → ({curr_x},{curr_y})")
+            return intermediate_state
     
     def _track_experience(self, action: str, previous_state: Dict, current_state: Dict, reward: float):
         """Track experience for learning system"""
