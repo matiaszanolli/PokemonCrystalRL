@@ -82,6 +82,43 @@ MEMORY_ADDRESSES = {
 }
 
 # Additional derived values that can be calculated
+def _safe_badges_total(state):
+    """Safely compute total badges, filtering uninitialized memory spikes.
+    Treat invalid bytes as uninitialized if conditions suggest memory corruption.
+    """
+    johto = state.get('badges', 0)
+    kanto = state.get('kanto_badges', 0)
+    party_count = state.get('party_count', 0)
+    player_level = state.get('player_level', 0)
+
+    # Early game indicators
+    early_game = party_count == 0 or player_level == 0
+    
+    # Invalid badge values (0xFF, or values > 0x80 which is only the last badge)
+    invalid_badges = (
+        johto == 0xFF or kanto == 0xFF or 
+        johto > 0x80 or kanto > 0x80 or 
+        player_level > 100  # Impossible level also indicates corruption
+    )
+    
+    # If early game and suspicious values, return 0
+    if early_game and invalid_badges:
+        return 0
+    
+    # Sanity bounds: max 8 badges each region = 16 total
+    total = 0
+    jb = johto & 0xFF
+    kb = kanto & 0xFF
+    
+    # Count bits explicitly to avoid surprises
+    for i in range(8):
+        total += (jb >> i) & 1
+    for i in range(8):
+        total += (kb >> i) & 1
+    
+    # Cap at maximum possible badges
+    return min(total, 16)
+
 DERIVED_VALUES = {
     'hp_percentage': lambda state: (
         state.get('player_hp', 0) / max(state.get('player_max_hp', 1), 1)
@@ -90,9 +127,7 @@ DERIVED_VALUES = {
         1 for i in range(state.get('party_count', 0))
         if state.get(f'party_hp_{i}', 0) > 0
     ),
-    'badges_total': lambda state: bin(
-        state.get('badges', 0) | (state.get('kanto_badges', 0) << 8)
-    ).count('1'),
+    'badges_total': _safe_badges_total,
     'is_healthy': lambda state: state.get('player_hp', 0) > (
         state.get('player_max_hp', 1) * 0.5
     ),

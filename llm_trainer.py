@@ -38,6 +38,10 @@ from core.memory_map_new import (
 
 # Import game intelligence system
 from core.game_intelligence import GameIntelligence, GameContext, ActionPlan
+from core.experience_memory import ExperienceMemory
+
+# Import DQN agent
+from core.dqn_agent import DQNAgent, HybridAgent
 
 class LLMAgent:
     """Local LLM agent for Pokemon Crystal decision making"""
@@ -50,6 +54,9 @@ class LLMAgent:
         
         # Initialize game intelligence system
         self.game_intelligence = GameIntelligence()
+        
+        # Initialize experience memory system
+        self.experience_memory = ExperienceMemory()
         
         # Test LLM availability
         self.available = self._test_llm_connection()
@@ -113,6 +120,16 @@ class LLMAgent:
         action_plans = self.game_intelligence.get_action_plan(game_context, game_state)
         contextual_advice = self.game_intelligence.get_contextual_advice(game_context, recent_actions)
         
+        # Check for learned experiences
+        situation_hash = self.experience_memory.get_situation_hash(game_state, screen_analysis, {
+            'phase': game_context.phase.name,
+            'location_type': game_context.location_type.name
+        })
+        learned_actions = self.experience_memory.get_recommended_actions(situation_hash, {
+            'phase': game_context.phase.name,
+            'location_type': game_context.location_type.name
+        })
+        
         # Game state summary
         party_count = game_state.get('party_count', 0)
         if party_count > 0:
@@ -157,6 +174,13 @@ class LLMAgent:
             action_plan_text = f"\n\nCURRENT PLAN: {top_plan.goal}\nSteps:\n"
             action_plan_text += "\n".join([f"{i+1}. {step}" for i, step in enumerate(top_plan.steps)])
         
+        # Add learned experience if available
+        experience_text = ""
+        if learned_actions:
+            experience_text = f"\n\nLEARNED EXPERIENCE: In similar situations, these actions worked well: {' → '.join(learned_actions)}"
+            memory_stats = self.experience_memory.get_memory_stats()
+            experience_text += f"\n(Based on {memory_stats['total_experiences']} past experiences)"
+        
         prompt = f"""You are an AI playing Pokemon Crystal. Make the best action choice based on the current situation.
 
 CURRENT STATUS:
@@ -180,6 +204,7 @@ IMMEDIATE GOALS:
 RECOMMENDED ACTIONS:
 {recommended_actions_text}
 {action_plan_text}
+{experience_text}
 
 AVAILABLE ACTIONS:
 up, down, left, right - Movement
@@ -356,25 +381,41 @@ class PokemonRewardCalculator:
         return 0.0
     
     def _calculate_level_reward(self, current: Dict, previous: Dict) -> float:
-        """Reward for leveling up Pokemon"""
+        """Reward for leveling up Pokemon with anti-glitch guards"""
         curr_level = current.get('player_level', 0)
         prev_level = previous.get('player_level', curr_level)
         
+        # Guard against impossible level spikes (>100 or huge jumps)
+        if curr_level > 100 or prev_level > 100:
+            return 0.0
+        
         if curr_level > prev_level:
             level_gain = curr_level - prev_level
+            # Cap level gain to prevent huge memory spike rewards
+            level_gain = min(level_gain, 5)  # Max 5 levels per step
             return level_gain * 50.0  # Big reward for leveling up
             
         return 0.0
     
     def _calculate_badge_reward(self, current: Dict, previous: Dict) -> float:
-        """Huge reward for earning badges (major milestones)"""
+        """Huge reward for earning badges (major milestones), with anti-glitch guards."""
         curr_badges = current.get('badges_total', 0)
         prev_badges = previous.get('badges_total', curr_badges)
-        
-        if curr_badges > prev_badges:
+
+        # Guard against uninitialized memory spikes (0xFF) early in the game
+        curr_raw = (current.get('badges', 0), current.get('kanto_badges', 0))
+        prev_raw = (previous.get('badges', curr_raw[0]), previous.get('kanto_badges', curr_raw[1]))
+        early_game = current.get('party_count', 0) == 0 and current.get('player_level', 0) == 0
+        if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
+            return 0.0
+
+        # Only reward if the total is within plausible range
+        if 0 <= curr_badges <= 16 and 0 <= prev_badges <= 16 and curr_badges > prev_badges:
             badge_gain = curr_badges - prev_badges
+            # Cap to 1 badge per step to prevent jumps awarding huge rewards
+            badge_gain = min(badge_gain, 1)
             return badge_gain * 500.0  # Huge reward for badge progress!
-            
+
         return 0.0
     
     def _calculate_money_reward(self, current: Dict, previous: Dict) -> float:
@@ -1032,17 +1073,59 @@ class LLMPokemonTrainer:
     """Advanced Pokemon Crystal trainer with LLM integration and reward system"""
     
     def __init__(self, rom_path, max_actions=5000, llm_model="smollm2:1.7b", 
-                 llm_interval=20, enable_web=True, web_port=8080):
+                 llm_interval=20, enable_web=True, web_port=8080, enable_dqn=True, 
+                 dqn_model_path=None):
         self.rom_path = rom_path
         self.max_actions = max_actions
         self.llm_interval = llm_interval
         self.enable_web = enable_web
         self.web_port = web_port
+        self.enable_dqn = enable_dqn
         
         # Core components
         self.pyboy = None
         self.llm_agent = LLMAgent(llm_model)
         self.reward_calculator = PokemonRewardCalculator()
+        
+        # DQN components
+        self.dqn_agent = None
+        self.hybrid_agent = None
+        self.dqn_training_frequency = 4  # Train DQN every N actions
+        self.dqn_save_frequency = 500  # Save DQN model every N actions
+        
+        if self.enable_dqn:
+            # Initialize DQN agent
+            self.dqn_agent = DQNAgent(
+                state_size=32,
+                action_size=8,
+                learning_rate=1e-4,
+                gamma=0.99,
+                epsilon_start=0.9,
+                epsilon_end=0.05,
+                epsilon_decay=0.995,
+                memory_size=50000,
+                batch_size=32,
+                target_update=1000
+            )
+            
+            # Load existing model if provided
+            if dqn_model_path and os.path.exists(dqn_model_path):
+                self.dqn_agent.load_model(dqn_model_path)
+            
+            # Create hybrid agent combining LLM and DQN
+            self.hybrid_agent = HybridAgent(
+                dqn_agent=self.dqn_agent,
+                llm_agent=self.llm_agent,
+                dqn_weight=0.2,  # Start with low DQN influence
+                exploration_bonus=0.1
+            )
+            
+            print(f"🧠 DQN Agent initialized with {self.dqn_agent.device}")
+        
+        # Experience tracking
+        self.recent_situation_hashes = []
+        self.recent_action_sequences = []
+        self.experience_window = 10  # Track last N actions for experience recording
         
         # Training state
         self.actions_taken = 0
@@ -1176,9 +1259,26 @@ class LLMPokemonTrainer:
             except:
                 state[name] = 0
         
-        # Add badge parsing
+        # Add badge parsing with comprehensive sanitization for uninitialized memory
         johto_badges = state.get('badges', 0)
         kanto_badges = state.get('kanto_badges', 0)
+        player_level = state.get('player_level', 0)
+        party_count = state.get('party_count', 0)
+        
+        # Sanitize implausible values that indicate uninitialized memory
+        early_game_indicators = party_count == 0 or player_level == 0
+        invalid_badge_values = johto_badges == 0xFF or kanto_badges == 0xFF or johto_badges > 0x80 or kanto_badges > 0x80
+        
+        if early_game_indicators and invalid_badge_values:
+            johto_badges = 0
+            kanto_badges = 0
+        
+        # Additional sanity check: if level > 100 (impossible in Pokemon), sanitize everything
+        if player_level > 100:
+            state['player_level'] = 0
+            johto_badges = 0
+            kanto_badges = 0
+        
         state['badges_earned'] = get_badges_earned(johto_badges, kanto_badges)
         state['badges_total'] = len(state['badges_earned'])
         
@@ -1245,32 +1345,68 @@ class LLMPokemonTrainer:
         }
     
     def get_next_action(self) -> Tuple[str, str]:
-        """Get next action using LLM or fallback logic"""
+        """Get next action using hybrid DQN+LLM or fallback logic"""
         game_state = self.get_game_state()
         screen_analysis = self.analyze_screen()
         
-        # Use LLM every N actions
-        use_llm = (self.actions_taken - self.last_llm_decision_action) >= self.llm_interval
+        # If DQN is enabled and available, use hybrid approach
+        if self.enable_dqn and self.hybrid_agent:
+            # Use hybrid agent that combines LLM reasoning with DQN experience
+            use_llm = (self.actions_taken - self.last_llm_decision_action) >= self.llm_interval
+            
+            if use_llm and self.llm_agent.available:
+                # Get hybrid decision combining LLM and DQN
+                action, reasoning = self.hybrid_agent.get_hybrid_action(
+                    game_state, screen_analysis, self.recent_actions
+                )
+                self.last_llm_decision_action = self.actions_taken
+                self.stats['llm_decision_count'] += 1
+                
+                # Track recent decisions for web display
+                self.stats['recent_llm_decisions'].append({
+                    'action': action,
+                    'reasoning': reasoning,
+                    'timestamp': time.time()
+                })
+                
+                # Keep only last 5 decisions
+                if len(self.stats['recent_llm_decisions']) > 5:
+                    self.stats['recent_llm_decisions'].pop(0)
+                
+                return action, f"Hybrid: {reasoning[:50]}..."
+            else:
+                # Use DQN-only action selection between LLM decisions
+                action, q_value = self.dqn_agent.get_action(game_state, screen_analysis, training=True)
+                dqn_info = self.hybrid_agent.get_info()
+                return action, f"DQN (Q={q_value:.3f}) - {dqn_info}"
         
-        if use_llm and self.llm_agent.available:
-            action, reasoning = self.llm_agent.get_decision(game_state, screen_analysis, self.recent_actions)
-            self.last_llm_decision_action = self.actions_taken
-            self.stats['llm_decision_count'] += 1
+        # Fallback to original LLM-only logic
+        elif self.llm_agent.available:
+            # Use LLM every N actions
+            use_llm = (self.actions_taken - self.last_llm_decision_action) >= self.llm_interval
             
-            # Track recent LLM decisions for web display
-            self.stats['recent_llm_decisions'].append({
-                'action': action,
-                'reasoning': reasoning,
-                'timestamp': time.time()
-            })
-            
-            # Keep only last 5 decisions
-            if len(self.stats['recent_llm_decisions']) > 5:
-                self.stats['recent_llm_decisions'].pop(0)
-            
-            return action, f"LLM: {reasoning[:50]}..."
+            if use_llm:
+                action, reasoning = self.llm_agent.get_decision(game_state, screen_analysis, self.recent_actions)
+                self.last_llm_decision_action = self.actions_taken
+                self.stats['llm_decision_count'] += 1
+                
+                # Track recent LLM decisions for web display
+                self.stats['recent_llm_decisions'].append({
+                    'action': action,
+                    'reasoning': reasoning,
+                    'timestamp': time.time()
+                })
+                
+                # Keep only last 5 decisions
+                if len(self.stats['recent_llm_decisions']) > 5:
+                    self.stats['recent_llm_decisions'].pop(0)
+                
+                return action, f"LLM: {reasoning[:50]}..."
+            else:
+                # Fallback rule-based action
+                return self._get_rule_based_action(game_state, screen_analysis), "Rule-based fallback"
         else:
-            # Fallback rule-based action
+            # No LLM available, use rule-based fallback
             return self._get_rule_based_action(game_state, screen_analysis), "Rule-based fallback"
     
     def _get_rule_based_action(self, game_state: Dict, screen_analysis: Dict) -> str:
@@ -1302,8 +1438,9 @@ class LLMPokemonTrainer:
         if not self.running or not self.pyboy:
             return
             
-        # Store previous state for reward calculation
+        # Store previous state for reward calculation and DQN training
         previous_state = self.previous_game_state.copy()
+        previous_screen_analysis = self.analyze_screen()
         
         # Execute the action
         self.pyboy.button_press(action)
@@ -1324,7 +1461,36 @@ class LLMPokemonTrainer:
         
         # Get new state and calculate rewards
         current_state = self.get_game_state()
+        current_screen_analysis = self.analyze_screen()
         reward, reward_breakdown = self.reward_calculator.calculate_reward(current_state, previous_state)
+        
+        # DQN experience storage and training
+        if self.enable_dqn and self.dqn_agent:
+            # Store experience in DQN replay buffer
+            done = False  # We don't have episode termination in continuous play
+            self.dqn_agent.store_experience(
+                previous_state, previous_screen_analysis, action,
+                reward, current_state, current_screen_analysis, done
+            )
+            
+            # Train DQN periodically
+            if self.actions_taken % self.dqn_training_frequency == 0:
+                loss = self.dqn_agent.train_step()
+                if loss > 0 and self.actions_taken % (self.dqn_training_frequency * 10) == 0:
+                    print(f"🧠 DQN training: loss={loss:.4f}, ε={self.dqn_agent.epsilon:.3f}")
+            
+            # Record performance for hybrid agent adaptation
+            if self.hybrid_agent:
+                self.hybrid_agent.record_performance(reward)
+            
+            # Save DQN model periodically
+            if self.actions_taken % self.dqn_save_frequency == 0:
+                model_path = os.path.join("logs", f"dqn_model_{self.actions_taken}.pth")
+                self.dqn_agent.save_model(model_path)
+                print(f"🔄 DQN model saved at action {self.actions_taken}")
+        
+        # Track experience for learning
+        self._track_experience(action, previous_state, current_state, reward)
         
         # Update tracking
         self.actions_taken += 1
@@ -1343,7 +1509,55 @@ class LLMPokemonTrainer:
         self.stats['badges_total'] = current_state.get('badges_total', 0)
         self.stats['last_reward_breakdown'] = self.reward_calculator.get_reward_summary(reward_breakdown)
         
+        # Add DQN stats if enabled
+        if self.enable_dqn and self.dqn_agent:
+            dqn_stats = self.dqn_agent.get_training_stats()
+            self.stats['dqn_steps'] = dqn_stats['steps_trained']
+            self.stats['dqn_epsilon'] = dqn_stats['epsilon']
+            self.stats['dqn_memory_size'] = dqn_stats['memory_size']
+        
         return reward, reward_breakdown
+    
+    def _track_experience(self, action: str, previous_state: Dict, current_state: Dict, reward: float):
+        """Track experience for learning system"""
+        # Create screen analysis for previous state
+        screen_analysis = self.analyze_screen()
+        
+        # Get game context
+        game_context = self.llm_agent.game_intelligence.analyze_game_context(previous_state, screen_analysis)
+        
+        # Create situation hash
+        situation_hash = self.llm_agent.experience_memory.get_situation_hash(
+            previous_state, 
+            screen_analysis, 
+            {
+                'phase': game_context.phase.name,
+                'location_type': game_context.location_type.name
+            }
+        )
+        
+        # Add to recent tracking
+        self.recent_situation_hashes.append(situation_hash)
+        self.recent_action_sequences.append(action.upper())
+        
+        # Keep window size manageable
+        if len(self.recent_action_sequences) > self.experience_window:
+            self.recent_situation_hashes.pop(0)
+            self.recent_action_sequences.pop(0)
+        
+        # Record significant experiences (positive rewards or major events)
+        if reward > 0.1 or abs(reward) > 10.0:  # Significant positive or major event
+            if len(self.recent_action_sequences) >= 3:  # Need some history
+                self.llm_agent.experience_memory.record_experience(
+                    situation_hash=situation_hash,
+                    actions=self.recent_action_sequences[-5:],  # Last 5 actions
+                    reward=reward,
+                    context={
+                        'phase': game_context.phase.name,
+                        'location_type': game_context.location_type.name,
+                        'timestamp': time.time()
+                    }
+                )
     
     def update_web_data(self):
         """Update data for web monitoring"""
@@ -1423,6 +1637,17 @@ class LLMPokemonTrainer:
                 json.dump(self.llm_agent.decision_history, f, indent=2)
             print(f"🧠 LLM decisions saved to {llm_file}")
         
+        # Save final DQN model if enabled
+        if self.enable_dqn and self.dqn_agent:
+            final_model_path = os.path.join(logs_dir, f"dqn_final_model_{timestamp}.pth")
+            self.dqn_agent.save_model(final_model_path)
+            print(f"🧠 Final DQN model saved to {final_model_path}")
+        
+        # Save experience memory
+        self.llm_agent.experience_memory.save_memory()
+        memory_stats = self.llm_agent.experience_memory.get_memory_stats()
+        print(f"📚 Experience memory saved: {memory_stats['total_experiences']} experiences, {memory_stats['total_patterns']} patterns")
+        
         print(f"📊 Training stats saved to {stats_file}")
     
     def start_training(self):
@@ -1493,7 +1718,7 @@ def main():
     """Main entry point"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="LLM-Enhanced Pokemon Crystal RL Training")
+    parser = argparse.ArgumentParser(description="Hybrid LLM+DQN Pokemon Crystal RL Training")
     parser.add_argument("--rom", default="roms/pokemon_crystal.gbc", help="ROM file path")
     parser.add_argument("--actions", type=int, default=2000, help="Number of actions to execute")
     parser.add_argument("--llm-model", default="smollm2:1.7b", 
@@ -1503,6 +1728,8 @@ def main():
                        help="Actions between LLM decisions")
     parser.add_argument("--web-port", type=int, default=8080, help="Web monitoring port")
     parser.add_argument("--no-web", action="store_true", help="Disable web monitoring")
+    parser.add_argument("--no-dqn", action="store_true", help="Disable DQN agent (LLM-only mode)")
+    parser.add_argument("--dqn-model", type=str, help="Path to pre-trained DQN model to load")
     
     args = parser.parse_args()
     
@@ -1511,6 +1738,12 @@ def main():
         print(f"❌ ROM file not found: {args.rom}")
         return 1
     
+    # Validate DQN model path if provided
+    if args.dqn_model and not os.path.exists(args.dqn_model):
+        print(f"⚠️ DQN model file not found: {args.dqn_model}")
+        print("Starting with fresh DQN model...")
+        args.dqn_model = None
+    
     # Create and start trainer
     trainer = LLMPokemonTrainer(
         rom_path=args.rom,
@@ -1518,7 +1751,9 @@ def main():
         llm_model=args.llm_model,
         llm_interval=args.llm_interval,
         enable_web=not args.no_web,
-        web_port=args.web_port
+        web_port=args.web_port,
+        enable_dqn=not args.no_dqn,
+        dqn_model_path=args.dqn_model
     )
     
     success = trainer.start_training()
