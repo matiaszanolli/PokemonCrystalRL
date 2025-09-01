@@ -178,13 +178,15 @@ class ProgressTracker:
         """Get immediate, actionable goals"""
         goals = []
         phase = self.get_game_phase(game_state)
+        party_count = game_state.get('party_count', 0)
         
-        # Health is always priority
-        hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
-        if hp_ratio < 0.3:
-            goals.append("URGENT: Heal Pokemon immediately")
-        elif hp_ratio < 0.6:
-            goals.append("Find healing when convenient")
+        # Health is only a priority if we actually have Pokemon
+        if party_count > 0:
+            hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
+            if hp_ratio < 0.3:
+                goals.append("URGENT: Heal Pokemon immediately")
+            elif hp_ratio < 0.6:
+                goals.append("Find healing when convenient")
         
         # Phase-specific goals
         if phase == GamePhase.TUTORIAL:
@@ -281,10 +283,15 @@ class GameIntelligence:
         strategic_goals = self.progress_tracker.get_strategic_goals(game_state)
         
         # Health and party status
-        hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
         party_count = game_state.get('party_count', 0)
         
-        health_status = "Critical" if hp_ratio < 0.3 else "Low" if hp_ratio < 0.6 else "Good"
+        if party_count > 0:
+            hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
+            health_status = "Critical" if hp_ratio < 0.3 else "Low" if hp_ratio < 0.6 else "Good"
+        else:
+            hp_ratio = 1.0  # No Pokemon = no health concerns
+            health_status = "No Pokemon"
+            
         party_status = f"{party_count} Pokemon" + (" (need more!)" if party_count < 2 else "")
         
         # Recommended actions based on context
@@ -297,12 +304,12 @@ class GameIntelligence:
         
         # Urgency level
         urgency = 1
-        if hp_ratio < 0.2:
-            urgency = 5
-        elif hp_ratio < 0.4:
-            urgency = 3
-        elif party_count == 0:
-            urgency = 4
+        if party_count == 0:
+            urgency = 4  # High priority: get first Pokemon
+        elif party_count > 0 and hp_ratio < 0.2:
+            urgency = 5  # Critical: heal immediately
+        elif party_count > 0 and hp_ratio < 0.4:
+            urgency = 3  # Medium: consider healing
         
         return GameContext(
             phase=phase,
@@ -320,8 +327,9 @@ class GameIntelligence:
         """Generate multi-step action plans"""
         plans = []
         
-        # Emergency healing plan
-        if game_context.urgency_level >= 4:
+        # Emergency healing plan (only if we have Pokemon)
+        party_count = game_state.get('party_count', 0)
+        if game_context.urgency_level >= 4 and party_count > 0:
             if game_context.location_type == LocationType.POKEMON_CENTER:
                 plans.append(ActionPlan(
                     goal="Emergency heal at Pokemon Center",
