@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple, Optional
 
 # Import our memory mapping system
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.memory_map import (
+from core.memory_map_new import (
     MEMORY_ADDRESSES, 
     DERIVED_VALUES,
     IMPORTANT_LOCATIONS,
@@ -36,6 +36,9 @@ from core.memory_map import (
     get_badges_earned
 )
 
+# Import game intelligence system
+from core.game_intelligence import GameIntelligence, GameContext, ActionPlan
+
 class LLMAgent:
     """Local LLM agent for Pokemon Crystal decision making"""
     
@@ -44,6 +47,9 @@ class LLMAgent:
         self.base_url = base_url
         self.decision_history = []
         self.last_decision_time = 0
+        
+        # Initialize game intelligence system
+        self.game_intelligence = GameIntelligence()
         
         # Test LLM availability
         self.available = self._test_llm_connection()
@@ -100,14 +106,23 @@ class LLMAgent:
             return self._fallback_decision(game_state), f"LLM error: {str(e)}"
     
     def _build_prompt(self, game_state: Dict, screen_analysis: Dict, recent_actions: List[str]) -> str:
-        """Build context-aware prompt for LLM"""
+        """Build context-aware prompt for LLM with game intelligence"""
+        
+        # Use game intelligence to analyze context
+        game_context = self.game_intelligence.analyze_game_context(game_state, screen_analysis)
+        action_plans = self.game_intelligence.get_action_plan(game_context, game_state)
+        contextual_advice = self.game_intelligence.get_contextual_advice(game_context, recent_actions)
         
         # Game state summary
-        player_info = f"Player: Level {game_state.get('player_level', '?')}, HP {game_state.get('player_hp', 0)}/{game_state.get('player_max_hp', 1)}"
-        location_info = f"Map: {game_state.get('player_map', 'unknown')} at ({game_state.get('player_x', 0)}, {game_state.get('player_y', 0)})"
+        party_count = game_state.get('party_count', 0)
+        if party_count > 0:
+            player_info = f"Player: Level {game_state.get('player_level', '?')}, HP {game_state.get('player_hp', 0)}/{game_state.get('player_max_hp', 1)}"
+        else:
+            player_info = f"Player: NO POKEMON YET (HP display shows 0/0 but this is normal)"
+        location_info = f"Location: {game_context.location_name} ({game_context.location_type.name})"
         badges_info = f"Badges: {game_state.get('badges_total', 0)}/16"
         money_info = f"Money: ¥{game_state.get('money', 0)}"
-        party_info = f"Party: {game_state.get('party_count', 0)} Pokemon"
+        party_info = f"Party: {party_count} Pokemon" + (" - YOU NEED TO GET YOUR FIRST POKEMON!" if party_count == 0 else "")
         
         # Screen analysis
         screen_state = screen_analysis.get('state', 'unknown')
@@ -116,12 +131,31 @@ class LLMAgent:
         # Recent actions context
         recent = " → ".join(recent_actions[-5:]) if recent_actions else "None"
         
+        # Game phase and progress information
+        phase_info = f"Game Phase: {game_context.phase.name}"
+        
+        # Health and urgency context
+        health_info = f"Health Status: {game_context.health_status} (Urgency: {game_context.urgency_level}/5)"
+        
         # Battle context
         battle_context = ""
         if game_state.get('in_battle', 0) == 1:
             enemy_level = game_state.get('enemy_level', 0)
             enemy_species = game_state.get('enemy_species', 0)
             battle_context = f"\n🔥 IN BATTLE: Enemy Level {enemy_level} (Species {enemy_species})"
+        
+        # Build recommended actions list
+        recommended_actions_text = "\n".join([f"- {action}" for action in game_context.recommended_actions])
+        
+        # Format immediate goals
+        immediate_goals_text = "\n".join([f"- {goal}" for goal in game_context.immediate_goals])
+        
+        # Format action plans if available
+        action_plan_text = ""
+        if action_plans:
+            top_plan = action_plans[0]  # Get highest priority plan
+            action_plan_text = f"\n\nCURRENT PLAN: {top_plan.goal}\nSteps:\n"
+            action_plan_text += "\n".join([f"{i+1}. {step}" for i, step in enumerate(top_plan.steps)])
         
         prompt = f"""You are an AI playing Pokemon Crystal. Make the best action choice based on the current situation.
 
@@ -131,9 +165,21 @@ CURRENT STATUS:
 {badges_info}
 {money_info}
 {party_info}
+{phase_info}
+{health_info}
 Screen State: {screen_state} (variance: {screen_variance:.1f})
 Recent Actions: {recent}
 {battle_context}
+
+GAME CONTEXT:
+{contextual_advice}
+
+IMMEDIATE GOALS:
+{immediate_goals_text}
+
+RECOMMENDED ACTIONS:
+{recommended_actions_text}
+{action_plan_text}
 
 AVAILABLE ACTIONS:
 up, down, left, right - Movement
@@ -150,6 +196,11 @@ CRITICAL SCREEN STATE RULES:
 🌍 OVERWORLD: Explore with movement + 'a' to interact
 ⏳ LOADING: Wait (any action is fine)
 
+IMPORTANT: NO POKEMON = NO HEALING NEEDED!
+- If you have 0 Pokemon, HP shows 0/0 but this is NORMAL
+- Do NOT try to heal when you have no Pokemon
+- Focus on getting your first Pokemon instead
+
 IMPORTANT GUIDELINES:
 - If screen_state is 'settings_menu': ALWAYS use 'b' to escape
 - If screen_state is 'menu' and you didn't intend to open it: use 'b'
@@ -163,7 +214,7 @@ STRATEGY PRIORITIES:
 2. If in battle: Use 'a' to attack
 3. If in dialogue: Use 'a' to progress
 4. If in unwanted menu: Use 'b' to exit
-5. If in overworld: Explore and interact
+5. If in overworld: Follow IMMEDIATE GOALS and RECOMMENDED ACTIONS
 
 Choose ONE action and briefly explain why. Format: ACTION: [action]
 Reasoning: [brief explanation]
@@ -214,6 +265,8 @@ class PokemonRewardCalculator:
         self.previous_state = {}
         self.exploration_bonus = {}
         self.last_reward_time = time.time()
+        # Track visited locations to prevent reward farming
+        self.visited_locations = set()  # Will store (map_id, x, y) tuples
         
     def calculate_reward(self, current_state: Dict, previous_state: Dict) -> Tuple[float, Dict[str, float]]:
         """Calculate comprehensive reward based on game progress"""
@@ -347,15 +400,22 @@ class PokemonRewardCalculator:
         prev_x = previous.get('player_x', curr_x)
         prev_y = previous.get('player_y', curr_y)
         
+        # Current location tuple
+        current_location = (curr_map, curr_x, curr_y)
+        
         # New map reward
         if curr_map != prev_map:
+            # Add the new location to visited set
+            self.visited_locations.add(current_location)
             return 10.0  # Reward for entering new area
         
-        # Movement reward (small)
-        distance = abs(curr_x - prev_x) + abs(curr_y - prev_y)
-        if distance > 0:
-            return min(distance * 0.1, 1.0)  # Small reward for moving
-            
+        # Check if this location has been visited before
+        if current_location not in self.visited_locations:
+            # New unvisited location! Add to visited set and give reward
+            self.visited_locations.add(current_location)
+            return 0.1  # Small reward for discovering new tile
+        
+        # No reward for revisiting locations - prevents farming
         return 0.0
     
     def _calculate_battle_reward(self, current: Dict, previous: Dict) -> float:
@@ -1086,9 +1146,9 @@ class LLMPokemonTrainer:
             try:
                 if name in ['money']:  # Special BCD handling
                     # Read 3 bytes for money in BCD format
-                    byte1 = self.pyboy.get_memory_value(addr)
-                    byte2 = self.pyboy.get_memory_value(addr + 1)
-                    byte3 = self.pyboy.get_memory_value(addr + 2)
+                    byte1 = self.pyboy.memory[addr]
+                    byte2 = self.pyboy.memory[addr + 1]
+                    byte3 = self.pyboy.memory[addr + 2]
                     
                     # Convert BCD to decimal
                     def bcd_to_decimal(byte):
@@ -1099,9 +1159,15 @@ class LLMPokemonTrainer:
                     money = bcd_to_decimal(byte1) * 10000 + bcd_to_decimal(byte2) * 100 + bcd_to_decimal(byte3)
                     state['money'] = money
                 else:
-                    state[name] = self.pyboy.get_memory_value(addr)
+                    state[name] = self.pyboy.memory[addr]
             except:
                 state[name] = 0
+        
+        # Use alt coordinates if main coordinates are 0
+        if state.get('player_x', 0) == 0 and state.get('alt_x', 0) != 0:
+            state['player_x'] = state['alt_x']
+        if state.get('player_y', 0) == 0 and state.get('alt_y', 0) != 0:
+            state['player_y'] = state['alt_y']
         
         # Calculate derived values
         for name, func in DERIVED_VALUES.items():
@@ -1130,40 +1196,46 @@ class LLMPokemonTrainer:
         unique_colors = len(np.unique(screen.reshape(-1, screen.shape[-1]), axis=0))
         brightness = float(np.mean(screen.astype(np.float32)))
         
-        # More sophisticated state detection
-        # Check for common UI patterns by analyzing screen regions
-        
+        # CRITICAL: Very few colors (2-3) almost always means menu/battle/evolution
+        # This prevents false positives where menus are classified as overworld
+        if unique_colors <= 3:
+            # Very few colors - definitely not overworld
+            if variance < 50:
+                state = "loading"  # Solid colors or very simple screen
+            elif brightness > 200:
+                state = "dialogue"  # High brightness with few colors = dialogue box
+            else:
+                state = "menu"  # Low brightness with few colors = menu/battle/evolution
         # Very low variance = loading/transition screen
-        if variance < 50:
+        elif variance < 50:
             state = "loading"
-        # Very high variance = battle screen (lots of sprites/effects)
-        elif variance > 20000:
+        # Very high variance with many colors = battle screen (lots of sprites/effects)
+        elif variance > 20000 and unique_colors > 8:
             state = "battle"
         # Medium-high variance with many colors = overworld
         elif variance > 3000 and unique_colors > 10:
             state = "overworld"
-        # Low variance with high brightness = likely a menu or dialogue
+        # Low variance patterns
         elif variance < 3000:
             # Further distinguish between menu and dialogue
-            # Dialogue typically has more uniform color distribution
-            # Menus often have more structured patterns
-            
-            # Check brightness patterns - dialogue boxes tend to have consistent bright areas
             if brightness > 200 and unique_colors < 8:
                 # Very bright with few colors = likely dialogue box
                 state = "dialogue"
+            elif unique_colors < 6:
+                # Few colors = menu system
+                state = "menu"
             elif variance > 500 and unique_colors >= 8:
                 # Some variance with multiple colors = likely settings/menu
                 state = "settings_menu"
-            elif variance < 500:
-                # Low variance = simple menu
-                state = "menu"
             else:
-                # Default case
+                # Default to menu for low variance screens
                 state = "menu"
         else:
-            # Default to overworld for anything else
-            state = "overworld"
+            # Medium variance with reasonable colors - could be overworld
+            if unique_colors > 8:
+                state = "overworld"
+            else:
+                state = "menu"  # Conservative: few colors = likely menu
             
         return {
             'state': state,
@@ -1331,8 +1403,12 @@ class LLMPokemonTrainer:
         """Save comprehensive training data"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
+        # Ensure logs directory exists
+        logs_dir = "logs"
+        os.makedirs(logs_dir, exist_ok=True)
+        
         # Save main stats
-        stats_file = f"llm_training_stats_{timestamp}.json"
+        stats_file = os.path.join(logs_dir, f"llm_training_stats_{timestamp}.json")
         final_stats = self.stats.copy()
         final_stats['final_game_state'] = self.get_game_state()
         final_stats['llm_decisions'] = len(self.llm_agent.decision_history)
@@ -1342,7 +1418,7 @@ class LLMPokemonTrainer:
         
         # Save detailed LLM decisions
         if self.llm_agent.decision_history:
-            llm_file = f"llm_decisions_{timestamp}.json"
+            llm_file = os.path.join(logs_dir, f"llm_decisions_{timestamp}.json")
             with open(llm_file, 'w') as f:
                 json.dump(self.llm_agent.decision_history, f, indent=2)
             print(f"🧠 LLM decisions saved to {llm_file}")
