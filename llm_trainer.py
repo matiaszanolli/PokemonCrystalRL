@@ -138,16 +138,32 @@ Recent Actions: {recent}
 AVAILABLE ACTIONS:
 up, down, left, right - Movement
 a - Interact/Confirm/Attack
-b - Cancel/Back
-start - Menu
+b - Cancel/Back/Exit Menu
+start - Open Menu
 select - Select button
 
+CRITICAL SCREEN STATE RULES:
+🔥 BATTLE: Use 'a' to attack
+💬 DIALOGUE: Use 'a' to progress text
+⚙️ SETTINGS_MENU: Use 'b' to exit (you're stuck in settings!)
+📋 MENU: Use 'b' to exit unless you have a specific goal
+🌍 OVERWORLD: Explore with movement + 'a' to interact
+⏳ LOADING: Wait (any action is fine)
+
+IMPORTANT GUIDELINES:
+- If screen_state is 'settings_menu': ALWAYS use 'b' to escape
+- If screen_state is 'menu' and you didn't intend to open it: use 'b'
+- If screen_state is 'dialogue': ALWAYS use 'a' to progress
+- If recent actions show 'START' but you're in 'settings_menu': use 'b' to exit
+- Only use 'start' when you specifically need to access menu for healing/items
+- 'b' is your escape key - use it liberally to exit unwanted screens
+
 STRATEGY PRIORITIES:
-1. If in battle: Use effective attacks (mostly 'a')
-2. If in dialogue: Progress with 'a'  
-3. If in menu: Navigate with directional keys, confirm with 'a'
-4. If in overworld: Explore new areas, talk to NPCs, find items
-5. Avoid getting stuck - vary actions if repeating
+1. If stuck in settings_menu: Press 'b' immediately
+2. If in battle: Use 'a' to attack
+3. If in dialogue: Use 'a' to progress
+4. If in unwanted menu: Use 'b' to exit
+5. If in overworld: Explore and interact
 
 Choose ONE action and briefly explain why. Format: ACTION: [action]
 Reasoning: [brief explanation]
@@ -1103,7 +1119,7 @@ class LLMPokemonTrainer:
         return state
     
     def analyze_screen(self) -> Dict:
-        """Analyze current screen state"""
+        """Analyze current screen state with improved detection"""
         if not self.pyboy:
             return {'state': 'unknown', 'variance': 0, 'colors': 0}
             
@@ -1114,17 +1130,40 @@ class LLMPokemonTrainer:
         unique_colors = len(np.unique(screen.reshape(-1, screen.shape[-1]), axis=0))
         brightness = float(np.mean(screen.astype(np.float32)))
         
-        # Improved state detection with multiple metrics
+        # More sophisticated state detection
+        # Check for common UI patterns by analyzing screen regions
+        
+        # Very low variance = loading/transition screen
         if variance < 50:
             state = "loading"
-        elif variance < 1000:
-            state = "menu"
-        elif brightness > 200 and unique_colors < 10:
-            state = "dialogue"  # Dialogue often has high brightness, few colors
+        # Very high variance = battle screen (lots of sprites/effects)
         elif variance > 20000:
-            state = "battle"  # Battles have very high variance
+            state = "battle"
+        # Medium-high variance with many colors = overworld
+        elif variance > 3000 and unique_colors > 10:
+            state = "overworld"
+        # Low variance with high brightness = likely a menu or dialogue
+        elif variance < 3000:
+            # Further distinguish between menu and dialogue
+            # Dialogue typically has more uniform color distribution
+            # Menus often have more structured patterns
+            
+            # Check brightness patterns - dialogue boxes tend to have consistent bright areas
+            if brightness > 200 and unique_colors < 8:
+                # Very bright with few colors = likely dialogue box
+                state = "dialogue"
+            elif variance > 500 and unique_colors >= 8:
+                # Some variance with multiple colors = likely settings/menu
+                state = "settings_menu"
+            elif variance < 500:
+                # Low variance = simple menu
+                state = "menu"
+            else:
+                # Default case
+                state = "menu"
         else:
-            state = "overworld"  # Default to overworld for exploration
+            # Default to overworld for anything else
+            state = "overworld"
             
         return {
             'state': state,
@@ -1163,19 +1202,26 @@ class LLMPokemonTrainer:
             return self._get_rule_based_action(game_state, screen_analysis), "Rule-based fallback"
     
     def _get_rule_based_action(self, game_state: Dict, screen_analysis: Dict) -> str:
-        """Rule-based fallback action"""
+        """Rule-based fallback action with improved screen state handling"""
         state_type = screen_analysis.get('state', 'unknown')
         
         if game_state.get('in_battle', 0) == 1:
             return 'a'  # Attack in battle
         elif state_type == 'dialogue':
             return 'a'  # Progress dialogue
+        elif state_type == 'settings_menu':
+            return 'b'  # Always exit settings menu immediately
         elif state_type == 'menu':
-            # Simple menu navigation
-            menu_actions = ['up', 'down', 'a', 'b']
-            return menu_actions[self.actions_taken % len(menu_actions)]
+            # Smart menu handling - check recent actions
+            recent_actions_str = ' '.join(self.recent_actions[-3:]) if self.recent_actions else ''
+            if 'START' in recent_actions_str:
+                return 'b'  # Exit menu if we recently opened one
+            else:
+                return 'b'  # Default to exiting menus unless we have a specific goal
+        elif state_type == 'loading':
+            return 'a'  # Wait during loading screens
         else:
-            # Exploration pattern
+            # Exploration pattern for overworld (avoid START button spam)
             exploration_actions = ['up', 'up', 'a', 'right', 'right', 'a', 'down', 'down', 'a', 'left', 'left', 'a']
             return exploration_actions[self.actions_taken % len(exploration_actions)]
     
