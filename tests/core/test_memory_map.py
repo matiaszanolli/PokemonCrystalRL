@@ -438,24 +438,38 @@ class TestDerivedValues:
         badges_total = DERIVED_VALUES['badges_total']
         
         # Test no badges
-        state = {'badges': 0, 'kanto_badges': 0}
+        state = {'badges': 0, 'kanto_badges': 0, 'party_count': 1, 'player_level': 5}
         assert badges_total(state) == 0
         
         # Test some Johto badges
-        state = {'badges': 0x0F, 'kanto_badges': 0}  # 4 badges
+        state = {'badges': 0x0F, 'kanto_badges': 0, 'party_count': 1, 'player_level': 5}  # 4 badges
         assert badges_total(state) == 4
         
         # Test some Kanto badges
-        state = {'badges': 0, 'kanto_badges': 0x07}  # 3 badges
+        state = {'badges': 0, 'kanto_badges': 0x07, 'party_count': 1, 'player_level': 5}  # 3 badges
         assert badges_total(state) == 3
         
         # Test mixed badges
-        state = {'badges': 0x0F, 'kanto_badges': 0x07}  # 4 + 3 = 7 badges
+        state = {'badges': 0x0F, 'kanto_badges': 0x07, 'party_count': 1, 'player_level': 5}  # 4 + 3 = 7 badges
         assert badges_total(state) == 7
         
-        # Test all badges
-        state = {'badges': 0xFF, 'kanto_badges': 0xFF}  # 8 + 8 = 16 badges
+        # Test all badges (valid case with party and level)
+        state = {'badges': 0xFF, 'kanto_badges': 0xFF, 'party_count': 6, 'player_level': 50}  # 8 + 8 = 16 badges
         assert badges_total(state) == 16
+        
+        # Test memory corruption protection: 0xFF early game should return 0
+        state = {'badges': 0xFF, 'kanto_badges': 0, 'party_count': 0, 'player_level': 0}  # Early game corruption
+        assert badges_total(state) == 0
+        
+        state = {'badges': 0, 'kanto_badges': 0xFF, 'party_count': 0, 'player_level': 0}  # Early game corruption
+        assert badges_total(state) == 0
+        
+        state = {'badges': 0xFF, 'kanto_badges': 0xFF, 'party_count': 0, 'player_level': 0}  # Both corrupted
+        assert badges_total(state) == 0
+        
+        # Test impossible level protection
+        state = {'badges': 0xFF, 'kanto_badges': 0xFF, 'party_count': 1, 'player_level': 122}  # Impossible level
+        assert badges_total(state) == 0
     
     def test_is_healthy(self):
         """Test health status calculation"""

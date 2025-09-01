@@ -57,36 +57,41 @@ def monitor(test_config, error_handler):
     """Create and start monitor instance."""
     monitor = UnifiedMonitor(config=test_config)
     monitor.error_handler = error_handler
+    
+    # Start training - this will call _ensure_server_started() automatically
+    # which starts the server in a background thread
     monitor.start_training(config={"test": True})
     
-    # Start the web server in a separate thread
-    import threading
     import time
     import requests
     
-    def run_server():
-        monitor.run(debug=False)
-    
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
-    
-    # Wait for server to become available
+    # Wait for server to become responsive
     start_time = time.time()
     max_wait = 10  # Maximum wait time in seconds
     while time.time() - start_time < max_wait:
         try:
-            response = requests.get(f"http://localhost:{monitor.port}/api/status")
+            response = requests.get(f"http://localhost:{monitor.config.web_port}/api/status", timeout=1)
             if response.status_code == 200:
                 break
-        except requests.ConnectionError:
+        except (requests.ConnectionError, requests.Timeout):
             time.sleep(0.1)
     else:
-        raise TimeoutError("Server did not start within timeout period")
+        raise TimeoutError(f"Server on port {monitor.config.web_port} did not become responsive within timeout period")
     
     try:
         yield monitor
     finally:
-        monitor.stop_training()
+        # Comprehensive cleanup
+        try:
+            # Stop training and monitoring (this will also stop the server thread)
+            monitor.stop_training()
+            monitor.stop_monitoring()
+            
+            # Give the system time to release the port
+            time.sleep(1.0)
+            
+        except Exception as e:
+            print(f"Warning: Error during monitor cleanup: {e}")
 
 @pytest.mark.integration
 @pytest.mark.web
@@ -95,8 +100,9 @@ class TestWebIntegration:
     
     def test_status_endpoint(self, monitor):
         """Test status API endpoint."""
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/api/status"
+            f"http://localhost:{port}/api/status"
         )
         assert response.status_code == 200
         
@@ -117,8 +123,9 @@ class TestWebIntegration:
         monitor.update_metrics(metrics)
         
         # Get metrics
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/api/metrics"
+            f"http://localhost:{port}/api/metrics"
         )
         assert response.status_code == 200
         
@@ -129,7 +136,7 @@ class TestWebIntegration:
         
         # Test historical metrics
         response = requests.get(
-            f"http://localhost:{monitor.port}/api/metrics/history",
+            f"http://localhost:{port}/api/metrics/history",
             params={"metric": "loss", "minutes": 5}
         )
         assert response.status_code == 200
@@ -146,8 +153,9 @@ class TestWebIntegration:
         monitor.update_screenshot(screenshot)
         
         # Get screenshot
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/api/screenshot"
+            f"http://localhost:{port}/api/screenshot"
         )
         assert response.status_code == 200
         
@@ -161,7 +169,8 @@ class TestWebIntegration:
         """Test Socket.IO connectivity."""
         # Create Socket.IO client
         socket = socketio.Client()
-        socket.connect(f"http://localhost:{monitor.port}")
+        port = monitor.config.web_port if monitor.config else monitor.port
+        socket.connect(f"http://localhost:{port}")
 
         # Initialize response holder
         response_data = None
@@ -190,7 +199,8 @@ class TestWebIntegration:
     def test_real_time_updates(self, monitor):
         """Test real-time updates via Socket.IO."""
         socket = socketio.Client()
-        socket.connect(f"http://localhost:{monitor.port}")
+        port = monitor.config.web_port if monitor.config else monitor.port
+        socket.connect(f"http://localhost:{port}")
 
         updates_received = []
         done = False
@@ -261,8 +271,9 @@ class TestWebIntegration:
         )
         
         # Check error endpoint
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/api/errors"
+            f"http://localhost:{port}/api/errors"
         )
         assert response.status_code == 200
         
@@ -275,8 +286,9 @@ class TestWebIntegration:
     
     def test_system_metrics(self, monitor):
         """Test system metrics reporting."""
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/api/system"
+            f"http://localhost:{port}/api/system"
         )
         assert response.status_code == 200
         
@@ -288,9 +300,10 @@ class TestWebIntegration:
     
     def test_training_control(self, monitor):
         """Test training control via web interface."""
+        port = monitor.config.web_port if monitor.config else monitor.port
         # Pause training
         response = requests.post(
-            f"http://localhost:{monitor.port}/api/training/control",
+            f"http://localhost:{port}/api/training/control",
             json={"action": "pause"}
         )
         assert response.status_code == 200
@@ -298,7 +311,7 @@ class TestWebIntegration:
         
         # Resume training
         response = requests.post(
-            f"http://localhost:{monitor.port}/api/training/control",
+            f"http://localhost:{port}/api/training/control",
             json={"action": "resume"}
         )
         assert response.status_code == 200
@@ -313,16 +326,18 @@ class TestWebIntegration:
         test_file.write_text("test content")
         
         # Get file
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/static/test.txt"
+            f"http://localhost:{port}/static/test.txt"
         )
         assert response.status_code == 200
         assert response.text == "test content"
     
     def test_dashboard_html(self, monitor):
         """Test dashboard HTML endpoint."""
+        port = monitor.config.web_port if monitor.config else monitor.port
         response = requests.get(
-            f"http://localhost:{monitor.port}/"
+            f"http://localhost:{port}/"
         )
         assert response.status_code == 200
         assert "text/html" in response.headers["Content-Type"]

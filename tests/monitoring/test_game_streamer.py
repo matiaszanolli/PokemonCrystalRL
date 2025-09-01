@@ -18,7 +18,7 @@ import threading
 import queue
 import numpy as np
 import base64
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, PropertyMock
 from PIL import Image
 import io
 
@@ -174,7 +174,10 @@ class TestPyBoyIntegration:
     def test_capture_frame_error(self, streamer):
         """Test frame capture error handling"""
         mock_pyboy = Mock()
-        mock_pyboy.screen.ndarray = Mock(side_effect=Exception("Screen error"))
+        mock_screen = Mock()
+        # The ndarray property should raise an exception when accessed
+        type(mock_screen).ndarray = PropertyMock(side_effect=Exception("Screen error"))
+        mock_pyboy.screen = mock_screen
         streamer.set_pyboy_instance(mock_pyboy)
         
         with pytest.raises(Exception):
@@ -364,6 +367,16 @@ class TestPerformanceAndStats:
         yield streamer
         streamer.shutdown()
     
+    @pytest.fixture
+    def mock_pyboy(self):
+        """Create mock PyBoy instance for performance tests"""
+        mock_pyboy = Mock()
+        mock_screen = Mock()
+        test_array = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_screen.ndarray = test_array
+        mock_pyboy.screen = mock_screen
+        return mock_pyboy
+    
     def test_performance_stats_initial(self, streamer):
         """Test initial performance statistics"""
         stats = streamer.get_performance_stats()
@@ -514,8 +527,14 @@ class TestStreamingIntegration:
             frame = np.full((144, 160, 3), i * 25, dtype=np.uint8)
             frames.append(frame)
         
-        frame_iter = iter(frames * 10)  # Repeat frames
-        mock_screen.ndarray = Mock(side_effect=lambda: next(frame_iter))
+        # Create a cycling iterator that will never run out
+        frame_cycle = []
+        def get_frame():
+            if not frame_cycle:
+                frame_cycle.extend(frames * 10)  # Initialize with many copies
+            return frame_cycle.pop(0)  # Return first frame and remove it
+        
+        mock_screen.ndarray = get_frame
         mock_pyboy.screen = mock_screen
         return mock_pyboy
     
