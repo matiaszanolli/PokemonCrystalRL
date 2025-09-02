@@ -13,6 +13,7 @@ import json
 from datetime import datetime
 
 from .game_state_analyzer import GameStateAnalyzer, GameStateAnalysis, GamePhase, SituationCriticality
+from .goal_oriented_planner import GoalOrientedPlanner
 
 @dataclass
 class ActionConsequence:
@@ -51,6 +52,7 @@ class StrategicContextBuilder:
     
     def __init__(self, max_history=20):
         self.game_state_analyzer = GameStateAnalyzer()
+        self.goal_planner = GoalOrientedPlanner()
         self.max_history = max_history
         
         # History tracking
@@ -98,7 +100,7 @@ class StrategicContextBuilder:
         # 4. Identify emergency actions
         emergency_actions = self._identify_emergency_actions(current_analysis)
         
-        # 5. Set strategic goals
+        # 5. Set strategic goals using goal planner
         strategic_goals = self._determine_strategic_goals(current_analysis)
         
         # 6. Build prompts
@@ -344,37 +346,24 @@ class StrategicContextBuilder:
         return emergency_actions
     
     def _determine_strategic_goals(self, analysis: GameStateAnalysis) -> List[str]:
-        """Determine current strategic goals based on game state"""
-        goals = []
+        """Determine current strategic goals using the goal-oriented planner"""
+        # Get strategic goals from the planner
+        active_goals = self.goal_planner.evaluate_goals(analysis)
         
-        # Phase-specific goals
-        if analysis.phase == GamePhase.EARLY_GAME:
-            goals.extend([
-                "Navigate to Professor Elm's laboratory",
-                "Obtain starter Pokemon", 
-                "Begin Pokemon journey"
-            ])
-        elif analysis.phase == GamePhase.STARTER_PHASE:
-            goals.extend([
-                "Train and level up starter Pokemon",
-                "Explore nearby routes",
-                "Learn basic battle mechanics"
-            ])
-        elif analysis.phase == GamePhase.EXPLORATION:
-            goals.extend([
-                "Expand Pokemon team",
-                "Discover new areas and towns",
-                "Prepare for gym challenges"
-            ])
+        # Convert to string descriptions for compatibility
+        goal_descriptions = []
+        for goal in active_goals:
+            progress_str = f"({goal.progress_percentage:.0f}%)" if goal.progress_percentage > 0 else ""
+            goal_descriptions.append(f"{goal.name} {progress_str}")
         
-        # Universal goals based on threats/opportunities
-        if analysis.health_percentage < 50:
-            goals.insert(0, "Heal Pokemon to restore battle effectiveness")
+        # Add immediate tactical goals if needed
+        if analysis.health_percentage < 25:
+            goal_descriptions.insert(0, "URGENT: Restore Pokemon health")
         
         if analysis.immediate_threats:
-            goals.insert(0, "Address immediate survival threats")
+            goal_descriptions.insert(0, "CRITICAL: Address survival threats")
         
-        return goals[:3]  # Top 3 goals
+        return goal_descriptions[:3]  # Top 3 goals
     
     def _build_prompts(self, analysis: GameStateAnalysis, consequences: Dict[str, ActionConsequence],
                       emergency_actions: List[str], strategic_goals: List[str]) -> Dict[str, str]:
@@ -418,14 +407,34 @@ STRATEGIC GOALS: {'; '.join(strategic_goals)}
 ACTION ANALYSIS:
 """
         
-        # Add top action recommendations
+        # Get goal-oriented action recommendations
+        goal_recommendations = self.goal_planner.get_recommended_actions(analysis)
+        
+        # Combine with consequence-based recommendations
         action_priorities = []
+        
+        # Add goal-oriented recommendations with high priority
+        for action, reason, weight in goal_recommendations:
+            if action in consequences:
+                consequence = consequences[action]
+                # Boost priority for goal-aligned actions
+                boosted_consequence = ActionConsequence(
+                    action=consequence.action,
+                    likely_outcome=f"{consequence.likely_outcome} (Goal-aligned: {reason})",
+                    risk_level=consequence.risk_level,
+                    reward_potential="HIGH",  # Goal-aligned actions get high reward potential
+                    strategic_value=f"High strategic value: {reason}"
+                )
+                action_priorities.append((action, boosted_consequence))
+        
+        # Add high-reward potential actions that aren't goal-aligned
         for action, consequence in consequences.items():
-            if consequence.reward_potential == "HIGH":
+            if consequence.reward_potential == "HIGH" and not any(action == rec[0] for rec in goal_recommendations):
                 action_priorities.append((action, consequence))
         
-        # Sort by strategic value and reward potential
+        # Sort by strategic value and reward potential  
         action_priorities.sort(key=lambda x: (
+            "goal-aligned" in x[1].strategic_value.lower(),  # Goal-aligned first
             x[1].reward_potential == "HIGH",
             x[1].risk_level != "HIGH", 
             "breaks stuck pattern" in x[1].strategic_value.lower()
@@ -458,3 +467,11 @@ Action: """
             'guidance': guidance_prompt.strip(),
             'complete': complete_prompt.strip()
         }
+    
+    def get_strategic_summary(self, analysis: GameStateAnalysis) -> str:
+        """Get a comprehensive strategic summary including goals"""
+        return self.goal_planner.get_current_strategy_summary()
+    
+    def get_goal_statistics(self) -> Dict[str, Any]:
+        """Get goal completion statistics"""
+        return self.goal_planner.get_goal_stats()
