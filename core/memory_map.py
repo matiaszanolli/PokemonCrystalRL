@@ -7,10 +7,10 @@ memory_map.py - Memory addresses for Pokémon Crystal game state
 
 MEMORY_ADDRESSES = {
     # Player position and map data
-    'player_x': 0xDCB8,           # Player X coordinate
-    'player_y': 0xDCB9,           # Player Y coordinate
-    'player_map': 0xDCB5,         # Current map/location ID
-    'player_direction': 0xDCBA,   # Direction player is facing
+    'player_x': 0xDCB8,           # Player X coordinate (VERIFIED)
+    'player_y': 0xDCB9,           # Player Y coordinate (VERIFIED)
+    'player_map': 0xDCBA,         # Current map/location ID (updated from test)
+    'player_direction': 0xDCBB,   # Direction player is facing (updated)
     
     # Player stats
     'player_hp': 0xDCDA,          # Current HP (2 bytes, little endian)

@@ -15,9 +15,17 @@ class PokemonRewardCalculator:
         self.last_reward_time = time.time()
         # Track visited locations to prevent reward farming
         self.visited_locations = set()  # Will store (map_id, x, y) tuples
+        # Track visited maps to prevent repeated large map-entry rewards
+        self.visited_maps = set()
+        # Simple step counter and rate limit for map-entry rewards
+        self.step_counter = 0
+        self.last_map_reward_step = -10_000
         
     def calculate_reward(self, current_state: Dict, previous_state: Dict) -> Tuple[float, Dict[str, float]]:
         """Calculate comprehensive reward based on game progress"""
+        # Increment internal step counter for simple rate limiting
+        self.step_counter += 1
+        
         rewards = {}
         total_reward = 0.0
         
@@ -225,9 +233,23 @@ class PokemonRewardCalculator:
         if curr_map != prev_map:
             map_diff = abs(curr_map - prev_map)
             # Only reward reasonable map transitions (not huge jumps that indicate glitches)
-            if map_diff <= 10:  # Adjacent or nearby maps
+            if map_diff <= 10:
+                # Additional guardrails to prevent exaggerated rewards:
+                # 1) Only reward first time we ever enter this map in the session
+                if curr_map in self.visited_maps:
+                    return 0.0
+                # 2) Require that coordinate delta is reasonable (door/edge transition, not teleport)
+                coord_delta = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+                if coord_delta > 8:
+                    return 0.0
+                # 3) Rate limit map-entry rewards (e.g., once every 50 steps)
+                if (self.step_counter - self.last_map_reward_step) < 50:
+                    return 0.0
+                # 4) All good: record visit and reward
+                self.visited_maps.add(curr_map)
                 self.visited_locations.add(current_location)
-                return 10.0  # Reward for entering new area
+                self.last_map_reward_step = self.step_counter
+                return 10.0  # Reward for entering a new map for the first time
             else:
                 # Suspicious map jump - likely a glitch, no reward
                 return 0.0

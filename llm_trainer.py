@@ -41,11 +41,11 @@ MEMORY_ADDRESSES = {
     'player_level': 0xD16B,     # Level of first Pokemon (party slot 0 + 8)
     'player_status': 0xD16C,    # Status condition of first Pokemon (party slot 0 + 9)
     
-    # Location and movement - From your coordinate analysis
-    'player_map': 0xD35D,       # Current map ID
-    'player_x': 0xD361,         # Player X coordinate
-    'player_y': 0xD362,         # Player Y coordinate
-    'player_direction': 0xD363, # Direction player is facing (0=down,1=up,2=left,3=right)
+    # Location and movement - VERIFIED ADDRESSES from coordinate testing
+    'player_map': 0xDCBA,       # Current map ID (VERIFIED)
+    'player_x': 0xDCB8,         # Player X coordinate (VERIFIED)
+    'player_y': 0xDCB9,         # Player Y coordinate (VERIFIED)
+    'player_direction': 0xDCBB, # Direction player is facing (VERIFIED)
     
     # Resources and progress - From your money/badge analysis
     'money_low': 0xD347,        # Money (low byte, 3 bytes little-endian)
@@ -111,12 +111,12 @@ def build_observation(memory) -> Dict:
     except:
         money = 0
     
-    # Location and coordinates - using your validated addresses
+    # Location and coordinates - using VERIFIED addresses
     try:
-        map_id = memory[0xD35D]
-        player_x = memory[0xD361]
-        player_y = memory[0xD362]
-        facing = memory[0xD363]
+        map_id = memory[0xDCBA]      # VERIFIED Map ID
+        player_x = memory[0xDCB8]    # VERIFIED Player X
+        player_y = memory[0xDCB9]    # VERIFIED Player Y 
+        facing = memory[0xDCBB]      # VERIFIED Direction
     except:
         map_id = player_x = player_y = facing = 0
     
@@ -556,6 +556,11 @@ class PokemonRewardCalculator:
         self.last_reward_time = time.time()
         # Track visited locations to prevent reward farming
         self.visited_locations = set()  # Will store (map_id, x, y) tuples
+        # Track visited maps to prevent repeated large map-entry rewards
+        self.visited_maps = set()
+        # Simple step counter and rate limit for map-entry rewards
+        self.step_counter = 0
+        self.last_map_reward_step = -10_000
         
         # Track repeated blocked movements for escalating penalties
         self.blocked_movement_tracker = {}  # (map, x, y, direction) -> consecutive_count
@@ -563,6 +568,9 @@ class PokemonRewardCalculator:
         
     def calculate_reward(self, current_state: Dict, previous_state: Dict) -> Tuple[float, Dict[str, float]]:
         """Calculate comprehensive reward based on game progress"""
+        # Increment internal step counter for simple rate limiting
+        self.step_counter += 1
+        
         rewards = {}
         total_reward = 0.0
         
@@ -855,9 +863,23 @@ class PokemonRewardCalculator:
         if curr_map != prev_map:
             map_diff = abs(curr_map - prev_map)
             # Only reward reasonable map transitions (not huge jumps that indicate glitches)
-            if map_diff <= 10:  # Adjacent or nearby maps
+            if map_diff <= 10:
+                # Additional guardrails to prevent exaggerated rewards:
+                # 1) Only reward first time we ever enter this map in the session
+                if curr_map in self.visited_maps:
+                    return 0.0
+                # 2) Require that coordinate delta is reasonable (door/edge transition, not teleport)
+                coord_delta = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+                if coord_delta > 8:
+                    return 0.0
+                # 3) Rate limit map-entry rewards (e.g., once every 50 steps)
+                if (self.step_counter - self.last_map_reward_step) < 50:
+                    return 0.0
+                # 4) All good: record visit and reward
+                self.visited_maps.add(curr_map)
                 self.visited_locations.add(current_location)
-                return 10.0  # Reward for entering new area
+                self.last_map_reward_step = self.step_counter
+                return 10.0  # Reward for entering a new map for the first time
             else:
                 # Suspicious map jump - likely a glitch, no reward
                 return 0.0
