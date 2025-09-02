@@ -1,14 +1,16 @@
 # 🎮 Pokemon Crystal RL Training Platform
 
-**An advanced reinforcement learning environment for Pokemon Crystal featuring LLM-enhanced decision making, comprehensive memory mapping, and real-time web monitoring.**
+**An advanced reinforcement learning environment for Pokemon Crystal featuring hybrid LLM-RL training, intelligent decision making, comprehensive memory mapping, and real-time web monitoring.**
 
 ## 🌟 Features
 
-### 🤖 **LLM-Enhanced Training**
-- **Local LLM Integration**: Uses Ollama with models like `smollm2:1.7b` for intelligent decision making
-- **Context-Aware Decisions**: AI receives game state, screen analysis, and recent actions
-- **Hybrid Approach**: Combines LLM intelligence with rule-based fallbacks
-- **Decision Tracking**: Complete LLM reasoning history with context
+### 🤖 **Hybrid LLM-RL Training System**
+- **Intelligent Architecture**: Combines LLM strategic guidance with RL optimization
+- **Curriculum Learning**: Progressive transition from LLM-heavy to RL-optimized decisions
+- **Adaptive Strategies**: Dynamic switching between decision-making approaches based on performance
+- **Decision Pattern Learning**: Learns from decision history with SQLite-backed persistence
+- **Multi-Modal Observations**: Screen capture, state variables, and strategic context integration
+- **Action Masking**: Prevents invalid moves based on current game state
 
 ### 🎮 **Advanced Game Integration**
 - **PyBoy Emulation**: Full Pokemon Crystal emulation with memory access
@@ -50,18 +52,20 @@ mkdir roms
 # Place pokemon_crystal.gbc in the roms/ directory
 ```
 
-### 4. **Run LLM-Enhanced Training**
+### 4. **Run Hybrid LLM-RL Training**
 ```bash
-# Basic training
-python3 llm_trainer.py --rom roms/pokemon_crystal.gbc --actions 2000
+# Basic hybrid training
+python3 examples/run_hybrid_training.py
 
-# Advanced configuration
-python3 llm_trainer.py \
-    --rom roms/pokemon_crystal.gbc \
-    --actions 5000 \
-    --llm-model smollm2:1.7b \
-    --llm-interval 15 \
-    --web-port 8080
+# Advanced hybrid training with custom configuration
+python3 -c "
+from trainer.hybrid_llm_rl_trainer import create_trainer_from_config
+trainer = create_trainer_from_config('hybrid_training_config.json')
+trainer.train(total_episodes=1000, max_steps_per_episode=10000)
+"
+
+# Legacy LLM-only training (still supported)
+python3 llm_trainer.py --rom roms/pokemon_crystal.gbc --actions 2000
 ```
 
 ### 5. **Monitor Training**
@@ -73,7 +77,14 @@ python3 llm_trainer.py \
 
 ### **Core Components**
 
-#### 🧠 **LLM Integration** (`llm_trainer.py`)
+#### 🤖 **Hybrid Training System** (`trainer/hybrid_llm_rl_trainer.py`)
+- **HybridLLMRLTrainer**: Main training orchestrator with curriculum learning
+- **AdaptiveStrategySystem**: Performance-based strategy switching (630 lines)
+- **DecisionHistoryAnalyzer**: Pattern learning with SQLite persistence (677 lines)
+- **HybridAgent**: Combines LLM and RL agents with decision arbitration (651 lines)
+- **EnhancedPyBoyPokemonCrystalEnv**: Multi-modal Gymnasium environment (599 lines)
+
+#### 🧠 **Legacy LLM Integration** (`llm_trainer.py`)
 - **LLMAgent**: Handles communication with Ollama
 - **Context Building**: Creates rich prompts with game state
 - **Decision Parsing**: Extracts valid actions from LLM responses
@@ -109,7 +120,29 @@ Supported LLM models via Ollama:
 
 ## 📊 Training Configuration
 
-### **LLM-Enhanced Training Options**
+### **Hybrid LLM-RL Training Options**
+
+```bash
+# Create configuration file
+cat > hybrid_training_config.json << 'EOF'
+{
+  "rom_path": "roms/pokemon_crystal.gbc",
+  "headless": true,
+  "observation_type": "multi_modal",
+  "llm_model": "gpt-4",
+  "max_context_length": 8000,
+  "initial_strategy": "llm_heavy",
+  "decision_db_path": "pokemon_decisions.db",
+  "save_dir": "training_checkpoints",
+  "log_level": "INFO"
+}
+EOF
+
+# Run hybrid training
+python3 examples/run_hybrid_training.py
+```
+
+### **Legacy LLM-Enhanced Training Options**
 
 ```bash
 # Standard configuration
@@ -167,16 +200,25 @@ python3 llm_trainer.py \
 
 ```
 pokemon_crystal_rl/
-├── llm_trainer.py              # 🤖 LLM-enhanced trainer (MAIN)
-├── enhanced_trainer.py         # 📊 Original enhanced trainer
+├── examples/
+│   └── run_hybrid_training.py  # 🤖 Hybrid training example (MAIN)
+├── trainer/
+│   ├── hybrid_llm_rl_trainer.py # 🧠 Hybrid LLM-RL trainer (455 lines)
+│   └── llm_manager.py          # 💬 LLM communication manager
 ├── core/
-│   ├── memory_map.py          # 🗺️ Memory address definitions
-│   └── __init__.py
+│   ├── hybrid_agent.py         # 🤝 LLM+RL decision arbitration (651 lines)
+│   ├── adaptive_strategy_system.py # 📊 Performance-based strategies (630 lines)
+│   ├── decision_history_analyzer.py # 🧠 Pattern learning (677 lines)
+│   ├── enhanced_pyboy_env.py   # 🎮 Multi-modal environment (599 lines)
+│   ├── goal_oriented_planner.py # 🎯 Strategic goal planning
+│   ├── state_variable_dictionary.py # 📊 Comprehensive state mapping
+│   └── memory_map.py           # 🗺️ Memory address definitions
+├── tests/
+│   ├── trainer/                # 🧪 Trainer tests (13 test methods)
+│   ├── integration/            # 🔗 Integration tests
+│   └── core/                   # ⚙️ Core component tests
+├── llm_trainer.py              # 🤖 Legacy LLM trainer
 ├── roms/                       # 💾 ROM files (not included)
-│   ├── pokemon_crystal.gbc     #    Your ROM file
-│   └── *.state                 #    Save states
-├── llm_training_stats_*.json   # 📊 Training statistics
-├── llm_decisions_*.json        # 🧠 LLM decision history
 ├── requirements.txt            # 📦 Dependencies
 └── README.md                   # 📖 This documentation
 ```
