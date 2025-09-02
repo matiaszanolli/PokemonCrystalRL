@@ -2426,7 +2426,80 @@ class LLMPokemonTrainer:
         return reward, reward_breakdown
     
     def _execute_single_action(self, action: str):
-        """Execute a single action press"""
+        """Execute a single action with proper Pokemon Crystal timing"""
+        screen_state = self.analyze_screen().get('state', 'unknown')
+        
+        # Different timing for different game states
+        if screen_state == 'overworld':
+            self._execute_overworld_action(action)
+        elif screen_state == 'battle':
+            self._execute_battle_action(action)
+        elif screen_state in ['menu', 'dialogue', 'settings_menu']:
+            self._execute_menu_action(action)
+        else:
+            # Default timing for unknown states
+            self._execute_default_action(action)
+    
+    def _execute_overworld_action(self, action: str):
+        """Execute action with overworld timing (16 frames per action)"""
+        # Press button
+        self.pyboy.button_press(action)
+        
+        # Hold for 2 frames (minimum for registration)
+        for _ in range(2):
+            if not self.running:
+                break
+            self.pyboy.tick()
+        
+        # Release button
+        self.pyboy.button_release(action)
+        
+        # Wait for game to process (14 more frames for 16-frame alignment)
+        for _ in range(14):
+            if not self.running:
+                break
+            self.pyboy.tick()
+    
+    def _execute_battle_action(self, action: str):
+        """Execute action in battle with input availability checking"""
+        # In battle, we need to wait for input to be available
+        # For now, use longer timing to ensure battle system processes
+        self.pyboy.button_press(action)
+        
+        # Hold button for 4 frames
+        for _ in range(4):
+            if not self.running:
+                break
+            self.pyboy.tick()
+        
+        self.pyboy.button_release(action)
+        
+        # Wait longer for battle system to process (20 frames)
+        for _ in range(20):
+            if not self.running:
+                break
+            self.pyboy.tick()
+    
+    def _execute_menu_action(self, action: str):
+        """Execute action in menus/dialogue with appropriate timing"""
+        self.pyboy.button_press(action)
+        
+        # Hold for 3 frames
+        for _ in range(3):
+            if not self.running:
+                break
+            self.pyboy.tick()
+        
+        self.pyboy.button_release(action)
+        
+        # Wait for menu system to process (8 frames)
+        for _ in range(8):
+            if not self.running:
+                break
+            self.pyboy.tick()
+    
+    def _execute_default_action(self, action: str):
+        """Default action timing for unknown states"""
         self.pyboy.button_press(action)
         
         # Hold button for several frames
