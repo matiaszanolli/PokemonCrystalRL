@@ -295,6 +295,11 @@ class GameStateAnalyzer:
     
     def _has_emergency_conditions(self, state_vars: Dict[str, StateVariable]) -> bool:
         """Check for conditions requiring immediate action"""
+        # Only check survival conditions if we have Pokemon
+        party_count = state_vars.get('party_count')
+        if not party_count or party_count.current_value == 0:
+            return False
+        
         # Pokemon at 0 HP
         hp = state_vars.get('player_hp')
         if hp and hp.current_value == 0:
@@ -313,6 +318,16 @@ class GameStateAnalyzer:
     
     def _has_urgent_conditions(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> bool:
         """Check for conditions requiring prompt attention"""
+        party_count = state_vars.get('party_count')
+        
+        # No Pokemon but should have one (not during early game)
+        if party_count and party_count.current_value == 0 and phase != GamePhase.EARLY_GAME:
+            return True
+        
+        # Only check HP-related urgent conditions if we have Pokemon
+        if not party_count or party_count.current_value == 0:
+            return False
+            
         # Low HP outside of battle
         hp = state_vars.get('player_hp')
         max_hp = state_vars.get('player_max_hp')
@@ -324,32 +339,34 @@ class GameStateAnalyzer:
                 if hp_percentage < 0.25:  # Less than 25% HP
                     return True
         
-        # No Pokemon but should have one
-        party_count = state_vars.get('party_count')
-        if party_count and party_count.current_value == 0 and phase != GamePhase.EARLY_GAME:
-            return True
-        
         return False
     
     def _is_optimal_state(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> bool:
         """Check if we're in an optimal state for strategic planning"""
-        # Good HP
-        hp = state_vars.get('player_hp')
-        max_hp = state_vars.get('player_max_hp')
-        if hp and max_hp and max_hp.current_value > 0:
-            hp_percentage = hp.current_value / max_hp.current_value
-            if hp_percentage < 0.8:  # Less than 80% HP
-                return False
-        
-        # Not in battle
-        in_battle = state_vars.get('in_battle')
-        if in_battle and in_battle.current_value:
-            return False
-        
-        # Have Pokemon if we should
         party_count = state_vars.get('party_count')
+        
+        # Have Pokemon if we should (not during early game)
         if party_count and party_count.current_value == 0 and phase != GamePhase.EARLY_GAME:
             return False
+        
+        # If we're in early game with no Pokemon, that's actually optimal
+        if phase == GamePhase.EARLY_GAME and (not party_count or party_count.current_value == 0):
+            return True
+        
+        # Only check HP and battle conditions if we have Pokemon
+        if party_count and party_count.current_value > 0:
+            # Good HP
+            hp = state_vars.get('player_hp')
+            max_hp = state_vars.get('player_max_hp')
+            if hp and max_hp and max_hp.current_value > 0:
+                hp_percentage = hp.current_value / max_hp.current_value
+                if hp_percentage < 0.8:  # Less than 80% HP
+                    return False
+            
+            # Not in battle
+            in_battle = state_vars.get('in_battle')
+            if in_battle and in_battle.current_value:
+                return False
         
         return True
     
@@ -405,22 +422,27 @@ class GameStateAnalyzer:
         """Identify immediate threats requiring attention"""
         threats = []
         
-        # Health-related threats
+        # Calculate health percentage once for use throughout the method
         hp_pct = self._calculate_health_percentage(state_vars)
-        if hp_pct == 0:
-            threats.append("Pokemon has fainted - needs immediate healing")
-        elif hp_pct < 10:
-            threats.append("Critically low HP - emergency healing needed")
-        elif hp_pct < 25:
-            threats.append("Low HP - should heal soon")
         
-        # Battle threats
-        in_battle = state_vars.get('in_battle')
-        if in_battle and in_battle.current_value and hp_pct < 50:
-            threats.append("In battle with low HP - consider fleeing or using items")
+        # Only check health-related threats if we actually have Pokemon
+        party_count = state_vars.get('party_count')
+        if party_count and party_count.current_value > 0:
+            # Health-related threats
+            if hp_pct == 0:
+                threats.append("Pokemon has fainted - needs immediate healing")
+            elif hp_pct < 10:
+                threats.append("Critically low HP - emergency healing needed")
+            elif hp_pct < 25:
+                threats.append("Low HP - should heal soon")
+        
+        # Battle threats (only if we have Pokemon)
+        if party_count and party_count.current_value > 0:
+            in_battle = state_vars.get('in_battle')
+            if in_battle and in_battle.current_value and hp_pct < 50:
+                threats.append("In battle with low HP - consider fleeing or using items")
         
         # Progression threats
-        party_count = state_vars.get('party_count')
         if party_count and party_count.current_value == 0 and phase != GamePhase.EARLY_GAME:
             threats.append("No Pokemon in party - game cannot progress")
         
@@ -436,17 +458,19 @@ class GameStateAnalyzer:
         elif phase == GamePhase.STARTER_PHASE:
             opportunities.append("Train starter Pokemon and explore nearby routes")
         
-        # Battle opportunities
-        in_battle = state_vars.get('in_battle')
-        hp_pct = self._calculate_health_percentage(state_vars)
-        if in_battle and in_battle.current_value and hp_pct > 50:
-            opportunities.append("In battle with good HP - opportunity for victory")
+        # Battle opportunities (only if we have Pokemon)
+        party_count = state_vars.get('party_count')
+        if party_count and party_count.current_value > 0:
+            in_battle = state_vars.get('in_battle')
+            hp_pct = self._calculate_health_percentage(state_vars)
+            if in_battle and in_battle.current_value and hp_pct > 50:
+                opportunities.append("In battle with good HP - opportunity for victory")
         
-        # Exploration opportunities
+        # Exploration opportunities (only if we have Pokemon for training)
         map_id = state_vars.get('player_map')
         if map_id and map_id.current_value in self.location_knowledge:
             location = self.location_knowledge[map_id.current_value]
-            if location['type'] == 'route':
+            if location['type'] == 'route' and party_count and party_count.current_value > 0:
                 opportunities.append("On route - good for training and catching Pokemon")
         
         return opportunities
