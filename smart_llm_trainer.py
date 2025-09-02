@@ -287,7 +287,7 @@ class SmartPokemonTrainer:
         print("🎮 Initializing PyBoy...")
         
         try:
-            self.pyboy = PyBoy(self.rom_path, window_type="headless")
+            self.pyboy = PyBoy(self.rom_path, window="null")
             
             # Try to load save state
             save_state_path = self.rom_path + ".state"
