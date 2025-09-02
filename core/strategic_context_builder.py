@@ -14,6 +14,8 @@ from datetime import datetime
 
 from .game_state_analyzer import GameStateAnalyzer, GameStateAnalysis, GamePhase, SituationCriticality
 from .goal_oriented_planner import GoalOrientedPlanner
+from .decision_history_analyzer import DecisionHistoryAnalyzer
+from .adaptive_strategy_system import AdaptiveStrategySystem
 
 @dataclass
 class ActionConsequence:
@@ -53,6 +55,8 @@ class StrategicContextBuilder:
     def __init__(self, max_history=20):
         self.game_state_analyzer = GameStateAnalyzer()
         self.goal_planner = GoalOrientedPlanner()
+        self.history_analyzer = DecisionHistoryAnalyzer()
+        self.adaptive_strategy = AdaptiveStrategySystem(self.history_analyzer, self.goal_planner)
         self.max_history = max_history
         
         # History tracking
@@ -475,3 +479,58 @@ Action: """
     def get_goal_statistics(self) -> Dict[str, Any]:
         """Get goal completion statistics"""
         return self.goal_planner.get_goal_stats()
+    
+    def get_adaptive_action(self, analysis: GameStateAnalysis, llm_manager=None) -> Tuple[int, str, str]:
+        """
+        Get action using the adaptive strategy system
+        
+        Returns:
+            Tuple of (action, decision_source, reasoning)
+        """
+        recent_actions = list(self.action_history)[-10:] if self.action_history else []
+        action, source, reasoning = self.adaptive_strategy.get_next_action(
+            analysis, llm_manager, recent_actions
+        )
+        
+        # Record the action for history
+        self.action_history.append(action)
+        
+        return action, source.value, reasoning
+    
+    def record_action_outcome(self, reward: float, led_to_progress: bool = False, was_effective: bool = True):
+        """Record the outcome of the last action for learning"""
+        self.reward_history.append(reward)
+        
+        # Update adaptive strategy performance
+        self.adaptive_strategy.record_outcome(reward, led_to_progress, was_effective)
+        
+        # If we have enough history, also record in decision history analyzer
+        if len(self.action_history) > 0 and hasattr(self, '_last_game_state'):
+            last_action = self.action_history[-1]
+            self.history_analyzer.record_decision(
+                game_state=self._last_game_state,
+                action_taken=last_action,
+                llm_reasoning=getattr(self, '_last_reasoning', None),
+                reward_received=reward,
+                led_to_progress=led_to_progress,
+                was_effective=was_effective
+            )
+    
+    def get_strategy_insights(self) -> Dict[str, Any]:
+        """Get insights about strategy performance and learning"""
+        return {
+            "adaptive_strategy": self.adaptive_strategy.get_strategy_stats(),
+            "learned_patterns": self.history_analyzer.get_patterns_summary(),
+            "goal_progress": self.goal_planner.get_goal_stats()
+        }
+    
+    def set_strategy(self, strategy_name: str):
+        """Force a specific strategy (for testing/debugging)"""
+        from .adaptive_strategy_system import StrategyType
+        
+        try:
+            strategy = StrategyType(strategy_name)
+            self.adaptive_strategy.force_strategy(strategy)
+        except ValueError:
+            available = [s.value for s in StrategyType]
+            raise ValueError(f"Invalid strategy '{strategy_name}'. Available: {available}")
