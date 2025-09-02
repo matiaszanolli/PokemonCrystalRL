@@ -18,15 +18,18 @@ import sys
 import os
 import threading
 import io
+import argparse
 from datetime import datetime
 from PIL import Image
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 
-# Import our accurate game state system
+# Import our systems
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from accurate_game_state import AccurateGameState
+from core.accurate_game_state import AccurateGameState
+from core.game_state_analyzer import GameStateAnalyzer, GameStateAnalysis
+from core.strategic_context_builder import StrategicContextBuilder, DecisionContext
 
 # Memory address mappings for Pokemon Crystal (VALIDATED addresses from your analysis)
 MEMORY_ADDRESSES = {
@@ -242,7 +245,7 @@ from core.experience_memory import ExperienceMemory
 from core.dqn_agent import DQNAgent, HybridAgent
 
 class LLMAgent:
-    """Local LLM agent for Pokemon Crystal decision making"""
+    """Enhanced LLM agent with strategic decision-making capabilities"""
     
     def __init__(self, model_name="smollm2:1.7b", base_url="http://localhost:11434"):
         self.model_name = model_name
@@ -250,14 +253,15 @@ class LLMAgent:
         self.decision_history = []
         self.last_decision_time = 0
         
-        # Initialize game intelligence system
+        # Initialize enhanced systems
         self.game_intelligence = GameIntelligence()
-        
-        # Initialize experience memory system
         self.experience_memory = ExperienceMemory()
+        self.context_builder = StrategicContextBuilder()
         
         # Test LLM availability
         self.available = self._test_llm_connection()
+        if not self.available:
+            print("⚠️ LLM not available - will use rule-based fallbacks")
         
     def _test_llm_connection(self) -> bool:
         """Test if LLM is available"""
@@ -268,12 +272,18 @@ class LLMAgent:
             return False
     
     def get_decision(self, game_state: Dict, screen_analysis: Dict, recent_actions: List[str]) -> Tuple[str, str]:
-        """Get LLM decision based on game state"""
+        """Get LLM decision based on comprehensive state analysis"""
         if not self.available:
             return self._fallback_decision(game_state), "LLM unavailable - using fallback"
         
         try:
-            prompt = self._build_prompt(game_state, screen_analysis, recent_actions)
+            # Build comprehensive decision context
+            context = self.context_builder.build_context(
+                game_state, recent_actions[-1] if recent_actions else None, None
+            )
+            
+            # Get prompt using enhanced context
+            prompt = self._build_prompt(game_state, screen_analysis, recent_actions, context)
             
             response = requests.post(
                 f"{self.base_url}/api/generate",
@@ -310,17 +320,19 @@ class LLMAgent:
         except Exception as e:
             return self._fallback_decision(game_state), f"LLM error: {str(e)}"
     
-    def _build_prompt(self, game_state: Dict, screen_analysis: Dict, recent_actions: List[str]) -> str:
-        """Build context-aware prompt for LLM with game intelligence"""
+    def _build_prompt(self, game_state: Dict, screen_analysis: Dict, recent_actions: List[str], 
+                       decision_context: DecisionContext) -> str:
+        """Build enhanced prompt with strategic context and intelligence"""
         
         # Check if failsafe intervention is active
         failsafe_context = getattr(self, 'failsafe_context', {})
         is_failsafe_active = failsafe_context.get('stuck_detected', False)
         
-        # Use game intelligence to analyze context
+        # Use game intelligence and decision context
         game_context = self.game_intelligence.analyze_game_context(game_state, screen_analysis)
         action_plans = self.game_intelligence.get_action_plan(game_context, game_state)
         contextual_advice = self.game_intelligence.get_contextual_advice(game_context, recent_actions)
+        strategic_context = decision_context.current_analysis
         
         # Check for learned experiences
         situation_hash = self.experience_memory.get_situation_hash(game_state, screen_analysis, {
@@ -417,6 +429,17 @@ FAILSAFE OVERRIDE: Ignore vague goals. Focus ONLY on changing your coordinates!"
             action_plan_text = f"\n\nCURRENT PLAN: {top_plan.goal}\nSteps:\n"
             action_plan_text += "\n".join([f"{i+1}. {step}" for i, step in enumerate(top_plan.steps)])
         
+# Add strategic analysis if available
+        strategic_text = ""
+        if strategic_context:
+            strategic_text = f"""
+\nSTRATEGIC ANALYSIS:
+- Phase: {strategic_context.phase.name}
+- Criticality: {strategic_context.criticality.value}/5
+- Progress: {strategic_context.progression_score}%
+- Threats: {', '.join(strategic_context.immediate_threats) if strategic_context.immediate_threats else 'None'}
+- Opportunities: {', '.join(strategic_context.opportunities) if strategic_context.opportunities else 'None'}"""
+
         # Add learned experience if available
         experience_text = ""
         if learned_actions:
@@ -561,6 +584,11 @@ class PokemonRewardCalculator:
         # Simple step counter and rate limit for map-entry rewards
         self.step_counter = 0
         self.last_map_reward_step = -10_000
+        
+        # ANTI-FARMING: Track recent location history to prevent back-and-forth movement farming
+        self.recent_locations = []  # Store last N locations as (map, x, y) tuples
+        self.location_history_size = 10  # Track last 10 locations
+        self.movement_penalty_tracker = {}  # Track repeated movements between same locations
         
         # Track repeated blocked movements for escalating penalties
         self.blocked_movement_tracker = {}  # (map, x, y, direction) -> consecutive_count
@@ -897,7 +925,7 @@ class PokemonRewardCalculator:
         return 0.0
     
     def _calculate_movement_reward(self, current: Dict, previous: Dict) -> float:
-        """Small reward for any coordinate movement - helps break stuck patterns"""
+        """Small reward for any coordinate movement - with anti-farming protection"""
         # CRITICAL: Only reward movement when actually in overworld
         curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
         prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
@@ -924,28 +952,69 @@ class PokemonRewardCalculator:
         if not (0 <= prev_x <= 255 and 0 <= prev_y <= 255 and 0 <= prev_map <= 255):
             return 0.0
         
+        current_location = (curr_map, curr_x, curr_y)
+        previous_location = (prev_map, prev_x, prev_y)
+        
+        # Update location history for anti-farming
+        self.recent_locations.append(current_location)
+        if len(self.recent_locations) > self.location_history_size:
+            self.recent_locations.pop(0)
+        
         # Check if coordinates changed
         position_changed = (curr_x != prev_x) or (curr_y != prev_y)
         map_changed = (curr_map != prev_map)
         
-        # Reward any position change
-        if position_changed or map_changed:
-            # Validate this is reasonable movement (not huge coordinate jumps)
-            if map_changed:
-                map_diff = abs(curr_map - prev_map)
-                if map_diff <= 10:  # Reasonable map transition
-                    return 0.05  # Small reward for changing maps
-                else:
-                    return 0.0  # Skip suspicious map jumps
-            else:
-                # Same map, different coordinates
-                coord_diff = abs(curr_x - prev_x) + abs(curr_y - prev_y)
-                if 1 <= coord_diff <= 3:  # Reasonable single-step movement
-                    return 0.02  # Small reward for moving within same map
-                else:
-                    return 0.0  # Skip suspicious coordinate jumps
+        # No movement = no reward
+        if not position_changed and not map_changed:
+            return 0.0
         
-        return 0.0  # No movement, no reward
+        # ANTI-FARMING: Check for back-and-forth movement patterns
+        if len(self.recent_locations) >= 4:  # Need some history
+            # Check if we're oscillating between same locations
+            recent_unique = list(set(self.recent_locations[-4:]))  # Last 4 locations, unique
+            if len(recent_unique) <= 2:  # Only moving between 1-2 locations
+                # Count how often we've been to current location recently
+                recent_visits = self.recent_locations[-6:].count(current_location)
+                if recent_visits >= 3:  # Been here 3+ times in last 6 moves
+                    # Apply escalating penalty for farming
+                    farming_key = frozenset([current_location, previous_location])
+                    if farming_key not in self.movement_penalty_tracker:
+                        self.movement_penalty_tracker[farming_key] = 0
+                    self.movement_penalty_tracker[farming_key] += 1
+                    
+                    # Escalating penalty: -0.01, -0.02, -0.03, etc.
+                    penalty = -0.01 * self.movement_penalty_tracker[farming_key]
+                    penalty = max(penalty, -0.1)  # Cap at -0.1
+                    return penalty
+        
+        # Clean up old penalty tracking occasionally
+        if self.step_counter % 100 == 0:
+            # Remove penalty tracking for location pairs not seen recently
+            current_pairs = set()
+            for i in range(len(self.recent_locations) - 1):
+                pair = frozenset([self.recent_locations[i], self.recent_locations[i+1]])
+                current_pairs.add(pair)
+            
+            # Keep only recently active pairs
+            self.movement_penalty_tracker = {
+                k: v for k, v in self.movement_penalty_tracker.items() 
+                if k in current_pairs
+            }
+        
+        # Reward legitimate movement if not farming
+        if map_changed:
+            map_diff = abs(curr_map - prev_map)
+            if map_diff <= 10:  # Reasonable map transition
+                return 0.02  # Reduced reward for changing maps
+            else:
+                return 0.0  # Skip suspicious map jumps
+        else:
+            # Same map, different coordinates
+            coord_diff = abs(curr_x - prev_x) + abs(curr_y - prev_y)
+            if 1 <= coord_diff <= 3:  # Reasonable single-step movement
+                return 0.01  # Reduced reward for moving within same map
+            else:
+                return 0.0  # Skip suspicious coordinate jumps
     
     def _calculate_battle_reward(self, current: Dict, previous: Dict) -> float:
         """Reward for battle performance"""
@@ -1560,6 +1629,16 @@ class WebMonitor(BaseHTTPRequestHandler):
                                 <div class="stat-label">Badges Earned</div>
                                 <div class="progress-bar"><div class="progress-fill" id="badge-progress"></div></div>
                             </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="phase">-</div>
+                                <div class="stat-label">Game Phase</div>
+                                <div class="stat-change" id="phase-change"></div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="progress">0%</div>
+                                <div class="stat-label">Phase Progress</div>
+                                <div class="progress-bar"><div class="progress-fill" id="phase-progress"></div></div>
+                            </div>
                         </div>
                         
                         <!-- Game Screen -->
@@ -1664,6 +1743,17 @@ class WebMonitor(BaseHTTPRequestHandler):
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Strategic Analysis -->
+                        <div class="panel">
+                            <h3>🎯 Strategic Analysis</h3>
+                            <div class="reward-bars" id="strategic-info">
+                                <div class="reward-bar">Phase: <span id="strategic-phase">-</span></div>
+                                <div class="reward-bar">Criticality: <span id="strategic-criticality">-</span>/5</div>
+                                <div class="reward-bar">Threats: <span id="strategic-threats">None</span></div>
+                                <div class="reward-bar">Opportunities: <span id="strategic-opportunities">None</span></div>
+                            </div>
+                        </div>
                         
                         <!-- LLM Decisions -->
                         <div class="panel">
@@ -1718,6 +1808,8 @@ class WebMonitor(BaseHTTPRequestHandler):
                             document.getElementById('total-reward').textContent = (stats.total_reward || 0).toFixed(2);
                             document.getElementById('level').textContent = stats.player_level || 0;
                             document.getElementById('badges').textContent = `${stats.badges_total || 0}/16`;
+                            document.getElementById('phase').textContent = stats.game_phase || 'Unknown';
+                            document.getElementById('progress').textContent = `${stats.phase_progress || 0}%`;
                             
                             // Update change indicators
                             document.getElementById('actions-change').innerHTML = formatChange(stats.actions_taken, lastStats.actions_taken);
@@ -1729,6 +1821,16 @@ class WebMonitor(BaseHTTPRequestHandler):
                             // Update badge progress
                             const badgeProgress = ((stats.badges_total || 0) / 16) * 100;
                             document.getElementById('badge-progress').style.width = badgeProgress + '%';
+                            
+                            // Update progress bars
+                            const phaseProgress = stats.phase_progress || 0;
+                            document.getElementById('phase-progress').style.width = phaseProgress + '%';
+                            
+                            // Update strategic info
+                            document.getElementById('strategic-phase').textContent = stats.game_phase || 'Unknown';
+                            document.getElementById('strategic-criticality').textContent = stats.criticality || 0;
+                            document.getElementById('strategic-threats').textContent = stats.threats?.join(', ') || 'None';
+                            document.getElementById('strategic-opportunities').textContent = stats.opportunities?.join(', ') || 'None';
                             
                             // Update game state info
                             document.getElementById('player-map').textContent = stats.final_game_state?.player_map || '-';
@@ -1912,45 +2014,74 @@ class WebMonitor(BaseHTTPRequestHandler):
 class LLMPokemonTrainer:
     """Advanced Pokemon Crystal trainer with LLM integration and reward system"""
     
-    def __init__(self, rom_path, max_actions=5000, llm_model="smollm2:1.7b", 
-                 llm_interval=20, enable_web=True, web_port=8080, enable_dqn=True, 
-                 dqn_model_path=None):
+    def __init__(self, rom_path, max_actions=5000, save_state=None,
+                 llm_model="smollm2:1.7b", llm_base_url="http://localhost:11434",
+                 llm_interval=20, llm_temperature=0.7, enable_web=True, web_port=8080,
+                 web_host="localhost", enable_dqn=True, dqn_model_path=None,
+                 dqn_learning_rate=1e-4, dqn_batch_size=32, dqn_memory_size=50000,
+                 dqn_training_frequency=4, dqn_save_frequency=500, log_dir="logs",
+                 show_progress=True):
+        # Core paths and configuration
         self.rom_path = rom_path
+        self.save_state = save_state
         self.max_actions = max_actions
+        self.log_dir = log_dir
+        self.show_progress = show_progress
+        
+        # LLM configuration
         self.llm_interval = llm_interval
+        self.llm_temperature = llm_temperature
+        
+        # Web server configuration
         self.enable_web = enable_web
         self.web_port = web_port
+        self.web_host = web_host
+        
+        # DQN configuration
         self.enable_dqn = enable_dqn
+        self.dqn_learning_rate = dqn_learning_rate
+        self.dqn_batch_size = dqn_batch_size
+        self.dqn_memory_size = dqn_memory_size
+        self.dqn_training_frequency = dqn_training_frequency
+        self.dqn_save_frequency = dqn_save_frequency
         
         # Core components
         self.pyboy = None
-        self.llm_agent = LLMAgent(llm_model)
+        self.llm_agent = LLMAgent(llm_model, llm_base_url)
         self.reward_calculator = PokemonRewardCalculator()
+        
+        # Initialize logging
+        self.logger = logging.getLogger("LLMTrainer")
+        self.logger.setLevel(logging.INFO)
         
         # DQN components
         self.dqn_agent = None
         self.hybrid_agent = None
-        self.dqn_training_frequency = 4  # Train DQN every N actions
-        self.dqn_save_frequency = 500  # Save DQN model every N actions
+        self.dqn_training_frequency = dqn_training_frequency  # Train DQN every N actions
+        self.dqn_save_frequency = dqn_save_frequency  # Save DQN model every N actions
+        self.dqn_memory_size = dqn_memory_size  # Size of experience replay buffer
+        self.dqn_batch_size = dqn_batch_size  # Training batch size
+        self.dqn_learning_rate = dqn_learning_rate  # Learning rate for optimizer
         
         if self.enable_dqn:
             # Initialize DQN agent
             self.dqn_agent = DQNAgent(
                 state_size=32,
                 action_size=8,
-                learning_rate=1e-4,
+                learning_rate=self.dqn_learning_rate,
                 gamma=0.99,
                 epsilon_start=0.9,
                 epsilon_end=0.05,
                 epsilon_decay=0.995,
-                memory_size=50000,
-                batch_size=32,
+                memory_size=self.dqn_memory_size,
+                batch_size=self.dqn_batch_size,
                 target_update=1000
             )
             
             # Load existing model if provided
             if dqn_model_path and os.path.exists(dqn_model_path):
                 self.dqn_agent.load_model(dqn_model_path)
+                print(f"📥 Loaded DQN model from {dqn_model_path}")
             
             # Create hybrid agent combining LLM and DQN
             self.hybrid_agent = HybridAgent(
@@ -1967,11 +2098,15 @@ class LLMPokemonTrainer:
         self.recent_action_sequences = []
         self.experience_window = 10  # Track last N actions for experience recording
         
-        # Training state
+        # Training state and performance tracking
         self.actions_taken = 0
         self.start_time = time.time()
         self.previous_game_state = {}
         self.total_reward = 0.0
+        
+        # Performance logging
+        self.decision_log = []
+        self.performance_log = []
         self.last_llm_decision_action = 0
         
         # Failsafe mechanism for stuck detection
@@ -2039,7 +2174,53 @@ class LLMPokemonTrainer:
             self.web_thread = threading.Thread(target=self.web_server.serve_forever, daemon=True)
             self.web_thread.start()
             
+            # Initialize detailed stats tracking for web display
+        self.web_stats_history = {
+            'reward_history': [],  # Track reward trends
+            'action_history': [],  # Track action frequencies
+            'progression': [],     # Track game progression
+            'performance': []      # Track system performance
+        }
+        
+        # Initialize enhanced performance tracking
+        self.performance_tracking = {
+            'reward_window': [],           # Track rewards for rate calculation
+            'llm_success_window': [],      # Track LLM success for accuracy
+            'action_counts': {},          # Count of each action type
+            'state_transitions': {},      # Track state changes
+            'window_size': 100            # Size of sliding windows
+        }
+        
+        # Set initial web stats with expanded metrics
+        self.stats.update({
+            'experience_stats': {
+                'total_experiences': 0,
+                'positive_patterns': 0,
+                'learning_rate': 1.0
+            },
+            'recent_stats': {
+                'reward_rate': 0.0,       # Per-action reward rate
+                'exploration_rate': 0.0,   # Rate of new area discovery
+                'stuck_rate': 0.0,        # Rate of stuck detection
+                'success_rate': 0.0       # Rate of positive outcomes
+            },
+            'training_metrics': {
+                'llm_accuracy': 0.0,      # LLM decision quality
+                'dqn_loss': 0.0,         # DQN training loss
+                'hybrid_balance': 0.5,    # LLM vs DQN balance
+                'state_coverage': 0.0     # Game state exploration
+            },
+            'session_metrics': {
+                'start_time': time.time(),
+                'last_save': time.time(),
+                'total_steps': 0,
+                'unique_states': set(),
+                'error_count': 0
+            }
+        })
+            
             print(f"🌐 Enhanced web monitor: http://localhost:{self.web_port}")
+            print("   Real-time metrics and visualization available")
             
         except Exception as e:
             print(f"⚠️ Failed to start web server: {e}")
@@ -2378,17 +2559,79 @@ class LLMPokemonTrainer:
         # Pass action info to prevent SELECT button false rewards
         self.reward_calculator.last_action = action
         
-        reward, reward_breakdown = self.reward_calculator.calculate_reward(current_state, previous_state)
+        # Pass screen state info to reward calculator for BOTH exploration AND progression reward filtering
+        self.reward_calculator.last_screen_state = current_screen_analysis.get('state', 'unknown')
+        self.reward_calculator.prev_screen_state = previous_screen_analysis.get('state', 'unknown')
         
-        # DEBUG: Print all reward components if there's a significant reward
-        if abs(reward) > 1.0:
-            print(f"🔍 DEBUG REWARD: Total={reward:+.2f} | Action: {action}")
-            for category, value in reward_breakdown.items():
-                if abs(value) > 0.01:
-                    print(f"   {category}: {value:+.2f}")
-            print(f"   Party count: {previous_state.get('party_count', 0)} -> {current_state.get('party_count', 0)}")
-            print(f"   Level: {previous_state.get('player_level', 0)} -> {current_state.get('player_level', 0)}")
-            print(f"   Screen: {getattr(self.reward_calculator, 'prev_screen_state', '?')} -> {getattr(self.reward_calculator, 'last_screen_state', '?')}")
+        # Pass action info to prevent SELECT button false rewards
+        self.reward_calculator.last_action = action
+        
+        # Calculate reward with enhanced state validation
+        try:
+            reward, reward_breakdown = self.reward_calculator.calculate_reward(current_state, previous_state)
+            
+            # Track reward history for analysis
+            if not hasattr(self, 'reward_history'):
+                self.reward_history = []
+            
+            # Keep detailed reward history
+            reward_entry = {
+                'action': action,
+                'total_reward': reward,
+                'breakdown': reward_breakdown,
+                'state_changes': {
+                    'party_count': (previous_state.get('party_count', 0), current_state.get('party_count', 0)),
+                    'level': (previous_state.get('player_level', 0), current_state.get('player_level', 0)),
+                    'position': (
+                        (previous_state.get('player_x', 0), previous_state.get('player_y', 0)),
+                        (current_state.get('player_x', 0), current_state.get('player_y', 0))
+                    ),
+                    'map': (previous_state.get('player_map', 0), current_state.get('player_map', 0)),
+                    'screen_state': (
+                        previous_screen_analysis.get('state', 'unknown'),
+                        current_screen_analysis.get('state', 'unknown')
+                    )
+                },
+                'timestamp': time.time()
+            }
+            
+            self.reward_history.append(reward_entry)
+            if len(self.reward_history) > 1000:  # Keep last 1000 rewards
+                self.reward_history.pop(0)
+            
+            # Analyze significant rewards in detail
+            if abs(reward) > 1.0:
+                print(f"🔍 REWARD ANALYSIS | Action {self.actions_taken} | {action.upper()}")
+                print(f"   💰 Total: {reward:+.2f}")
+                
+                # Show significant components
+                significant_components = [
+                    (cat, val) for cat, val in reward_breakdown.items()
+                    if abs(val) > 0.01
+                ]
+                if significant_components:
+                    print("   📊 Components:")
+                    for category, value in significant_components:
+                        prefix = '🟢' if value > 0 else '🔴'
+                        print(f"      {prefix} {category}: {value:+.2f}")
+                
+                # Show relevant state changes
+                print("   📈 State Changes:")
+                for key, (old, new) in reward_entry['state_changes'].items():
+                    if old != new:
+                        print(f"      {key}: {old} → {new}")
+                print()
+            
+        except Exception as e:
+            # Handle reward calculation errors
+            print(f"⚠️ Reward calculation error: {str(e)}")
+            reward = 0.0
+            reward_breakdown = {'error': 0.0}
+            
+            # Log error for debugging
+            self.logger.error(f"Reward calculation failed: {str(e)}")
+            self.logger.error(f"States: Previous={previous_state}, Current={current_state}")
+            self.logger.error(f"Screen: Previous={previous_screen_analysis}, Current={current_screen_analysis}")
         
         # DQN experience storage and training
         if self.enable_dqn and self.dqn_agent:
@@ -2583,65 +2826,402 @@ class LLMPokemonTrainer:
             return intermediate_state
     
     def _track_experience(self, action: str, previous_state: Dict, current_state: Dict, reward: float):
-        """Track experience for learning system"""
-        # Create screen analysis for previous state
-        screen_analysis = self.analyze_screen()
-        
-        # Get game context
-        game_context = self.llm_agent.game_intelligence.analyze_game_context(previous_state, screen_analysis)
-        
-        # Create situation hash
-        situation_hash = self.llm_agent.experience_memory.get_situation_hash(
-            previous_state, 
-            screen_analysis, 
-            {
+        """Track experience for learning with enhanced pattern recognition"""
+        try:
+            # Create state analysis with deeper context
+            screen_analysis = self.analyze_screen()
+            
+            # Get enhanced game context
+            game_context = self.llm_agent.game_intelligence.analyze_game_context(previous_state, screen_analysis)
+            
+            # Create richer situation context including screen state
+            situation_context = {
                 'phase': game_context.phase.name,
-                'location_type': game_context.location_type.name
+                'location_type': game_context.location_type.name,
+                'screen_state': screen_analysis.get('state', 'unknown'),
+                'has_pokemon': previous_state.get('party_count', 0) > 0,
+                'in_battle': previous_state.get('in_battle', 0) == 1,
+                'location_progress': {
+                    'map': previous_state.get('player_map', 0),
+                    'xy': (previous_state.get('player_x', 0), previous_state.get('player_y', 0))
+                }
             }
-        )
-        
-        # Add to recent tracking
-        self.recent_situation_hashes.append(situation_hash)
-        self.recent_action_sequences.append(action.upper())
-        
-        # Keep window size manageable
-        if len(self.recent_action_sequences) > self.experience_window:
-            self.recent_situation_hashes.pop(0)
-            self.recent_action_sequences.pop(0)
-        
-        # Record significant experiences (positive rewards or major events)
-        if reward > 0.1 or abs(reward) > 10.0:  # Significant positive or major event
-            if len(self.recent_action_sequences) >= 3:  # Need some history
-                self.llm_agent.experience_memory.record_experience(
-                    situation_hash=situation_hash,
-                    actions=self.recent_action_sequences[-5:],  # Last 5 actions
-                    reward=reward,
-                    context={
-                        'phase': game_context.phase.name,
-                        'location_type': game_context.location_type.name,
-                        'timestamp': time.time()
-                    }
+            
+            # Create enhanced situation hash with more context
+            situation_hash = self.llm_agent.experience_memory.get_situation_hash(
+                previous_state, 
+                screen_analysis,
+                situation_context
+            )
+            
+            # Track recent situations and actions
+            self.recent_situation_hashes.append({
+                'hash': situation_hash,
+                'context': situation_context,
+                'timestamp': time.time()
+            })
+            self.recent_action_sequences.append({
+                'action': action.upper(),
+                'reward': reward,
+                'state_change': self._get_significant_state_changes(previous_state, current_state)
+            })
+            
+            # Maintain manageable history window
+            window_size = self.experience_window
+            if len(self.recent_action_sequences) > window_size:
+                self.recent_situation_hashes = self.recent_situation_hashes[-window_size:]
+                self.recent_action_sequences = self.recent_action_sequences[-window_size:]
+            
+            # Analyze recent experience patterns
+            if len(self.recent_action_sequences) >= 3:
+                # Identify action patterns that led to good outcomes
+                recent_actions = [a['action'] for a in self.recent_action_sequences[-5:]]
+                recent_rewards = [a['reward'] for a in self.recent_action_sequences[-5:]]
+                cumulative_reward = sum(recent_rewards)
+                
+                # Track significant experiences (with richer context)
+                experience_significance = self._evaluate_experience_significance(
+                    reward, cumulative_reward, current_state, previous_state
                 )
+                
+                if experience_significance['is_significant']:
+                    # Record enriched experience
+                    self.llm_agent.experience_memory.record_experience(
+                        situation_hash=situation_hash,
+                        actions=recent_actions,
+                        reward=reward,
+                        context={
+                            **situation_context,
+                            'cumulative_reward': cumulative_reward,
+                            'significance_type': experience_significance['type'],
+                            'pattern_info': experience_significance['pattern'],
+                            'state_changes': experience_significance['changes'],
+                            'timestamp': time.time()
+                        }
+                    )
+                    
+                    # Log significant experience for debugging
+                    if self.logger.isEnabledFor(logging.DEBUG):
+                        self.logger.debug(
+                            f"Recorded significant experience: {experience_significance['type']} "
+                            f"[Pattern: {' → '.join(recent_actions)}] "
+                            f"Reward: {reward:+.2f} (Cumulative: {cumulative_reward:+.2f})"
+                        )
+            
+        except Exception as e:
+            self.logger.error(f"Experience tracking error: {str(e)}")
+            self.logger.error("Recent actions:", self.recent_action_sequences[-5:] if self.recent_action_sequences else [])
+    
+    def _get_significant_state_changes(self, previous: Dict, current: Dict) -> Dict:
+        """Identify significant state changes between states"""
+        changes = {}
+        
+        # Check party changes
+        if current.get('party_count', 0) != previous.get('party_count', 0):
+            changes['party'] = {
+                'from': previous.get('party_count', 0),
+                'to': current.get('party_count', 0)
+            }
+        
+        # Check level changes
+        if current.get('player_level', 0) != previous.get('player_level', 0):
+            changes['level'] = {
+                'from': previous.get('player_level', 0),
+                'to': current.get('player_level', 0)
+            }
+        
+        # Check battle state changes
+        prev_battle = bool(previous.get('in_battle', 0))
+        curr_battle = bool(current.get('in_battle', 0))
+        if prev_battle != curr_battle:
+            changes['battle'] = {
+                'from': prev_battle,
+                'to': curr_battle,
+                'enemy_level': current.get('enemy_level', 0) if curr_battle else None
+            }
+        
+        # Check location changes
+        prev_loc = (previous.get('player_map', 0), previous.get('player_x', 0), previous.get('player_y', 0))
+        curr_loc = (current.get('player_map', 0), current.get('player_x', 0), current.get('player_y', 0))
+        if prev_loc != curr_loc:
+            changes['location'] = {
+                'from': {'map': prev_loc[0], 'x': prev_loc[1], 'y': prev_loc[2]},
+                'to': {'map': curr_loc[0], 'x': curr_loc[1], 'y': curr_loc[2]}
+            }
+        
+        return changes
+    
+    def _evaluate_experience_significance(self, reward: float, cumulative_reward: float,
+                                        current: Dict, previous: Dict) -> Dict:
+        """Evaluate the significance of an experience with pattern recognition"""
+        result = {
+            'is_significant': False,
+            'type': None,
+            'pattern': None,
+            'changes': self._get_significant_state_changes(previous, current)
+        }
+        
+        # Check for significant immediate rewards
+        if reward > 0.1 or abs(reward) > 10.0:
+            result['is_significant'] = True
+            result['type'] = 'reward'
+        
+        # Check for significant game progress
+        state_changes = result['changes']
+        if state_changes.get('party') or state_changes.get('level'):
+            result['is_significant'] = True
+            result['type'] = 'progression'
+            
+        # Check for strategic achievements
+        if state_changes.get('location', {}).get('to', {}).get('map') != \
+           state_changes.get('location', {}).get('from', {}).get('map'):
+            result['is_significant'] = True
+            result['type'] = 'exploration'
+        
+        # Check battle outcomes
+        battle_change = state_changes.get('battle', {})
+        if battle_change and not battle_change.get('to') and battle_change.get('from'):
+            # Battle ended - check if it was significant
+            if reward > 5.0:  # Significant positive reward suggests victory
+                result['is_significant'] = True
+                result['type'] = 'battle_victory'
+            elif reward < -2.0:  # Significant negative reward suggests defeat/flee
+                result['is_significant'] = True
+                result['type'] = 'battle_defeat'
+        
+        # Check for cumulative success patterns
+        if cumulative_reward > 1.0:
+            result['is_significant'] = True
+            result['type'] = 'success_pattern'
+            
+        # Add pattern analysis if significant
+        if result['is_significant']:
+            pattern_info = {
+                'context': {
+                    'has_pokemon': current.get('party_count', 0) > 0,
+                    'in_battle': current.get('in_battle', 0) == 1,
+                    'location': (current.get('player_map', 0), current.get('player_x', 0), current.get('player_y', 0))
+                },
+                'reward_scale': 'major' if abs(reward) > 10.0 else 'minor',
+                'cumulative_impact': 'positive' if cumulative_reward > 0 else 'negative'
+            }
+            result['pattern'] = pattern_info
+            
+        return result
     
     def update_web_data(self):
-        """Update data for web monitoring"""
+        """Update data for enhanced web monitoring"""
         if not self.enable_web or not self.web_server:
             return
             
-        # Update performance stats
-        elapsed = time.time() - self.start_time
-        self.stats['training_time'] = elapsed
-        self.stats['actions_per_second'] = self.actions_taken / elapsed if elapsed > 0 else 0
-        
-        # Update current game state and screen analysis
-        current_game_state = self.get_game_state()
-        screen_analysis = self.analyze_screen()
-        
-        self.stats['final_game_state'] = current_game_state
-        self.stats['screen_state'] = screen_analysis.get('state', 'unknown')
-        
-        # Update screenshot
         try:
+            # Update core performance stats
+            elapsed = time.time() - self.start_time
+            self.stats.update({
+                'training_time': elapsed,
+                'actions_per_second': self.actions_taken / elapsed if elapsed > 0 else 0,
+                'memory_usage': self.dqn_agent.get_memory_usage() if self.enable_dqn else 0,
+                'training_status': 'running' if self.running else 'stopped'
+            })
+            
+            # Get current state information
+            current_game_state = self.get_game_state()
+            screen_analysis = self.analyze_screen()
+            
+            # Calculate various game progress metrics
+            progress_metrics = self._calculate_progress_metrics(current_game_state)
+            
+            # Get enhanced game context
+            if hasattr(self.llm_agent, 'context_builder'):
+                context = self.llm_agent.context_builder.build_context(
+                    current_game_state,
+                    self.recent_actions[-1] if self.recent_actions else None,
+                    None
+                )
+                analysis = context.current_analysis
+                
+                # Update strategic information
+                self.stats.update({
+                    'game_phase': analysis.phase.name,
+                    'criticality': analysis.criticality.value,
+                    'phase_progress': analysis.progression_score,
+                    'threats': analysis.immediate_threats,
+                    'opportunities': analysis.opportunities,
+                    'strategic_advice': self._get_strategic_advice(analysis)
+                })
+            
+            # Update reward tracking information
+            if hasattr(self, 'reward_history') and self.reward_history:
+                recent_rewards = self.reward_history[-10:]
+                self.stats.update({
+                    'recent_rewards': [
+                        {
+                            'action': r['action'],
+                            'reward': r['total_reward'],
+                            'breakdown': r['breakdown'],
+                            'timestamp': r['timestamp']
+                        } for r in recent_rewards
+                    ],
+                    'reward_trends': self._calculate_reward_trends(recent_rewards)
+                })
+            
+            # Update DQN metrics if enabled
+            if self.enable_dqn and self.dqn_agent:
+                dqn_stats = self.dqn_agent.get_training_stats()
+                self.stats.update({
+                    'dqn_stats': {
+                        'steps_trained': dqn_stats['steps_trained'],
+                        'epsilon': dqn_stats['epsilon'],
+                        'memory_size': dqn_stats['memory_size'],
+                        'recent_losses': dqn_stats.get('recent_losses', []),
+                        'exploration_rate': dqn_stats.get('exploration_rate', 0.0)
+                    }
+                })
+            
+            # Calculate enhanced performance metrics
+            reward_rate = len([r for r in self.performance_tracking['reward_window'] if r > 0]) / \
+                         max(len(self.performance_tracking['reward_window']), 1)
+                         
+            llm_accuracy = len([d for d in self.performance_tracking['llm_success_window'] if d]) / \
+                          max(len(self.performance_tracking['llm_success_window']), 1)
+            
+            # Calculate action distribution
+            total_actions = sum(self.performance_tracking['action_counts'].values()) or 1
+            action_distribution = {
+                action: count/total_actions 
+                for action, count in self.performance_tracking['action_counts'].items()
+            }
+            
+            # Update performance metrics
+            self.stats['recent_stats'].update({
+                'reward_rate': reward_rate,
+                'exploration_rate': len(getattr(self.reward_calculator, 'visited_maps', set())) / 255,
+                'stuck_rate': self.actions_without_reward / max(self.actions_taken, 1),
+                'success_rate': reward_rate
+            })
+            
+            # Update training metrics
+            self.stats['training_metrics'].update({
+                'llm_accuracy': llm_accuracy,
+                'dqn_loss': float(np.mean(dqn_stats.get('recent_losses', [0]))) if self.enable_dqn else 0.0,
+                'hybrid_balance': self.hybrid_agent.get_balance() if hasattr(self.hybrid_agent, 'get_balance') else 0.5,
+                'state_coverage': len(self.stats['session_metrics']['unique_states']) / (255 * 255) * 100
+            })
+            
+            # Track history for trends
+            self.web_stats_history['reward_history'].append({
+                'timestamp': time.time(),
+                'reward_rate': reward_rate,
+                'total_reward': self.total_reward,
+                'action_dist': action_distribution
+            })
+            
+            # Keep history size manageable
+            if len(self.web_stats_history['reward_history']) > 1000:
+                self.web_stats_history['reward_history'] = self.web_stats_history['reward_history'][-1000:]
+            
+            # Update game state and progress
+            self.stats.update({
+                'final_game_state': current_game_state,
+                'screen_state': screen_analysis.get('state', 'unknown'),
+                'progress_metrics': progress_metrics,
+                'recent_actions': self.recent_actions[-10:],
+                'stuck_detection': {
+                    'actions_without_reward': self.actions_without_reward,
+                    'stuck_threshold': self.stuck_threshold,
+                    'stuck_location': getattr(self.llm_agent, 'failsafe_context', {}).get('stuck_location')
+                }
+            })
+            
+            # Update screenshot with error handling
+            self._update_screenshot()
+            
+            # Update live memory data for debugging
+            self.web_server.live_memory_data = current_game_state.copy()
+            
+            # Update final server stats
+            self.web_server.trainer_stats = self.stats
+            
+        except Exception as e:
+            self.logger.error(f"Web data update error: {str(e)}")
+            # Ensure the web interface shows error state
+            self.stats['error'] = str(e)
+            self.web_server.trainer_stats = self.stats
+    
+    def _calculate_progress_metrics(self, state: Dict) -> Dict:
+        """Calculate detailed progress metrics"""
+        return {
+            'game_completion': {
+                'badges': (state.get('badges_total', 0) / 16) * 100,
+                'pokemon': min((state.get('party_count', 0) / 6) * 100, 100),
+                'exploration': len(getattr(self.reward_calculator, 'visited_maps', set())) / 255 * 100
+            },
+            'current_status': {
+                'has_pokemon': state.get('party_count', 0) > 0,
+                'in_battle': state.get('in_battle', 0) == 1,
+                'pokemon_health': state.get('health_percentage', 0),
+                'location': {
+                    'map': state.get('player_map', 0),
+                    'position': (state.get('player_x', 0), state.get('player_y', 0))
+                }
+            },
+            'milestones': {
+                'first_pokemon': state.get('party_count', 0) > 0,
+                'first_battle': any(h.get('type') == 'battle_victory' 
+                                  for h in getattr(self, 'reward_history', [])),
+                'first_badge': state.get('badges_total', 0) > 0
+            }
+        }
+    
+    def _get_strategic_advice(self, analysis) -> List[str]:
+        """Generate strategic advice based on current analysis"""
+        advice = []
+        
+        # Phase-specific advice
+        advice.append(f"Current Phase: {analysis.phase.name}")
+        
+        # Add critical information
+        if analysis.criticality.value >= 4:
+            advice.append("⚠️ High-priority situation detected!")
+        
+        # Add immediate threats
+        if analysis.immediate_threats:
+            advice.append(f"🔥 Threats: {', '.join(analysis.immediate_threats)}")
+        
+        # Add opportunities
+        if analysis.opportunities:
+            advice.append(f"✨ Opportunities: {', '.join(analysis.opportunities)}")
+        
+        # Add progression advice
+        if analysis.progression_score < 50:
+            advice.append("🎯 Focus on main objectives to progress")
+        elif analysis.progression_score >= 90:
+            advice.append("🌟 Excellent progress! Ready for next phase")
+        
+        return advice
+    
+    def _calculate_reward_trends(self, recent_rewards: List[Dict]) -> Dict:
+        """Calculate trends in recent rewards"""
+        if not recent_rewards:
+            return {}
+            
+        rewards = [r['total_reward'] for r in recent_rewards]
+        return {
+            'average': sum(rewards) / len(rewards),
+            'trend': 'improving' if rewards[-1] > rewards[0] else 'declining',
+            'consistency': abs(max(rewards) - min(rewards)) < 1.0,
+            'peaks': {
+                'positive': max(rewards),
+                'negative': min(rewards)
+            }
+        }
+    
+    def _update_screenshot(self):
+        """Update screenshot with error handling"""
+        try:
+            if not self.pyboy:
+                return
+                
             screen = self.pyboy.screen.ndarray
             if screen.shape[2] == 4:  # RGBA to RGB
                 screen = screen[:, :, :3]
@@ -2654,13 +3234,15 @@ class LLMPokemonTrainer:
             self.web_server.screenshot_data = buf.getvalue()
             
         except Exception as e:
-            pass  # Ignore screenshot errors
-        
-        # Update live memory data for the web interface
-        self.web_server.live_memory_data = current_game_state.copy()
-        
-        # Update server stats
-        self.web_server.trainer_stats = self.stats.copy()
+            self.logger.warning(f"Screenshot update failed: {str(e)}")
+            # Create an error indicator image
+            try:
+                error_img = Image.new('RGB', (480, 432), (64, 0, 0))
+                buf = io.BytesIO()
+                error_img.save(buf, format='PNG')
+                self.web_server.screenshot_data = buf.getvalue()
+            except:
+                pass  # Last resort - ignore screenshot completely
     
     def print_progress(self, action: str, decision_source: str, reward: float, reward_breakdown: Dict):
         """Print detailed training progress"""
@@ -2782,21 +3364,62 @@ class LLMPokemonTrainer:
             self.save_training_data()
 
 def main():
-    """Main entry point"""
+    """Main entry point with enhanced command line configuration"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Hybrid LLM+DQN Pokemon Crystal RL Training")
-    parser.add_argument("--rom", default="roms/pokemon_crystal.gbc", help="ROM file path")
-    parser.add_argument("--actions", type=int, default=2000, help="Number of actions to execute")
-    parser.add_argument("--llm-model", default="smollm2:1.7b", 
-                       choices=["smollm2:1.7b", "llama3.2:1b", "llama3.2:3b", "deepseek-coder:latest"],
-                       help="LLM model to use")
-    parser.add_argument("--llm-interval", type=int, default=20, 
-                       help="Actions between LLM decisions")
-    parser.add_argument("--web-port", type=int, default=8080, help="Web monitoring port")
-    parser.add_argument("--no-web", action="store_true", help="Disable web monitoring")
-    parser.add_argument("--no-dqn", action="store_true", help="Disable DQN agent (LLM-only mode)")
-    parser.add_argument("--dqn-model", type=str, help="Path to pre-trained DQN model to load")
+    parser = argparse.ArgumentParser(description="Advanced Pokemon Crystal RL Training with LLM Integration")
+    
+    # Core configuration
+    parser.add_argument("--rom", default="roms/pokemon_crystal.gbc", help="Path to Pokemon Crystal ROM file")
+    parser.add_argument("--save-state", help="Path to initial save state (optional)")
+    parser.add_argument("--actions", type=int, default=2000, help="Maximum number of actions to execute")
+    
+    # LLM configuration
+    llm_group = parser.add_argument_group('LLM Configuration')
+    llm_group.add_argument("--llm-model", default="smollm2:1.7b", 
+                          choices=["smollm2:1.7b", "llama3.2:1b", "llama3.2:3b", "deepseek-coder:latest"],
+                          help="LLM model to use for decision making")
+    llm_group.add_argument("--llm-endpoint", default="http://localhost:11434",
+                          help="URL of the LLM API endpoint")
+    llm_group.add_argument("--llm-interval", type=int, default=20,
+                          help="Number of actions between LLM decisions")
+    llm_group.add_argument("--llm-temperature", type=float, default=0.7,
+                          help="Temperature for LLM sampling (higher = more random)")
+    
+    # DQN configuration
+    dqn_group = parser.add_argument_group('DQN Configuration')
+    dqn_group.add_argument("--no-dqn", action="store_true", 
+                          help="Disable DQN agent (LLM-only mode)")
+    dqn_group.add_argument("--dqn-model", type=str,
+                          help="Path to pre-trained DQN model")
+    dqn_group.add_argument("--dqn-learn-rate", type=float, default=1e-4,
+                          help="DQN learning rate")
+    dqn_group.add_argument("--dqn-batch-size", type=int, default=32,
+                          help="DQN training batch size")
+    dqn_group.add_argument("--dqn-memory-size", type=int, default=50000,
+                          help="Size of DQN replay memory")
+    dqn_group.add_argument("--dqn-train-freq", type=int, default=4,
+                          help="Train DQN every N steps")
+    dqn_group.add_argument("--dqn-save-freq", type=int, default=500,
+                          help="Save DQN model every N actions")
+    
+    # Web UI configuration
+    web_group = parser.add_argument_group('Web UI Configuration')
+    web_group.add_argument("--no-web", action="store_true",
+                          help="Disable web monitoring interface")
+    web_group.add_argument("--web-port", type=int, default=8080,
+                          help="Port for web monitoring interface")
+    web_group.add_argument("--web-host", default="localhost",
+                          help="Host for web monitoring interface")
+    
+    # Logging and output
+    log_group = parser.add_argument_group('Logging Configuration')
+    log_group.add_argument("--log-dir", default="logs",
+                          help="Directory for log files")
+    log_group.add_argument("--log-level", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                          default='INFO', help="Logging level")
+    log_group.add_argument("--disable-progress", action="store_true",
+                          help="Disable progress output")
     
     args = parser.parse_args()
     
@@ -2811,16 +3434,40 @@ def main():
         print("Starting with fresh DQN model...")
         args.dqn_model = None
     
-    # Create and start trainer
+    # Ensure log directory exists
+    os.makedirs(args.log_dir, exist_ok=True)
+    
+    # Configure logging
+    import logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(args.log_dir, 'trainer.log')),
+            logging.StreamHandler()
+        ]
+    )
+    
+    # Create trainer with enhanced configuration
     trainer = LLMPokemonTrainer(
         rom_path=args.rom,
         max_actions=args.actions,
         llm_model=args.llm_model,
+        llm_base_url=args.llm_endpoint,
         llm_interval=args.llm_interval,
+        llm_temperature=args.llm_temperature,
         enable_web=not args.no_web,
         web_port=args.web_port,
+        web_host=args.web_host,
         enable_dqn=not args.no_dqn,
-        dqn_model_path=args.dqn_model
+        dqn_model_path=args.dqn_model,
+        dqn_learning_rate=args.dqn_learn_rate,
+        dqn_batch_size=args.dqn_batch_size,
+        dqn_memory_size=args.dqn_memory_size,
+        dqn_training_frequency=args.dqn_train_freq,
+        dqn_save_frequency=args.dqn_save_freq,
+        log_dir=args.log_dir,
+        show_progress=not args.disable_progress
     )
     
     success = trainer.start_training()
