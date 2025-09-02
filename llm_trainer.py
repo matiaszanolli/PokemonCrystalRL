@@ -24,17 +24,215 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 from typing import Dict, List, Tuple, Optional
 
-# Import our memory mapping system
+# Import our accurate game state system
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.memory_map_new import (
-    MEMORY_ADDRESSES, 
-    DERIVED_VALUES,
-    IMPORTANT_LOCATIONS,
-    POKEMON_SPECIES,
-    STATUS_CONDITIONS,
-    BADGE_MASKS,
-    get_badges_earned
-)
+from accurate_game_state import AccurateGameState
+
+# Memory address mappings for Pokemon Crystal (VALIDATED addresses from your analysis)
+MEMORY_ADDRESSES = {
+    # Party and Pokemon data - Based on your party structure analysis
+    'party_count': 0xD163,      # Number of Pokemon in party
+    'player_species': 0xD163,   # Species of first Pokemon (party slot 0 + 0)
+    'player_held_item': 0xD164, # Held item of first Pokemon (party slot 0 + 1)
+    'player_hp': 0xD167,        # Current HP of first Pokemon (party slot 0 + 4, low byte)
+    'player_hp_high': 0xD168,   # Current HP of first Pokemon (party slot 0 + 4, high byte)
+    'player_max_hp': 0xD169,    # Max HP of first Pokemon (party slot 0 + 6, low byte)
+    'player_max_hp_high': 0xD16A, # Max HP of first Pokemon (party slot 0 + 6, high byte)
+    'player_level': 0xD16B,     # Level of first Pokemon (party slot 0 + 8)
+    'player_status': 0xD16C,    # Status condition of first Pokemon (party slot 0 + 9)
+    
+    # Location and movement - From your coordinate analysis
+    'player_map': 0xD35D,       # Current map ID
+    'player_x': 0xD361,         # Player X coordinate
+    'player_y': 0xD362,         # Player Y coordinate
+    'player_direction': 0xD363, # Direction player is facing (0=down,1=up,2=left,3=right)
+    
+    # Resources and progress - From your money/badge analysis
+    'money_low': 0xD347,        # Money (low byte, 3 bytes little-endian)
+    'money_mid': 0xD348,        # Money (mid byte)
+    'money_high': 0xD349,       # Money (high byte)
+    'badges': 0xD359,           # Badge flags (bit flags for 8 Johto badges)
+    
+    # Battle state - From your battle analysis
+    'in_battle': 0xD057,        # Battle active flag (0=overworld, 1=battle)
+    'battle_turn': 0xD068,      # Turn counter in battle
+    'enemy_species': 0xD0A5,    # Opponent Pokemon species
+    'enemy_hp_low': 0xD0A8,     # Opponent HP (low byte, 2 bytes)
+    'enemy_hp_high': 0xD0A9,    # Opponent HP (high byte)
+    'enemy_level': 0xD0AA,      # Opponent Pokemon level
+    'player_active_slot': 0xD05E, # Player active Pokemon slot (0-5)
+    'move_selected': 0xD05F,    # Move selected (0-3)
+    
+    # Misc useful - From your misc analysis
+    'step_counter': 0xD164,     # Step counter for movement tracking
+    'game_time_hours': 0xD3E1,  # Time played (hours)
+}
+
+# Function to build complete observation using your validated structure
+def build_observation(memory) -> Dict:
+    """Build complete game state observation using validated memory addresses"""
+    
+    # Party data - using your party structure (44 bytes per Pokemon)
+    party = []
+    party_count = memory[0xD163] if memory[0xD163] <= 6 else 0  # Validate party count
+    
+    for i in range(6):  # Always check all 6 slots
+        base = 0xD163 + i * 44
+        try:
+            species = memory[base] if i < party_count else 0
+            held_item = memory[base + 1] if i < party_count else 0
+            hp = memory[base + 4] + (memory[base + 5] << 8) if i < party_count else 0
+            max_hp = memory[base + 6] + (memory[base + 7] << 8) if i < party_count else 0
+            level = memory[base + 8] if i < party_count else 0
+            status = memory[base + 9] if i < party_count else 0
+            moves = [memory[base + 10 + j] for j in range(4)] if i < party_count else [0, 0, 0, 0]
+            pp = [memory[base + 14 + j] for j in range(4)] if i < party_count else [0, 0, 0, 0]
+            
+            party.append({
+                "species": species,
+                "held_item": held_item,
+                "hp": hp,
+                "max_hp": max_hp,
+                "level": level,
+                "status": status,
+                "moves": moves,
+                "pp": pp
+            })
+        except:
+            # Fallback for any memory read errors
+            party.append({
+                "species": 0, "held_item": 0, "hp": 0, "max_hp": 0,
+                "level": 0, "status": 0, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0]
+            })
+    
+    # Money - using your 3-byte little-endian structure
+    try:
+        money = memory[0xD347] + (memory[0xD348] << 8) + (memory[0xD349] << 16)
+    except:
+        money = 0
+    
+    # Location and coordinates - using your validated addresses
+    try:
+        map_id = memory[0xD35D]
+        player_x = memory[0xD361]
+        player_y = memory[0xD362]
+        facing = memory[0xD363]
+    except:
+        map_id = player_x = player_y = facing = 0
+    
+    # Battle state - using your battle structure
+    try:
+        battle_flag = memory[0xD057]
+        turn_count = memory[0xD068] if battle_flag else 0
+        enemy_species = memory[0xD0A5] if battle_flag else 0
+        enemy_hp = memory[0xD0A8] + (memory[0xD0A9] << 8) if battle_flag else 0
+        enemy_level = memory[0xD0AA] if battle_flag else 0
+    except:
+        battle_flag = turn_count = enemy_species = enemy_hp = enemy_level = 0
+    
+    # Badge and progression - using your badge structure
+    try:
+        badges = memory[0xD359]
+        badges_count = bin(badges).count('1')
+    except:
+        badges = badges_count = 0
+    
+    # Step counter for exploration
+    try:
+        step_counter = memory[0xD164]
+    except:
+        step_counter = 0
+    
+    # Compile complete state
+    return {
+        "party": party,
+        "party_count": party_count,
+        "money": money,
+        "badges": badges,
+        "badges_count": badges_count,
+        "badges_total": badges_count,  # For compatibility
+        "map_id": map_id,
+        "player_map": map_id,  # For compatibility
+        "coords": (player_x, player_y),
+        "player_x": player_x,
+        "player_y": player_y,
+        "facing": facing,
+        "player_direction": facing,
+        "in_battle": bool(battle_flag),
+        "battle_turn": turn_count,
+        "enemy_species": enemy_species,
+        "enemy_hp": enemy_hp,
+        "enemy_level": enemy_level,
+        "step_counter": step_counter,
+        
+        # Derived values for first Pokemon (main player stats)
+        "player_species": party[0]["species"] if party_count > 0 else 0,
+        "player_hp": party[0]["hp"] if party_count > 0 else 0,
+        "player_max_hp": party[0]["max_hp"] if party_count > 0 else 0,
+        "player_level": party[0]["level"] if party_count > 0 else 0,
+        "player_status": party[0]["status"] if party_count > 0 else 0,
+        "has_pokemon": party_count > 0,
+        "health_percentage": (party[0]["hp"] / max(party[0]["max_hp"], 1)) * 100 if party_count > 0 else 0,
+    }
+
+# Derived values calculated from memory addresses
+DERIVED_VALUES = {
+    'badges_total': lambda state: state.get('badges_count', 0),
+    'health_percentage': lambda state: (state.get('player_hp', 0) / max(state.get('player_max_hp', 1), 1)) * 100,
+    'has_pokemon': lambda state: state.get('party_count', 0) > 0,
+    'location_key': lambda state: f"{state.get('player_map', 0)}_{state.get('player_x', 0)}_{state.get('player_y', 0)}",
+}
+
+# Important locations in the game
+IMPORTANT_LOCATIONS = {
+    24: "Player's Bedroom",
+    25: "Player's House", 
+    26: "New Bark Town",
+    27: "Prof. Elm's Lab",
+    28: "Route 29",
+    29: "Route 30",
+    30: "Cherrygrove City",
+}
+
+# Pokemon species IDs (partial list for important ones)
+POKEMON_SPECIES = {
+    0: "None",
+    152: "Chikorita",
+    155: "Cyndaquil", 
+    158: "Totodile",
+    16: "Pidgey",
+    19: "Rattata",
+    129: "Magikarp",
+}
+
+# Status conditions
+STATUS_CONDITIONS = {
+    0: "Healthy",
+    1: "Sleep",
+    2: "Poison",
+    3: "Burn",
+    4: "Freeze",
+    5: "Paralysis",
+}
+
+# Badge masks for checking individual badges
+BADGE_MASKS = {
+    'johto': {
+        'zephyr': 0x01, 'hive': 0x02, 'plain': 0x04, 'fog': 0x08,
+        'storm': 0x10, 'mineral': 0x20, 'glacier': 0x40, 'rising': 0x80
+    }
+}
+
+def get_badges_earned(badges_byte: int) -> list:
+    """Get list of badges earned from badge byte"""
+    earned = []
+    
+    # Check Johto badges using your bit flag structure
+    for badge_name, mask in BADGE_MASKS['johto'].items():
+        if badges_byte & mask:
+            earned.append(f"johto_{badge_name}")
+    
+    return earned
 
 # Import game intelligence system
 from core.game_intelligence import GameIntelligence, GameContext, ActionPlan
@@ -359,6 +557,10 @@ class PokemonRewardCalculator:
         # Track visited locations to prevent reward farming
         self.visited_locations = set()  # Will store (map_id, x, y) tuples
         
+        # Track repeated blocked movements for escalating penalties
+        self.blocked_movement_tracker = {}  # (map, x, y, direction) -> consecutive_count
+        self.max_blocked_penalty = -0.1  # Maximum penalty for being very stuck
+        
     def calculate_reward(self, current_state: Dict, previous_state: Dict) -> Tuple[float, Dict[str, float]]:
         """Calculate comprehensive reward based on game progress"""
         rewards = {}
@@ -414,7 +616,12 @@ class PokemonRewardCalculator:
         rewards['dialogue'] = dialogue_reward
         total_reward += dialogue_reward
         
-        # 11. Time-based small negative reward to encourage efficiency
+        # 11. Blocked movement penalty (escalating for repeated attempts)
+        blocked_penalty = self._calculate_blocked_movement_penalty(current_state, previous_state)
+        rewards['blocked_movement'] = blocked_penalty
+        total_reward += blocked_penalty
+        
+        # 12. Time-based small negative reward to encourage efficiency
         time_penalty = -0.01  # Small penalty each step
         rewards['time'] = time_penalty
         total_reward += time_penalty
@@ -501,23 +708,56 @@ class PokemonRewardCalculator:
         return 0.0
     
     def _calculate_badge_reward(self, current: Dict, previous: Dict) -> float:
-        """Huge reward for earning badges (major milestones), with anti-glitch guards."""
+        """Huge reward for earning badges (major milestones), with much stricter anti-glitch guards."""
+        # Get screen state to prevent menu-state false rewards
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        
+        # CRITICAL FIX: Only award badge rewards in consistent overworld states
+        # This prevents menu operations from triggering false badge changes
+        if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
+            return 0.0
+        
         curr_badges = current.get('badges_total', 0)
         prev_badges = previous.get('badges_total', curr_badges)
-
-        # Guard against uninitialized memory spikes (0xFF) early in the game
+        
+        # Get badge raw values (bitmasks)
         curr_raw = (current.get('badges', 0), current.get('kanto_badges', 0))
         prev_raw = (previous.get('badges', curr_raw[0]), previous.get('kanto_badges', curr_raw[1]))
+        
+        # Additional validation: avoid early game memory spikes
         early_game = current.get('party_count', 0) == 0 and current.get('player_level', 0) == 0
         if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
             return 0.0
 
-        # Only reward if the total is within plausible range
+        # Additional validation: badges shouldn't change without actual progression
+        # Must have at least one Pokemon to earn badges
+        if current.get('party_count', 0) == 0:
+            return 0.0
+            
+        # Only reward if the total is within plausible range AND actually increased
         if 0 <= curr_badges <= 16 and 0 <= prev_badges <= 16 and curr_badges > prev_badges:
-            badge_gain = curr_badges - prev_badges
-            # Cap to 1 badge per step to prevent jumps awarding huge rewards
-            badge_gain = min(badge_gain, 1)
-            return badge_gain * 500.0  # Huge reward for badge progress!
+            # Create milestone key to prevent repeat rewards for the same badge
+            # This is similar to the progression milestone system
+            milestone_key = f"badge_{curr_badges}_{curr_raw[0]}_{curr_raw[1]}"
+            
+            if not hasattr(self, 'badge_milestones'):
+                self.badge_milestones = set()
+                
+            # Only reward each badge milestone once
+            if milestone_key not in self.badge_milestones:
+                self.badge_milestones.add(milestone_key)
+                
+                # Cap to 1 badge per step to prevent jumps awarding huge rewards
+                badge_gain = min(curr_badges - prev_badges, 1)
+                
+                # Debug logging to track badge rewards
+                print(f"🎖️ BADGE REWARD: {badge_gain * 500.0:.2f} | Raw: {curr_raw} | Total: {curr_badges}")
+                
+                return badge_gain * 500.0  # Huge reward for badge progress!
+            else:
+                # Already rewarded this badge milestone
+                return 0.0
 
         return 0.0
     
@@ -792,6 +1032,74 @@ class PokemonRewardCalculator:
             return 0.02  # Small reward for progressing dialogue
         
         return 0.0
+    
+    def _calculate_blocked_movement_penalty(self, current: Dict, previous: Dict) -> float:
+        """Escalating penalty for repeatedly trying blocked movements at same location"""
+        # Only apply this penalty in overworld state
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        if curr_screen_state != 'overworld':
+            return 0.0
+        
+        # Get current and previous positions
+        curr_map = current.get('player_map', 0)
+        curr_x = current.get('player_x', 0)
+        curr_y = current.get('player_y', 0)
+        
+        prev_map = previous.get('player_map', curr_map)
+        prev_x = previous.get('player_x', curr_x)
+        prev_y = previous.get('player_y', curr_y)
+        
+        # Get the last action attempted (stored by the trainer)
+        last_action = getattr(self, 'last_action', 'unknown')
+        
+        # Only track directional movements
+        if last_action not in ['up', 'down', 'left', 'right']:
+            return 0.0
+        
+        # Check if position didn't change (blocked movement)
+        position_unchanged = (
+            curr_map == prev_map and 
+            curr_x == prev_x and 
+            curr_y == prev_y
+        )
+        
+        if position_unchanged:
+            # Create tracking key: (map, x, y, direction)
+            blocked_key = (curr_map, curr_x, curr_y, last_action)
+            
+            # Increment consecutive blocked attempts
+            if blocked_key not in self.blocked_movement_tracker:
+                self.blocked_movement_tracker[blocked_key] = 0
+            self.blocked_movement_tracker[blocked_key] += 1
+            
+            consecutive_blocks = self.blocked_movement_tracker[blocked_key]
+            
+            # Calculate small escalating penalty: -0.005, -0.01, -0.015, -0.02, ..., capped at max
+            base_penalty = -0.005
+            escalation_factor = consecutive_blocks  # Linear escalation
+            penalty = base_penalty * escalation_factor
+            penalty = max(penalty, self.max_blocked_penalty)  # Cap at maximum penalty
+            
+            # Clean up old blocked movement tracking (prevent memory bloat)
+            if len(self.blocked_movement_tracker) > 100:
+                # Remove entries with low consecutive counts
+                self.blocked_movement_tracker = {
+                    k: v for k, v in self.blocked_movement_tracker.items() 
+                    if v >= 2
+                }
+            
+            return penalty
+        else:
+            # Position changed - clear any blocked movement tracking for this location
+            # This rewards successfully getting unstuck
+            keys_to_clear = [
+                key for key in self.blocked_movement_tracker.keys()
+                if key[0] == prev_map and key[1] == prev_x and key[2] == prev_y
+            ]
+            for key in keys_to_clear:
+                del self.blocked_movement_tracker[key]
+            
+            return 0.0
     
     def get_reward_summary(self, rewards: Dict[str, float]) -> str:
         """Get human-readable reward summary"""
@@ -1108,6 +1416,73 @@ class WebMonitor(BaseHTTPRequestHandler):
                         }
                     }
                     
+                    .memory-section {
+                        margin-bottom: 15px;
+                    }
+                    
+                    .memory-section h4 {
+                        font-size: 14px;
+                        color: #00d4ff;
+                        margin-bottom: 10px;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    
+                    .memory-grid {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 6px;
+                    }
+                    
+                    .memory-row {
+                        display: grid;
+                        grid-template-columns: auto 1fr auto;
+                        gap: 8px;
+                        align-items: center;
+                        padding: 4px 8px;
+                        background: rgba(255,255,255,0.05);
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-family: 'Courier New', monospace;
+                    }
+                    
+                    .memory-row .addr {
+                        color: #ffb347;
+                        font-weight: 700;
+                        min-width: 70px;
+                    }
+                    
+                    .memory-row .label {
+                        color: #ccc;
+                        font-size: 11px;
+                        text-transform: uppercase;
+                    }
+                    
+                    .memory-row .value {
+                        color: #00ff88;
+                        font-weight: 700;
+                        text-align: right;
+                        min-width: 40px;
+                        font-family: 'Courier New', monospace;
+                    }
+                    
+                    .memory-row .value.hex {
+                        color: #ff6b6b;
+                    }
+                    
+                    .memory-row .value.changed {
+                        animation: memoryFlash 0.5s ease;
+                        background: rgba(0, 255, 136, 0.2);
+                        border-radius: 3px;
+                        padding: 2px 4px;
+                    }
+                    
+                    @keyframes memoryFlash {
+                        0% { background: rgba(255, 255, 255, 0.3); }
+                        100% { background: rgba(0, 255, 136, 0.2); }
+                    }
+                    
                     @media (max-width: 768px) {
                         .stats-grid {
                             grid-template-columns: repeat(2, 1fr);
@@ -1195,6 +1570,76 @@ class WebMonitor(BaseHTTPRequestHandler):
                             <h3>💰 Reward Analysis</h3>
                             <div class="reward-bars" id="reward-breakdown">
                                 <div class="loading-spinner"></div> Loading...
+                            </div>
+                        </div>
+                        
+                        <!-- Memory Debugger -->
+                        <div class="panel">
+                            <h3>🔧 Live Memory Debug</h3>
+                            <div class="memory-section">
+                                <h4>🎯 Core Addresses</h4>
+                                <div class="memory-grid">
+                                    <div class="memory-row">
+                                        <span class="addr">0xD163:</span>
+                                        <span class="label">Party Count</span>
+                                        <span class="value" id="mem-party-count">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD35D:</span>
+                                        <span class="label">Map ID</span>
+                                        <span class="value" id="mem-map-id">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD361:</span>
+                                        <span class="label">Player X</span>
+                                        <span class="value" id="mem-player-x">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD362:</span>
+                                        <span class="label">Player Y</span>
+                                        <span class="value" id="mem-player-y">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD347-49:</span>
+                                        <span class="label">Money (3B)</span>
+                                        <span class="value" id="mem-money">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD359:</span>
+                                        <span class="label">Badge Flags</span>
+                                        <span class="value hex" id="mem-badges">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD057:</span>
+                                        <span class="label">In Battle</span>
+                                        <span class="value" id="mem-battle">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="memory-section">
+                                <h4>🎮 First Pokemon Stats</h4>
+                                <div class="memory-grid">
+                                    <div class="memory-row">
+                                        <span class="addr">0xD163:</span>
+                                        <span class="label">Species</span>
+                                        <span class="value" id="mem-species">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD16B:</span>
+                                        <span class="label">Level</span>
+                                        <span class="value" id="mem-level">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD167-68:</span>
+                                        <span class="label">HP (2B)</span>
+                                        <span class="value" id="mem-hp">-</span>
+                                    </div>
+                                    <div class="memory-row">
+                                        <span class="addr">0xD169-6A:</span>
+                                        <span class="label">Max HP (2B)</span>
+                                        <span class="value" id="mem-max-hp">-</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -1314,14 +1759,79 @@ class WebMonitor(BaseHTTPRequestHandler):
                         }
                     }
                     
-                    // Update stats every 500ms
-                    setInterval(updateStats, 500);
+                    // Memory debugging variables
+                    let lastMemoryValues = {};
                     
-                    // Update game screen every 250ms for smoother visuals
-                    setInterval(updateGameScreen, 250);
+                    function updateMemoryDebugger() {
+                        fetch('/memory')
+                            .then(response => response.json())
+                            .then(memData => {
+                                // Update core addresses
+                                updateMemoryValue('mem-party-count', memData.party_count, lastMemoryValues.party_count);
+                                updateMemoryValue('mem-map-id', memData.player_map, lastMemoryValues.player_map);
+                                updateMemoryValue('mem-player-x', memData.player_x, lastMemoryValues.player_x);
+                                updateMemoryValue('mem-player-y', memData.player_y, lastMemoryValues.player_y);
+                                updateMemoryValue('mem-money', `¥${memData.money || 0}`, lastMemoryValues.money);
+                                updateMemoryValue('mem-badges', `0x${(memData.badges || 0).toString(16).toUpperCase().padStart(2, '0')}`, lastMemoryValues.badges, true);
+                                updateMemoryValue('mem-battle', memData.in_battle ? '1' : '0', lastMemoryValues.in_battle);
+                                
+                                // Update first Pokemon stats
+                                updateMemoryValue('mem-species', memData.player_species || 0, lastMemoryValues.player_species);
+                                updateMemoryValue('mem-level', memData.player_level || 0, lastMemoryValues.player_level);
+                                updateMemoryValue('mem-hp', `${memData.player_hp || 0}`, lastMemoryValues.player_hp);
+                                updateMemoryValue('mem-max-hp', `${memData.player_max_hp || 0}`, lastMemoryValues.player_max_hp);
+                                
+                                // Store current values as previous for next comparison
+                                lastMemoryValues = {
+                                    party_count: memData.party_count,
+                                    player_map: memData.player_map,
+                                    player_x: memData.player_x,
+                                    player_y: memData.player_y,
+                                    money: memData.money,
+                                    badges: memData.badges,
+                                    in_battle: memData.in_battle,
+                                    player_species: memData.player_species,
+                                    player_level: memData.player_level,
+                                    player_hp: memData.player_hp,
+                                    player_max_hp: memData.player_max_hp
+                                };
+                            })
+                            .catch(e => {
+                                console.warn('Memory update failed:', e);
+                            });
+                    }
+                    
+                    function updateMemoryValue(elementId, newValue, oldValue, isHex = false) {
+                        const element = document.getElementById(elementId);
+                        if (!element) return;
+                        
+                        const displayValue = newValue !== undefined ? newValue : '-';
+                        element.textContent = displayValue;
+                        
+                        // Add flash animation if value changed
+                        if (oldValue !== undefined && newValue !== oldValue && newValue !== undefined) {
+                            element.classList.add('changed');
+                            setTimeout(() => {
+                                element.classList.remove('changed');
+                            }, 500);
+                        }
+                    }
+                    
+                    // Update stats every 400ms for better responsiveness
+                    setInterval(updateStats, 400);
+                    
+                    // Update memory debugger every 150ms for real-time feel
+                    setInterval(updateMemoryDebugger, 150);
+                    
+                    // Update game screen every 200ms for smooth visuals
+                    setInterval(updateGameScreen, 200);
+                    
+                    // Update refresh rate display
+                    document.getElementById('refresh-rate').textContent = '200ms';
                     
                     // Initial load
                     updateStats();
+                    updateMemoryDebugger();
                     updateGameScreen();
                 </script>
             </body>
@@ -1337,6 +1847,19 @@ class WebMonitor(BaseHTTPRequestHandler):
             
             stats = getattr(self.server, 'trainer_stats', {})
             self.wfile.write(json.dumps(stats).encode())
+            
+        elif self.path == '/memory':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            self.end_headers()
+            
+            # Get live memory data directly from the trainer
+            memory_data = getattr(self.server, 'live_memory_data', {})
+            self.wfile.write(json.dumps(memory_data).encode())
             
         elif self.path.startswith('/screenshot'):
             self.send_response(200)
@@ -1519,71 +2042,12 @@ class LLMPokemonTrainer:
         self.previous_game_state = self.get_game_state()
         
     def get_game_state(self) -> Dict:
-        """Extract comprehensive game state from memory"""
+        """Extract comprehensive game state from memory using validated addresses"""
         if not self.pyboy:
             return {}
         
-        state = {}
-        
-        # Read all memory addresses
-        for name, addr in MEMORY_ADDRESSES.items():
-            try:
-                if name in ['money']:  # Special BCD handling
-                    # Read 3 bytes for money in BCD format
-                    byte1 = self.pyboy.memory[addr]
-                    byte2 = self.pyboy.memory[addr + 1]
-                    byte3 = self.pyboy.memory[addr + 2]
-                    
-                    # Convert BCD to decimal
-                    def bcd_to_decimal(byte):
-                        high = (byte >> 4) & 0xF
-                        low = byte & 0xF
-                        return high * 10 + low if high <= 9 and low <= 9 else 0
-                    
-                    money = bcd_to_decimal(byte1) * 10000 + bcd_to_decimal(byte2) * 100 + bcd_to_decimal(byte3)
-                    state['money'] = money
-                else:
-                    state[name] = self.pyboy.memory[addr]
-            except:
-                state[name] = 0
-        
-        # Use alt coordinates if main coordinates are 0
-        if state.get('player_x', 0) == 0 and state.get('alt_x', 0) != 0:
-            state['player_x'] = state['alt_x']
-        if state.get('player_y', 0) == 0 and state.get('alt_y', 0) != 0:
-            state['player_y'] = state['alt_y']
-        
-        # Calculate derived values
-        for name, func in DERIVED_VALUES.items():
-            try:
-                state[name] = func(state)
-            except:
-                state[name] = 0
-        
-        # Add badge parsing with comprehensive sanitization for uninitialized memory
-        johto_badges = state.get('badges', 0)
-        kanto_badges = state.get('kanto_badges', 0)
-        player_level = state.get('player_level', 0)
-        party_count = state.get('party_count', 0)
-        
-        # Sanitize implausible values that indicate uninitialized memory
-        early_game_indicators = party_count == 0 or player_level == 0
-        invalid_badge_values = johto_badges == 0xFF or kanto_badges == 0xFF or johto_badges > 0x80 or kanto_badges > 0x80
-        
-        if early_game_indicators and invalid_badge_values:
-            johto_badges = 0
-            kanto_badges = 0
-        
-        # Additional sanity check: if level > 100 (impossible in Pokemon), sanitize everything
-        if player_level > 100:
-            state['player_level'] = 0
-            johto_badges = 0
-            kanto_badges = 0
-        
-        state['badges_earned'] = get_badges_earned(johto_badges, kanto_badges)
-        state['badges_total'] = len(state['badges_earned'])
-        
-        return state
+        # Use the build_observation function with validated memory structure
+        return build_observation(self.pyboy.memory)
     
     def analyze_screen(self) -> Dict:
         """Analyze current screen state with improved detection"""
@@ -2096,6 +2560,9 @@ class LLMPokemonTrainer:
             
         except Exception as e:
             pass  # Ignore screenshot errors
+        
+        # Update live memory data for the web interface
+        self.web_server.live_memory_data = current_game_state.copy()
         
         # Update server stats
         self.web_server.trainer_stats = self.stats.copy()
