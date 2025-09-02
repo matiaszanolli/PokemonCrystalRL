@@ -156,8 +156,8 @@ class LLMAgent(BaseAgent):
         from core.game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         # Get phase and criticality from observation
-        phase_idx = observation.get('game_phase', 0)
-        criticality_idx = observation.get('criticality', 0)
+        phase_idx = int(observation.get('game_phase', 0))
+        criticality_idx = int(observation.get('criticality', 0))
         
         phase = list(GamePhase)[phase_idx] if phase_idx < len(GamePhase) else GamePhase.EARLY_GAME
         criticality = list(SituationCriticality)[criticality_idx] if criticality_idx < len(SituationCriticality) else SituationCriticality.MODERATE
@@ -406,6 +406,9 @@ class HybridAgent:
         self.agent_usage_stats = {"llm": 0, "rl": 0, "hybrid": 0}
         self.performance_by_agent = {"llm": deque(maxlen=100), "rl": deque(maxlen=100)}
         
+        # Curriculum learning parameters
+        self.llm_confidence_threshold = 0.7
+        
         # Curriculum learning state
         self.curriculum_stage = 0
         self.stage_progress = 0
@@ -420,7 +423,7 @@ class HybridAgent:
             ]
         }
     
-    def get_action(self, observation: Dict[str, Any], info: Dict[str, Any]) -> int:
+    def get_action(self, observation: Dict[str, Any], info: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         """Get action from hybrid agent"""
         
         # Get decisions from both agents
@@ -433,11 +436,50 @@ class HybridAgent:
         # Update usage stats
         self.agent_usage_stats[chosen_agent] += 1
         
+        # Create decision info for trainer
+        decision_info = {
+            'source': chosen_agent,
+            'confidence': final_decision.confidence,
+            'reasoning': final_decision.reasoning,
+            'llm_confidence': llm_decision.confidence,
+            'rl_confidence': rl_decision.confidence
+        }
+        
         # Log decision for analysis
         self.logger.debug(f"Hybrid decision: {chosen_agent} chose action {final_decision.action} "
                          f"(LLM: {llm_decision.confidence:.2f}, RL: {rl_decision.confidence:.2f})")
         
-        return final_decision.action
+        return final_decision.action, decision_info
+    
+    def get_state_dict(self) -> Dict[str, Any]:
+        """Get state dictionary for saving/loading"""
+        return {
+            'rl_model_state': self.rl_agent.q_table,
+            'agent_usage_stats': self.agent_usage_stats,
+            'experience_buffer': getattr(self, 'experience_buffer', []),
+            'performance_history': getattr(self, 'performance_history', [])
+        }
+    
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        """Load state from dictionary"""
+        if 'rl_model_state' in state_dict:
+            self.rl_agent.q_table = state_dict['rl_model_state']
+        if 'agent_usage_stats' in state_dict:
+            self.agent_usage_stats = state_dict['agent_usage_stats']
+    
+    def update(self, observation: Dict[str, Any], action: int, reward: float, 
+               next_observation: Dict[str, Any], done: bool):
+        """Update agent with experience"""
+        # Update RL agent
+        self.rl_agent.update(observation, action, reward, next_observation, done)
+        
+        # Track performance for curriculum learning
+        self.recent_rewards.append(reward)
+        
+        # Update performance metrics (basic implementation)
+        if done and hasattr(self, 'recent_rewards'):
+            avg_reward = sum(self.recent_rewards) / len(self.recent_rewards) if self.recent_rewards else 0
+            self.logger.debug(f"Episode completed, avg reward: {avg_reward:.2f}")
     
     def _arbitrate_decision(self, llm_decision: AgentDecision, rl_decision: AgentDecision,
                            observation: Dict[str, Any], info: Dict[str, Any]) -> Tuple[str, AgentDecision]:

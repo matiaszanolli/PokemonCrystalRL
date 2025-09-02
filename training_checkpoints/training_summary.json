@@ -1,0 +1,17 @@
+{
+  "total_episodes": 5,
+  "total_steps": 5,
+  "best_reward": -0.01,
+  "final_avg_reward": -0.01,
+  "curriculum_stage_reached": 0,
+  "curriculum_advancements": 0,
+  "strategy_switches": 0,
+  "final_evaluation": {
+    "avg_reward": -0.009999999999999998,
+    "std_reward": 1.734723475976807e-18,
+    "avg_length": 1.0,
+    "avg_llm_usage": 1.0
+  },
+  "avg_episode_length": 1.0,
+  "avg_llm_usage": 1.0
+}

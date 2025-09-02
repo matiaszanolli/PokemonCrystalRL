@@ -105,27 +105,23 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
         # 1. State Variables (normalized game state)
         state_var_count = len(STATE_VARIABLES.variables)
         observation_spaces['state_variables'] = spaces.Box(
-            low=0.0, high=1.0, shape=(state_var_count,), dtype=np.float32,
-            description="Normalized game state variables"
+            low=0.0, high=1.0, shape=(state_var_count,), dtype=np.float32
         )
         
         # 2. Screen capture (grayscale for efficiency)
         observation_spaces['screen'] = spaces.Box(
-            low=0, high=255, shape=(*self.screen_size, 1), dtype=np.uint8,
-            description="Game screen capture"
+            low=0, high=255, shape=(*self.screen_size, 1), dtype=np.uint8
         )
         
         # 3. Strategic context (if enabled)
         if self.enable_strategic_context:
             observation_spaces['strategic_context'] = spaces.Box(
-                low=0.0, high=1.0, shape=(20,), dtype=np.float32,
-                description="Strategic context features"
+                low=0.0, high=1.0, shape=(20,), dtype=np.float32
             )
         
         # 4. Action history
         observation_spaces['action_history'] = spaces.Box(
-            low=0, high=8, shape=(self.history_window,), dtype=np.int8,
-            description="Recent action history"
+            low=0, high=8, shape=(self.history_window,), dtype=np.int8
         )
         
         # 5. Game phase and criticality
@@ -135,15 +131,13 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
         # 6. Goal progress (if strategic context enabled)
         if self.enable_strategic_context:
             observation_spaces['goal_progress'] = spaces.Box(
-                low=0.0, high=1.0, shape=(5,), dtype=np.float32,
-                description="Progress on top 5 active goals"
+                low=0.0, high=1.0, shape=(5,), dtype=np.float32
             )
         
         # 7. Action mask (if enabled)
         if self.enable_action_masking:
             observation_spaces['action_mask'] = spaces.Box(
-                low=0, high=1, shape=(9,), dtype=np.int8,
-                description="Mask for valid actions"
+                low=0, high=1, shape=(9,), dtype=np.int8
             )
         
         self.observation_space = spaces.Dict(observation_spaces)
@@ -311,9 +305,10 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
         action_history = list(self.action_history) + [0] * (self.history_window - len(self.action_history))
         observation['action_history'] = np.array(action_history, dtype=np.int8)
         
-        # 5. Game phase and criticality
-        observation['game_phase'] = game_analysis.phase.value
-        observation['criticality'] = game_analysis.criticality.value
+        # 5. Game phase and criticality (use list index for discrete spaces)
+        from core.game_state_analyzer import GamePhase, SituationCriticality
+        observation['game_phase'] = list(GamePhase).index(game_analysis.phase)
+        observation['criticality'] = list(SituationCriticality).index(game_analysis.criticality)
         
         # 6. Goal progress
         if self.enable_strategic_context and self.strategic_context:

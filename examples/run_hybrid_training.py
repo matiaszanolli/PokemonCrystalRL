@@ -18,10 +18,10 @@ from trainer.hybrid_llm_rl_trainer import create_trainer_from_config
 def create_example_config():
     """Create an example training configuration."""
     config = {
-        "rom_path": "pokemoncrystal.gbc",
+        "rom_path": "roms/pokemon_crystal.gbc",
         "headless": True,
         "observation_type": "multi_modal",
-        "llm_model": "gpt-4",
+        "llm_model": "smollm2:1.7b",
         "max_context_length": 8000,
         "initial_strategy": "llm_heavy",
         "decision_db_path": "pokemon_decisions.db",
@@ -58,13 +58,13 @@ def main():
         logger.info("Initializing hybrid LLM-RL trainer...")
         trainer = create_trainer_from_config(config_path)
         
-        # Training parameters
+        # Training parameters (reduced for demo)
         training_params = {
-            'total_episodes': 1000,
-            'max_steps_per_episode': 10000,
-            'save_interval': 100,
-            'eval_interval': 50,
-            'curriculum_patience': 20
+            'total_episodes': 5,
+            'max_steps_per_episode': 100,
+            'save_interval': 2,
+            'eval_interval': 10,
+            'curriculum_patience': 5
         }
         
         logger.info("Starting training with parameters:")
