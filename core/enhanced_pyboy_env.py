@@ -40,7 +40,8 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
                  screen_size: Tuple[int, int] = (160, 144),  # Game Boy screen size
                  enable_action_masking: bool = True,
                  enable_strategic_context: bool = True,
-                 history_window: int = 10):
+                 history_window: int = 10,
+                 observation_type: str = "multi_modal"):
         """
         Initialize the Enhanced Pokemon Crystal environment
         
@@ -563,6 +564,16 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
         if self.strategic_context and self.strategic_context.history_analyzer:
             self.strategic_context.history_analyzer.save_patterns_to_db()
 
+
+# Utility function for memory reading (for test compatibility)
+def get_memory_value(pyboy_instance, address: int) -> int:
+    """Get memory value from PyBoy instance"""
+    if pyboy_instance is None:
+        return 0
+    try:
+        return pyboy_instance.memory[address]
+    except Exception:
+        return 0
 
 # Factory function for creating the enhanced environment
 def make_enhanced_pokemon_env(**kwargs) -> EnhancedPyBoyPokemonCrystalEnv:

@@ -371,7 +371,7 @@ class HybridLLMRLTrainer:
     def load_checkpoint(self, checkpoint_path: str) -> bool:
         """Load training checkpoint."""
         try:
-            checkpoint = torch.load(checkpoint_path, map_location='cpu')
+            checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
             
             self.agent.load_state_dict(checkpoint['agent_state'])
             self.training_stats = checkpoint['training_stats']

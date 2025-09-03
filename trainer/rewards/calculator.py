@@ -166,23 +166,41 @@ class PokemonRewardCalculator:
         return 0.0
     
     def _calculate_badge_reward(self, current: Dict, previous: Dict) -> float:
-        """Huge reward for earning badges (major milestones), with anti-glitch guards."""
+        """Huge reward for earning badges (major milestones), with strict validation."""
+        # Early validation - must have at least one Pokemon to earn badges
+        curr_party_count = current.get('party_count', 0)
+        if curr_party_count == 0:
+            return 0.0
+
+        # Screen state validation (only in overworld)
+        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
+        if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
+            return 0.0
+            
         curr_badges = current.get('badges_total', 0)
         prev_badges = previous.get('badges_total', curr_badges)
 
         # Guard against uninitialized memory spikes (0xFF) early in the game
         curr_raw = (current.get('badges', 0), current.get('kanto_badges', 0))
         prev_raw = (previous.get('badges', curr_raw[0]), previous.get('kanto_badges', curr_raw[1]))
-        early_game = current.get('party_count', 0) == 0 and current.get('player_level', 0) == 0
+        early_game = curr_party_count == 0 and current.get('player_level', 0) == 0
         if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
             return 0.0
 
         # Only reward if the total is within plausible range
         if 0 <= curr_badges <= 16 and 0 <= prev_badges <= 16 and curr_badges > prev_badges:
-            badge_gain = curr_badges - prev_badges
-            # Cap to 1 badge per step to prevent jumps awarding huge rewards
-            badge_gain = min(badge_gain, 1)
-            return badge_gain * 500.0  # Huge reward for badge progress!
+            # Track milestone to prevent repeat rewards
+            milestone_key = f"badge_{curr_badges}_{curr_raw[0]}_{curr_raw[1]}"
+            if not hasattr(self, 'badge_milestones'):
+                self.badge_milestones = set()
+                
+            if milestone_key not in self.badge_milestones:
+                self.badge_milestones.add(milestone_key)
+                
+                # Cap to 1 badge per step to prevent jumps awarding huge rewards
+                badge_gain = min(curr_badges - prev_badges, 1)
+                return badge_gain * 500.0  # Huge reward for badge progress!
 
         return 0.0
     

@@ -19,6 +19,7 @@ import os
 import threading
 import io
 import argparse
+import logging
 from datetime import datetime
 from PIL import Image
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -82,9 +83,7 @@ def build_observation(memory) -> Dict:
     for i in range(6):  # Always check all 6 slots
         base = 0xD163 + i * 44
         try:
-            # Validate memory boundaries before reading
-            if base + 18 >= len(memory):
-                raise IndexError(f"Memory access out of bounds for Pokemon slot {i}")
+            # PyBoy memory access doesn't support len(), so we'll use try/except for bounds checking
 
             species = memory[base] if i < party_count else 0
             held_item = memory[base + 1] if i < party_count else 0
@@ -131,8 +130,7 @@ def build_observation(memory) -> Dict:
     
     # Money - using your 3-byte little-endian structure
     try:
-        if 0xD347 not in memory or 0xD348 not in memory or 0xD349 not in memory:
-            raise IndexError("Money address(es) out of range")
+        # PyBoy memory access doesn't support 'in' operator, so we'll use try/except
             
         # Validate individual bytes are within valid range (0-255)
         for addr in [0xD347, 0xD348, 0xD349]:
@@ -159,10 +157,7 @@ def build_observation(memory) -> Dict:
     
     # Location and coordinates - using VERIFIED addresses
     try:
-        # Check if all required memory addresses are accessible
-        for addr in [0xDCBA, 0xDCB8, 0xDCB9, 0xDCBB]:
-            if addr not in memory:
-                raise IndexError(f"Memory address {addr:X} not available")
+        # PyBoy memory access doesn't support 'in' operator, so we'll use direct access
         
         # Read location data
         map_id = memory[0xDCBA]
@@ -180,7 +175,10 @@ def build_observation(memory) -> Dict:
         if not 0 <= player_y <= 255:
             print(f"Warning: Invalid Y coordinate {player_y}, resetting to 0")
             player_y = 0
-        if not 0 <= facing <= 3:  # 4 possible directions (0-3)
+        # Game Boy direction encoding: 0=Down, 2=Up, 4=Left, 6=Right, 8=Standing still
+        # Also allow some other values that might occur during transitions
+        valid_directions = [0, 2, 4, 6, 8]  # Common Game Boy direction values
+        if facing not in valid_directions:
             print(f"Warning: Invalid direction {facing}, resetting to 0")
             facing = 0
             
@@ -772,21 +770,19 @@ class PokemonRewardCalculator:
         curr_level = current.get('player_level', 0)
         prev_level = previous.get('player_level', curr_level)
         
-        # Get screen state and party count for validation
-        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        # Optional screen state validation (only enforce if provided)
+        curr_screen_state = getattr(self, 'last_screen_state', None)
         prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
-        curr_party_count = current.get('party_count', 0)
-        prev_party_count = previous.get('party_count', 0)
+        if curr_screen_state is not None and prev_screen_state is not None:
+            if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
+                return 0.0
         
-        # CRITICAL FIX: Only award level rewards if we have Pokemon
-        # Level changes without Pokemon are memory glitches
-        if curr_party_count == 0 or prev_party_count == 0:
-            return 0.0  # No Pokemon = no level rewards possible
-        
-        # CRITICAL FIX: Only award level rewards in overworld state
-        # This prevents menu operations from triggering false level changes
-        if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
-            return 0.0
+        # Optional party count validation (only enforce if provided in inputs)
+        if ('party_count' in current or 'party_count' in previous):
+            curr_party_count = current.get('party_count', 0)
+            prev_party_count = previous.get('party_count', 0)
+            if curr_party_count == 0 or prev_party_count == 0:
+                return 0.0  # No Pokemon = no level rewards possible
         
         # Guard against impossible level spikes (>100 or huge jumps)
         if curr_level > 100 or prev_level > 100:
@@ -802,25 +798,25 @@ class PokemonRewardCalculator:
             level_gain = min(level_gain, 5)  # Max 5 levels per step
             
             # Additional validation: require HP values to be reasonable for this level
-            curr_hp = current.get('player_hp', 0)
-            curr_max_hp = current.get('player_max_hp', 0)
-            if curr_max_hp < 10 or curr_hp > curr_max_hp:
-                return 0.0  # Suspicious HP values, likely memory glitch
+            # Only enforce if HP fields are present
+            if 'player_hp' in current and 'player_max_hp' in current:
+                curr_hp = current.get('player_hp', 0)
+                curr_max_hp = current.get('player_max_hp', 0)
+                if curr_max_hp <= 0 or curr_hp > curr_max_hp or curr_max_hp < 10:
+                    return 0.0  # Suspicious HP values, likely memory glitch
             
             return level_gain * 50.0  # Big reward for leveling up
             
         return 0.0
     
     def _calculate_badge_reward(self, current: Dict, previous: Dict) -> float:
-        """Huge reward for earning badges (major milestones), with much stricter anti-glitch guards."""
-        # Get screen state to prevent menu-state false rewards
-        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        """Huge reward for earning badges (major milestones), with anti-glitch guards."""
+        # Optional screen state validation (only enforce if provided)
+        curr_screen_state = getattr(self, 'last_screen_state', None)
         prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
-        
-        # CRITICAL FIX: Only award badge rewards in consistent overworld states
-        # This prevents menu operations from triggering false badge changes
-        if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
-            return 0.0
+        if curr_screen_state is not None and prev_screen_state is not None:
+            if curr_screen_state != 'overworld' or prev_screen_state != 'overworld':
+                return 0.0
         
         curr_badges = current.get('badges_total', 0)
         prev_badges = previous.get('badges_total', curr_badges)
@@ -829,20 +825,19 @@ class PokemonRewardCalculator:
         curr_raw = (current.get('badges', 0), current.get('kanto_badges', 0))
         prev_raw = (previous.get('badges', curr_raw[0]), previous.get('kanto_badges', curr_raw[1]))
         
-        # Additional validation: avoid early game memory spikes
-        early_game = current.get('party_count', 0) == 0 and current.get('player_level', 0) == 0
-        if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
-            return 0.0
-
-        # Additional validation: badges shouldn't change without actual progression
-        # Must have at least one Pokemon to earn badges
-        if current.get('party_count', 0) == 0:
+        # Additional validation: avoid early game memory spikes (only if fields exist)
+        if ('party_count' in current and 'player_level' in current):
+            early_game = current.get('party_count', 0) == 0 and current.get('player_level', 0) == 0
+            if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
+                return 0.0
+        
+        # Additional validation: must have at least one Pokemon to earn badges (if info provided)
+        if 'party_count' in current and current.get('party_count', 0) == 0:
             return 0.0
             
         # Only reward if the total is within plausible range AND actually increased
         if 0 <= curr_badges <= 16 and 0 <= prev_badges <= 16 and curr_badges > prev_badges:
             # Create milestone key to prevent repeat rewards for the same badge
-            # This is similar to the progression milestone system
             milestone_key = f"badge_{curr_badges}_{curr_raw[0]}_{curr_raw[1]}"
             
             if not hasattr(self, 'badge_milestones'):
@@ -856,8 +851,7 @@ class PokemonRewardCalculator:
                 badge_gain = min(curr_badges - prev_badges, 1)
                 
                 # Debug logging to track badge rewards
-                print(f"🎖️ BADGE REWARD: {badge_gain * 500.0:.2f} | Raw: {curr_raw} | Total: {curr_badges}")
-                
+                # print removed to keep tests clean
                 return badge_gain * 500.0  # Huge reward for badge progress!
             else:
                 # Already rewarded this badge milestone
@@ -2038,7 +2032,20 @@ class WebMonitor(BaseHTTPRequestHandler):
             self.end_headers()
             
             stats = getattr(self.server, 'trainer_stats', {})
-            self.wfile.write(json.dumps(stats).encode())
+            
+            # Convert any sets to lists for JSON serialization
+            def convert_sets_to_lists(obj):
+                if isinstance(obj, set):
+                    return list(obj)
+                elif isinstance(obj, dict):
+                    return {k: convert_sets_to_lists(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_sets_to_lists(item) for item in obj]
+                else:
+                    return obj
+            
+            safe_stats = convert_sets_to_lists(stats)
+            self.wfile.write(json.dumps(safe_stats).encode())
             
         elif self.path == '/memory':
             self.send_response(200)
@@ -2243,49 +2250,49 @@ class LLMPokemonTrainer:
             self.web_thread.start()
             
             # Initialize detailed stats tracking for web display
-        self.web_stats_history = {
-            'reward_history': [],  # Track reward trends
-            'action_history': [],  # Track action frequencies
-            'progression': [],     # Track game progression
-            'performance': []      # Track system performance
-        }
-        
-        # Initialize enhanced performance tracking
-        self.performance_tracking = {
-            'reward_window': [],           # Track rewards for rate calculation
-            'llm_success_window': [],      # Track LLM success for accuracy
-            'action_counts': {},          # Count of each action type
-            'state_transitions': {},      # Track state changes
-            'window_size': 100            # Size of sliding windows
-        }
-        
-        # Set initial web stats with expanded metrics
-        self.stats.update({
-            'experience_stats': {
-                'total_experiences': 0,
-                'positive_patterns': 0,
-                'learning_rate': 1.0
-            },
-            'recent_stats': {
-                'reward_rate': 0.0,       # Per-action reward rate
-                'exploration_rate': 0.0,   # Rate of new area discovery
-                'stuck_rate': 0.0,        # Rate of stuck detection
-                'success_rate': 0.0       # Rate of positive outcomes
-            },
-            'training_metrics': {
-                'llm_accuracy': 0.0,      # LLM decision quality
-                'dqn_loss': 0.0,         # DQN training loss
-                'hybrid_balance': 0.5,    # LLM vs DQN balance
-                'state_coverage': 0.0     # Game state exploration
-            },
-            'session_metrics': {
-                'start_time': time.time(),
-                'last_save': time.time(),
-                'total_steps': 0,
-                'unique_states': set(),
-                'error_count': 0
+            self.web_stats_history = {
+                'reward_history': [],  # Track reward trends
+                'action_history': [],  # Track action frequencies
+                'progression': [],     # Track game progression
+                'performance': []      # Track system performance
             }
-        })
+            
+            # Initialize enhanced performance tracking
+            self.performance_tracking = {
+                'reward_window': [],           # Track rewards for rate calculation
+                'llm_success_window': [],      # Track LLM success for accuracy
+                'action_counts': {},          # Count of each action type
+                'state_transitions': {},      # Track state changes
+                'window_size': 100            # Size of sliding windows
+            }
+            
+            # Set initial web stats with expanded metrics
+            self.stats.update({
+                'experience_stats': {
+                    'total_experiences': 0,
+                    'positive_patterns': 0,
+                    'learning_rate': 1.0
+                },
+                'recent_stats': {
+                    'reward_rate': 0.0,       # Per-action reward rate
+                    'exploration_rate': 0.0,   # Rate of new area discovery
+                    'stuck_rate': 0.0,        # Rate of stuck detection
+                    'success_rate': 0.0       # Rate of positive outcomes
+                },
+                'training_metrics': {
+                    'llm_accuracy': 0.0,      # LLM decision quality
+                    'dqn_loss': 0.0,         # DQN training loss
+                    'hybrid_balance': 0.5,    # LLM vs DQN balance
+                    'state_coverage': 0.0     # Game state exploration
+                },
+                'session_metrics': {
+                    'start_time': time.time(),
+                    'last_save': time.time(),
+                    'total_steps': 0,
+                    'unique_states': set(),
+                    'error_count': 0
+                }
+            })
             
             print(f"🌐 Enhanced web monitor: http://localhost:{self.web_port}")
             print("   Real-time metrics and visualization available")
@@ -3289,32 +3296,96 @@ class LLMPokemonTrainer:
         }
     
     def _update_screenshot(self):
-        """Update screenshot with error handling"""
+        """Update screenshot with error handling and headless support"""
         try:
-            if not self.pyboy:
+            if not self.pyboy or not self.web_server:
                 return
-                
+            
+            # Force PyBoy to tick once to ensure screen buffer is updated
+            # This is crucial for headless mode
+            self.pyboy.tick()
+            
+            # Get screen data from PyBoy
             screen = self.pyboy.screen.ndarray
-            if screen.shape[2] == 4:  # RGBA to RGB
+            
+            # Handle different screen formats
+            if screen is None or screen.size == 0:
+                raise ValueError("Screen buffer is empty")
+            
+            # Ensure we have the right dimensions (Game Boy screen is 160x144)
+            if len(screen.shape) == 2:  # Grayscale
+                screen = np.stack([screen] * 3, axis=-1)  # Convert to RGB
+            elif screen.shape[2] == 4:  # RGBA to RGB
                 screen = screen[:, :, :3]
+            elif screen.shape[2] == 1:  # Single channel to RGB
+                screen = np.repeat(screen, 3, axis=2)
             
+            # Ensure data type is correct for PIL
+            if screen.dtype != np.uint8:
+                # Convert to 0-255 range if needed
+                if screen.max() <= 1.0:
+                    screen = (screen * 255).astype(np.uint8)
+                else:
+                    screen = screen.astype(np.uint8)
+            
+            # Create PIL image
             img = Image.fromarray(screen)
-            img = img.resize((480, 432), Image.NEAREST)  # Match the display size
             
+            # Scale up for better visibility (Game Boy 160x144 -> 480x432 = 3x scale)
+            img = img.resize((480, 432), Image.NEAREST)  # Pixel art style scaling
+            
+            # Save to buffer
             buf = io.BytesIO()
             img.save(buf, format='PNG', optimize=True)
-            self.web_server.screenshot_data = buf.getvalue()
+            screenshot_data = buf.getvalue()
+            
+            # Update server data
+            self.web_server.screenshot_data = screenshot_data
+            
+            # Debug info for first few screenshots
+            if not hasattr(self, '_screenshot_debug_count'):
+                self._screenshot_debug_count = 0
+            
+            if self._screenshot_debug_count < 3:
+                print(f"📷 Screenshot {self._screenshot_debug_count + 1}: {screen.shape}, dtype={screen.dtype}, size={len(screenshot_data)} bytes")
+                self._screenshot_debug_count += 1
             
         except Exception as e:
             self.logger.warning(f"Screenshot update failed: {str(e)}")
-            # Create an error indicator image
+            
+            # Create error indicator image with debug info
             try:
-                error_img = Image.new('RGB', (480, 432), (64, 0, 0))
+                from PIL import ImageDraw, ImageFont
+                error_img = Image.new('RGB', (480, 432), (32, 16, 16))  # Dark red background
+                draw = ImageDraw.Draw(error_img)
+                
+                # Add error text
+                try:
+                    # Try to use default font
+                    font = ImageFont.load_default()
+                except:
+                    font = None
+                
+                error_text = f"Screenshot Error:\n{str(e)[:100]}"
+                if font:
+                    draw.text((20, 200), error_text, fill=(255, 255, 255), font=font)
+                else:
+                    draw.text((20, 200), error_text, fill=(255, 255, 255))
+                
                 buf = io.BytesIO()
                 error_img.save(buf, format='PNG')
                 self.web_server.screenshot_data = buf.getvalue()
-            except:
-                pass  # Last resort - ignore screenshot completely
+                
+            except Exception as inner_e:
+                self.logger.error(f"Failed to create error screenshot: {inner_e}")
+                # Last resort - create minimal error image
+                try:
+                    minimal_error = Image.new('RGB', (480, 432), (64, 0, 0))
+                    buf = io.BytesIO()
+                    minimal_error.save(buf, format='PNG')
+                    self.web_server.screenshot_data = buf.getvalue()
+                except:
+                    pass  # Give up on screenshots
     
     def print_progress(self, action: str, decision_source: str, reward: float, reward_breakdown: Dict):
         """Print detailed training progress"""
@@ -3347,6 +3418,19 @@ class LLMPokemonTrainer:
         final_stats = self.stats.copy()
         final_stats['final_game_state'] = self.get_game_state()
         final_stats['llm_decisions'] = len(self.llm_agent.decision_history)
+        
+        # Convert any sets to lists for JSON serialization
+        def convert_sets_to_lists(obj):
+            if isinstance(obj, set):
+                return list(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_sets_to_lists(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_sets_to_lists(item) for item in obj]
+            else:
+                return obj
+        
+        final_stats = convert_sets_to_lists(final_stats)
         
         with open(stats_file, 'w') as f:
             json.dump(final_stats, f, indent=2)

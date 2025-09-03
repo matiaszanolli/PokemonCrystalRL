@@ -583,12 +583,36 @@ class AdaptiveStrategySystem:
         self.decisions_since_strategy_change = 0
         self.logger.info(f"Strategy forced: {old_strategy.value} -> {strategy.value}")
     
+    def select_strategy(self, context: Dict[str, Any]) -> StrategyType:
+        """Select strategy based on context (for compatibility with tests)"""
+        # Use current strategy or adapt based on context
+        if context.get('recent_performance', {}).get('success_rate', 0.5) < 0.3:
+            return StrategyType.LLM_MINIMAL
+        elif context.get('recent_performance', {}).get('success_rate', 0.5) > 0.8:
+            return StrategyType.LLM_HEAVY
+        return self.current_strategy
+    
+    def evaluate_performance(self, metrics: Dict[str, float]):
+        """Evaluate performance and adapt strategy (for compatibility with tests)"""
+        episode_reward = metrics.get('episode_reward', 0)
+        llm_usage_rate = metrics.get('llm_usage_rate', 0.5)
+        
+        # Record outcome based on metrics
+        led_to_progress = episode_reward > 10.0
+        was_effective = episode_reward > 0
+        self.record_outcome(episode_reward, led_to_progress, was_effective)
+    
     def get_strategy_stats(self) -> Dict[str, Any]:
         """Get statistics about strategy performance"""
+        # Count strategy switches
+        total_switches = sum(1 for decision in self.recent_decisions 
+                           if len(self.recent_decisions) > 1 and decision != self.recent_decisions[0])
+        
         stats = {
             "current_strategy": self.current_strategy.value,
             "time_in_current_strategy": (datetime.now() - self.strategy_start_time).total_seconds(),
             "decisions_in_current_strategy": self.decisions_since_strategy_change,
+            "total_switches": total_switches,
             "performance_by_strategy": {}
         }
         

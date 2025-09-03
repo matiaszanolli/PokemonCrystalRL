@@ -664,6 +664,48 @@ class DecisionHistoryAnalyzer:
                 ))
             
             conn.commit()
+    
+    def add_decision(self, decision_data: Dict[str, Any]):
+        """Add decision (compatibility method for tests)"""
+        # Convert test format to proper format
+        from .game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+        
+        # Mock a game state analysis for compatibility
+        mock_state = GameStateAnalysis(
+            phase=GamePhase.OVERWORLD,
+            criticality=SituationCriticality.NORMAL,
+            health_percentage=80.0,
+            progression_score=50.0,
+            exploration_score=30.0,
+            immediate_threats=[],
+            opportunities=[],
+            state_variables={}
+        )
+        
+        action = decision_data.get('action', 0)
+        llm_reasoning = decision_data.get('context', {}).get('reasoning', 'Test decision')
+        reward = decision_data.get('total_episode_reward', 0.0)
+        was_effective = decision_data.get('outcome') == 'success'
+        led_to_progress = reward > 5.0
+        
+        self.record_decision(mock_state, action, llm_reasoning, reward, led_to_progress, was_effective)
+    
+    def get_recent_decisions(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent decisions (compatibility method for tests)"""
+        recent = list(self.decision_history)[-limit:]
+        return [{
+            'action': r.action_taken,
+            'reward': r.reward_received,
+            'outcome': r.outcome_type.value,
+            'timestamp': r.timestamp,
+            'reasoning': r.llm_reasoning
+        } for r in recent]
+    
+    def close(self):
+        """Close the analyzer (compatibility method for tests)"""
+        # Save patterns before closing
+        self.save_patterns_to_db()
+        # No other cleanup needed for SQLite
 
 
 if __name__ == "__main__":

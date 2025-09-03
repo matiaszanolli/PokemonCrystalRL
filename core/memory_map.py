@@ -95,8 +95,8 @@ def _safe_badges_total(state):
     if player_level > 100:
         return 0
 
-    # Early game indicators
-    early_game = party_count == 0 or player_level == 0
+    # Early game indicators - EITHER condition suggests early game
+    early_game = (party_count == 0 or player_level == 0)
     
     # Invalid badge values (0xFF, or values > 0x80 which is only the last badge)
     invalid_badges = (
@@ -104,7 +104,7 @@ def _safe_badges_total(state):
         johto > 0x80 or kanto > 0x80
     )
     
-    # If early game and suspicious badge values, return 0
+    # If early game indicators with invalid badges, treat as corruption
     if early_game and invalid_badges:
         return 0
     
