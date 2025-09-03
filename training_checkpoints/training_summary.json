@@ -1,8 +1,8 @@
 {
-  "total_episodes": 5,
-  "total_steps": 5,
-  "best_reward": -0.01,
-  "final_avg_reward": -0.01,
+  "total_episodes": 50,
+  "total_steps": 50,
+  "best_reward": 99.99,
+  "final_avg_reward": 9.989999999999998,
   "curriculum_stage_reached": 0,
   "curriculum_advancements": 0,
   "strategy_switches": 0,

@@ -58,13 +58,13 @@ def main():
         logger.info("Initializing hybrid LLM-RL trainer...")
         trainer = create_trainer_from_config(config_path)
         
-        # Training parameters (reduced for demo)
+        # Training parameters (extended for meaningful training)
         training_params = {
-            'total_episodes': 5,
-            'max_steps_per_episode': 100,
-            'save_interval': 2,
-            'eval_interval': 10,
-            'curriculum_patience': 5
+            'total_episodes': 50,
+            'max_steps_per_episode': 1000,
+            'save_interval': 10,
+            'eval_interval': 15,
+            'curriculum_patience': 10
         }
         
         logger.info("Starting training with parameters:")

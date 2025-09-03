@@ -82,6 +82,10 @@ def build_observation(memory) -> Dict:
     for i in range(6):  # Always check all 6 slots
         base = 0xD163 + i * 44
         try:
+            # Validate memory boundaries before reading
+            if base + 18 >= len(memory):
+                raise IndexError(f"Memory access out of bounds for Pokemon slot {i}")
+
             species = memory[base] if i < party_count else 0
             held_item = memory[base + 1] if i < party_count else 0
             hp = memory[base + 4] + (memory[base + 5] << 8) if i < party_count else 0
@@ -90,6 +94,17 @@ def build_observation(memory) -> Dict:
             status = memory[base + 9] if i < party_count else 0
             moves = [memory[base + 10 + j] for j in range(4)] if i < party_count else [0, 0, 0, 0]
             pp = [memory[base + 14 + j] for j in range(4)] if i < party_count else [0, 0, 0, 0]
+
+            # Validate critical values
+            if i < party_count:
+                # Pokemon level should be between 1-100
+                if not 0 <= level <= 100:
+                    print(f"Warning: Invalid level {level} for Pokemon {i}, resetting to 0")
+                    level = 0
+                # HP should never be more than max HP
+                if hp > max_hp:
+                    print(f"Warning: HP {hp} exceeds max HP {max_hp} for Pokemon {i}, capping")
+                    hp = max_hp
             
             party.append({
                 "species": species,
@@ -101,8 +116,14 @@ def build_observation(memory) -> Dict:
                 "moves": moves,
                 "pp": pp
             })
-        except:
-            # Fallback for any memory read errors
+        except (IndexError, KeyError) as e:
+            print(f"Error reading Pokemon {i} data: {str(e)}")
+            party.append({
+                "species": 0, "held_item": 0, "hp": 0, "max_hp": 0,
+                "level": 0, "status": 0, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0]
+            })
+        except Exception as e:
+            print(f"Unexpected error reading Pokemon {i} data: {str(e)}")
             party.append({
                 "species": 0, "held_item": 0, "hp": 0, "max_hp": 0,
                 "level": 0, "status": 0, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0]
@@ -110,17 +131,64 @@ def build_observation(memory) -> Dict:
     
     # Money - using your 3-byte little-endian structure
     try:
+        if 0xD347 not in memory or 0xD348 not in memory or 0xD349 not in memory:
+            raise IndexError("Money address(es) out of range")
+            
+        # Validate individual bytes are within valid range (0-255)
+        for addr in [0xD347, 0xD348, 0xD349]:
+            if not 0 <= memory[addr] <= 255:
+                raise ValueError(f"Invalid money byte value at {addr:X}: {memory[addr]}")
+        
+        # Calculate money using little-endian bytes
         money = memory[0xD347] + (memory[0xD348] << 8) + (memory[0xD349] << 16)
-    except:
+        
+        # Validate final money value (reasonable max of 999,999)
+        if money > 999999:
+            print(f"Warning: Unusually high money value {money}, resetting to 0")
+            money = 0
+            
+    except (IndexError, KeyError) as e:
+        print(f"Error reading money data: {str(e)}")
+        money = 0
+    except ValueError as e:
+        print(f"Invalid money value: {str(e)}")
+        money = 0
+    except Exception as e:
+        print(f"Unexpected error reading money: {str(e)}")
         money = 0
     
     # Location and coordinates - using VERIFIED addresses
     try:
-        map_id = memory[0xDCBA]      # VERIFIED Map ID
-        player_x = memory[0xDCB8]    # VERIFIED Player X
-        player_y = memory[0xDCB9]    # VERIFIED Player Y 
-        facing = memory[0xDCBB]      # VERIFIED Direction
-    except:
+        # Check if all required memory addresses are accessible
+        for addr in [0xDCBA, 0xDCB8, 0xDCB9, 0xDCBB]:
+            if addr not in memory:
+                raise IndexError(f"Memory address {addr:X} not available")
+        
+        # Read location data
+        map_id = memory[0xDCBA]
+        player_x = memory[0xDCB8]
+        player_y = memory[0xDCB9] 
+        facing = memory[0xDCBB]
+        
+        # Validate location data is within reasonable ranges
+        if not 0 <= map_id <= 255:
+            print(f"Warning: Invalid map ID {map_id}, resetting to 0")
+            map_id = 0
+        if not 0 <= player_x <= 255:
+            print(f"Warning: Invalid X coordinate {player_x}, resetting to 0")
+            player_x = 0
+        if not 0 <= player_y <= 255:
+            print(f"Warning: Invalid Y coordinate {player_y}, resetting to 0")
+            player_y = 0
+        if not 0 <= facing <= 3:  # 4 possible directions (0-3)
+            print(f"Warning: Invalid direction {facing}, resetting to 0")
+            facing = 0
+            
+    except (IndexError, KeyError) as e:
+        print(f"Error reading location data: {str(e)}")
+        map_id = player_x = player_y = facing = 0
+    except Exception as e:
+        print(f"Unexpected error reading location data: {str(e)}")
         map_id = player_x = player_y = facing = 0
     
     # Battle state - using your battle structure
@@ -3023,6 +3091,10 @@ class LLMPokemonTrainer:
                 'memory_usage': self.dqn_agent.get_memory_usage() if self.enable_dqn else 0,
                 'training_status': 'running' if self.running else 'stopped'
             })
+        except Exception as e:
+            self.logger.error(f"Stats update error: {str(e)}")
+            self.stats['error'] = str(e)
+            return
             
             # Get current state information
             current_game_state = self.get_game_state()
@@ -3472,6 +3544,171 @@ def main():
     
     success = trainer.start_training()
     return 0 if success else 1
+
+def main() -> int:
+    """Main execution."""
+    parser = argparse.ArgumentParser(description="Pokemon Crystal LLM-RL Trainer")
+    
+    # Required arguments
+    parser.add_argument(
+        "rom_path", type=str,
+        help="Path to Pokemon Crystal ROM file"
+    )
+    
+    # Training configuration
+    training = parser.add_argument_group("Training Configuration")
+    training.add_argument(
+        "--max-actions", type=int, default=10000,
+        help="Maximum number of actions to take (default: 10000)"
+    )
+    training.add_argument(
+        "--save-state", type=str,
+        help="Path to save state file"
+    )
+    
+    # LLM configuration
+    llm = parser.add_argument_group("LLM Configuration")
+    llm.add_argument(
+        "--llm-model", default="smollm2:1.7b",
+        help="LLM model to use (default: smollm2:1.7b)"
+    )
+    llm.add_argument(
+        "--llm-url", default="http://localhost:11434",
+        help="LLM API endpoint URL (default: http://localhost:11434)"
+    )
+    llm.add_argument(
+        "--llm-interval", type=int, default=20,
+        help="Get LLM decision every N steps (default: 20)"
+    )
+    
+    # DQN configuration
+    dqn = parser.add_argument_group("DQN Configuration")
+    dqn.add_argument(
+        "--no-dqn", action="store_true",
+        help="Disable DQN (LLM-only mode)"
+    )
+    dqn.add_argument(
+        "--dqn-model",
+        help="Path to pre-trained DQN model"
+    )
+    dqn.add_argument(
+        "--dqn-params", type=str,
+        help="JSON file with DQN parameters"
+    )
+    
+    # Strategy configuration
+    strategy = parser.add_argument_group("Strategy Configuration")
+    strategy.add_argument(
+        "--strategy",
+        choices=["llm_only", "llm_heavy", "balanced", "dqn_heavy"],
+        default="llm_heavy",
+        help="Training strategy (default: llm_heavy)"
+    )
+    
+    # Output configuration
+    output = parser.add_argument_group("Output Configuration")
+    output.add_argument(
+        "--output-dir", default="training_output",
+        help="Directory for output files (default: training_output)"
+    )
+    output.add_argument(
+        "--web-port", type=int, default=8080,
+        help="Port for web monitoring interface (default: 8080)"
+    )
+    output.add_argument(
+        "--headless", action="store_true",
+        help="Run without visual output"
+    )
+    output.add_argument(
+        "--debug", action="store_true",
+        help="Enable debug mode"
+    )
+    
+    args = parser.parse_args()
+    
+    # Set up logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    log_dir = args.output_dir
+    os.makedirs(log_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(f"{log_dir}/training_{timestamp}.log"),
+            logging.StreamHandler()
+        ]
+    )
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Validate ROM path
+        if not os.path.exists(args.rom_path):
+            logger.error(f"ROM file not found: {args.rom_path}")
+            return 1
+        
+        # Load DQN parameters if provided
+        dqn_params = None
+        if args.dqn_params and not args.no_dqn:
+            try:
+                with open(args.dqn_params) as f:
+                    dqn_params = json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load DQN parameters: {e}")
+                return 1
+        
+        # Create trainer
+        trainer = LLMPokemonTrainer(
+            rom_path=args.rom_path,
+            max_actions=args.max_actions,
+            save_state=args.save_state,
+            llm_model=args.llm_model,
+            llm_base_url=args.llm_url,
+            llm_interval=args.llm_interval,
+            enable_web=True,
+            web_port=args.web_port,
+            web_host="localhost",
+            enable_dqn=not args.no_dqn,
+            dqn_model_path=args.dqn_model,
+            dqn_learning_rate=dqn_params.get('learning_rate', 1e-4) if dqn_params else 1e-4,
+            dqn_batch_size=dqn_params.get('batch_size', 32) if dqn_params else 32,
+            dqn_memory_size=dqn_params.get('memory_size', 50000) if dqn_params else 50000,
+            dqn_training_frequency=dqn_params.get('training_frequency', 4) if dqn_params else 4,
+            dqn_save_frequency=500,
+            log_dir=args.output_dir,
+            show_progress=True
+        )
+        
+        # Log configuration
+        logger.info("Training Configuration:")
+        logger.info(f"  ROM: {args.rom_path}")
+        logger.info(f"  Max Actions: {args.max_actions}")
+        logger.info(f"  LLM Model: {args.llm_model}")
+        logger.info(f"  Strategy: {args.strategy}")
+        logger.info(f"  DQN Enabled: {not args.no_dqn}")
+        logger.info(f"  Web Interface: http://localhost:{args.web_port}")
+        
+        # Start training
+        success = trainer.start_training()
+        
+        if success:
+            logger.info("\n✅ Training completed successfully")
+            return 0
+        else:
+            logger.error("\n❌ Training failed")
+            return 1
+            
+    except KeyboardInterrupt:
+        logger.info("\n⚠️ Training interrupted by user")
+        if 'trainer' in locals():
+            trainer.shutdown(None, None)
+        return 0
+    except Exception as e:
+        logger.error(f"\n❌ Training failed: {e}", exc_info=True)
+        return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
