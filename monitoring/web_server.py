@@ -853,8 +853,54 @@ class TrainingHandler(BaseHTTPRequestHandler):
                     self.wfile.write(image_data)
                     return
             
-            self.send_error(404)
-        except Exception:
+            # Final fallback - ensure screen capture is enabled
+            if hasattr(self.trainer, 'pyboy') and self.trainer.pyboy:
+                try:
+                    # Try to capture screen directly
+                    screen_array = self.trainer.pyboy.screen.ndarray
+                    if screen_array is not None:
+                        from PIL import Image
+                        import io
+                        
+                        # Convert to RGB
+                        if len(screen_array.shape) == 3 and screen_array.shape[2] >= 3:
+                            rgb_screen = screen_array[:, :, :3].astype(np.uint8)
+                        else:
+                            rgb_screen = screen_array.astype(np.uint8)
+                        
+                        # Create PIL image and resize for web
+                        pil_image = Image.fromarray(rgb_screen, 'RGB')
+                        resized = pil_image.resize((320, 288), Image.NEAREST)
+                        
+                        # Save as PNG
+                        buffer = io.BytesIO()
+                        resized.save(buffer, format='PNG', optimize=True)
+                        
+                        self.send_response(200)
+                        self.send_header('Content-type', 'image/png')
+                        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                        self.send_header('Pragma', 'no-cache')
+                        self.send_header('Expires', '0')
+                        self.end_headers()
+                        self.wfile.write(buffer.getvalue())
+                        return
+                except Exception as e:
+                    logger.warning(f"Direct screen capture failed: {e}")
+            
+            # Return blank image if nothing works
+            from PIL import Image
+            import io
+            blank_img = Image.new('RGB', (320, 288), color='black')
+            buffer = io.BytesIO()
+            blank_img.save(buffer, format='PNG')
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'image/png')
+            self.end_headers()
+            self.wfile.write(buffer.getvalue())
+            
+        except Exception as e:
+            logger.error(f"Screen serve error: {e}")
             self.send_error(500)
     
     def _serve_stats(self):

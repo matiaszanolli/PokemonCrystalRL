@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core.accurate_game_state import AccurateGameState
 from core.game_state_analyzer import GameStateAnalyzer, GameStateAnalysis
 from core.strategic_context_builder import StrategicContextBuilder, DecisionContext
+from core.web_monitor import WebMonitor
 
 # Memory address mappings for Pokemon Crystal (VALIDATED addresses from your analysis)
 MEMORY_ADDRESSES = {
@@ -602,39 +603,77 @@ Your choice:"""
         return prompt
     
     def _parse_llm_response(self, response: str) -> str:
-        """Parse LLM response to extract action"""
-        response = response.lower().strip()
+        """Parse LLM response to extract action with enhanced synonym recognition"""
+        response_lower = response.lower().strip()
         
-        # Look for ACTION: pattern
-        if "action:" in response:
-            action_part = response.split("action:")[1].split("\n")[0].strip()
-            # Extract first word that looks like an action
+        # Enhanced action word mapping with synonyms
+        action_mappings = {
+            # Basic directions
+            'up': ['up', 'north', 'forward'],
+            'down': ['down', 'south', 'backward'],
+            'left': ['left', 'west'],
+            'right': ['right', 'east'],
+            # Buttons
+            'a': ['a', 'interact', 'confirm', 'attack', 'select_pokemon', 'use'],
+            'b': ['b', 'cancel', 'back', 'flee', 'run', 'escape'],
+            'start': ['start', 'menu', 'pause'],
+            'select': ['select']
+        }
+        
+        # Look for ACTION: pattern first
+        if "action:" in response_lower:
+            action_part = response_lower.split("action:")[1].split("\n")[0].strip()
             words = action_part.split()
             for word in words:
                 clean_word = word.strip('.,!?()[]{}').lower()
-                if clean_word in ['up', 'down', 'left', 'right', 'a', 'b', 'start', 'select']:
-                    return clean_word
+                for action, synonyms in action_mappings.items():
+                    if clean_word in synonyms:
+                        return action
         
-        # Look for common action words in the response
-        valid_actions = ['up', 'down', 'left', 'right', 'a', 'b', 'start', 'select']
-        for action in valid_actions:
-            if action in response:
-                return action
+        # Look for any action word or synonym in the response
+        for action, synonyms in action_mappings.items():
+            for synonym in synonyms:
+                if synonym in response_lower:
+                    return action
         
         # Fallback to 'a' if nothing found
         return 'a'
     
     def _fallback_decision(self, game_state: Dict) -> str:
-        """Fallback decision when LLM is unavailable"""
+        """Enhanced fallback decision with stuck pattern detection"""
+        # Check for stuck patterns in recent actions
+        if hasattr(self, 'recent_actions') and len(self.recent_actions) >= 5:
+            recent_5 = self.recent_actions[-5:]
+            if len(set(recent_5)) <= 2:  # Only 1-2 unique actions in last 5
+                # Try an action not recently used
+                all_actions = ['up', 'down', 'left', 'right', 'a', 'b']
+                unused_actions = [a for a in all_actions if a not in recent_5[-3:]]
+                if unused_actions:
+                    return unused_actions[0]  # Use first unused action
+        
         # Smart fallback based on game state
         if game_state.get('in_battle', 0) == 1:
             return 'a'  # Attack in battle
         elif game_state.get('menu_state', 0) != 0:
             return 'a'  # Navigate menus
         else:
-            # Exploration pattern
-            actions = ['up', 'right', 'down', 'left', 'a']
-            return actions[int(time.time()) % len(actions)]
+            # Phase-aware exploration pattern
+            phase = game_state.get('phase', 'exploration')
+            if phase == 'early_game':
+                preferred_actions = ['a', 'up', 'right', 'down']  # Interaction-focused
+            elif phase == 'starter_phase':
+                preferred_actions = ['a', 'up', 'down', 'left', 'right']  # Training-focused
+            else:
+                preferred_actions = ['up', 'right', 'down', 'left', 'a', 'start']  # General exploration
+            
+            # Choose action not recently used
+            if hasattr(self, 'recent_actions') and len(self.recent_actions) >= 2:
+                for action in preferred_actions:
+                    if action not in self.recent_actions[-2:]:
+                        return action
+            
+            # Fallback to time-based selection
+            return preferred_actions[int(time.time()) % len(preferred_actions)]
 
 class PokemonRewardCalculator:
     """Sophisticated reward calculation for Pokemon Crystal"""
@@ -2217,7 +2256,16 @@ class LLMPokemonTrainer:
         self.running = True
         self.recent_actions = []
         
-        # Web server setup
+        # LLM decision tracking for web monitor
+        from collections import deque
+        self.llm_decisions = deque(maxlen=10)  # Keep last 10 decisions
+        
+        # Web monitoring setup
+        self.web_monitor = None
+        if self.enable_web:
+            self.web_monitor = WebMonitor(self, self.web_port, self.web_host)
+        
+        # Legacy web server references for compatibility
         self.web_server = None
         self.web_thread = None
         
@@ -2232,8 +2280,15 @@ class LLMPokemonTrainer:
         print(f"\n⏸️ Shutting down LLM training...")
         self.running = False
         
+        if self.web_monitor:
+            print("Stopping web monitor...")
+            try:
+                self.web_monitor.stop()
+            except Exception as e:
+                print(f"Error stopping web monitor: {e}")
+        
+        # Legacy web server cleanup
         if self.web_server:
-            print("Stopping web server...")
             try:
                 self.web_server.shutdown()
             except:
@@ -2250,11 +2305,22 @@ class LLMPokemonTrainer:
         """Setup enhanced web monitoring server"""
         if not self.enable_web:
             return
-            
+        
+        # Use the new WebMonitor if available
+        if self.web_monitor:
+            success = self.web_monitor.start()
+            if success:
+                print(f"🌐 Web monitor started at {self.web_monitor.get_url()}")
+            else:
+                print("⚠️ Failed to start web monitor")
+            return
+        
+        # Legacy fallback (should not be reached normally)
+        print("⚠️ Using legacy web server fallback")
         try:
-            self.web_server = HTTPServer(('localhost', self.web_port), WebMonitor)
-            self.web_server.trainer_stats = self.stats
-            self.web_server.screenshot_data = None
+            # Note: This refers to the old WebMonitor class that should be replaced
+            from core.web_monitor import WebMonitorHandler
+            self.web_server = HTTPServer(('localhost', self.web_port), WebMonitorHandler)
             
             self.web_thread = threading.Thread(target=self.web_server.serve_forever, daemon=True)
             self.web_thread.start()
@@ -2310,6 +2376,53 @@ class LLMPokemonTrainer:
         except Exception as e:
             print(f"⚠️ Failed to start web server: {e}")
             self.enable_web = False
+    
+    def get_current_stats(self):
+        """Get current training statistics for web monitor"""
+        current_time = time.time()
+        elapsed = current_time - self.start_time
+        
+        # Extract game state from latest observation
+        current_state = {}
+        if hasattr(self, 'pyboy') and self.pyboy:
+            try:
+                memory = self.pyboy.memory
+                current_state = {
+                    'party_count': memory[MEMORY_ADDRESSES['party_count']],
+                    'player_map': memory[MEMORY_ADDRESSES['player_map']],
+                    'player_x': memory[MEMORY_ADDRESSES['player_x']],
+                    'player_y': memory[MEMORY_ADDRESSES['player_y']],
+                    'money': (memory[MEMORY_ADDRESSES['money_low']] + 
+                             (memory[MEMORY_ADDRESSES['money_mid']] << 8) +
+                             (memory[MEMORY_ADDRESSES['money_high']] << 16)),
+                    'badges': bin(memory[MEMORY_ADDRESSES['badges']]).count('1'),
+                    'in_battle': memory[MEMORY_ADDRESSES['in_battle']],
+                    'player_level': memory[MEMORY_ADDRESSES['player_level']] if memory[MEMORY_ADDRESSES['party_count']] > 0 else 0
+                }
+            except Exception as e:
+                # Return empty state on error
+                current_state = {}
+        
+        return {
+            'total_actions': self.actions_taken,
+            'actions_per_second': self.actions_taken / max(elapsed, 1),
+            'llm_calls': getattr(self, 'llm_decision_count', 0),
+            'total_episodes': 1,  # Single continuous session
+            'session_duration': elapsed,
+            'start_time': self.start_time,
+            'total_reward': self.total_reward,
+            'badges_earned': current_state.get('badges', 0),
+            'current_map': current_state.get('player_map', 0),
+            'player_position': {
+                'x': current_state.get('player_x', 0),
+                'y': current_state.get('player_y', 0)
+            },
+            'money': current_state.get('money', 0),
+            'party': current_state.get('party_count', 0),
+            'memory_data': current_state,
+            'game_phase': 'Gameplay',
+            'phase_progress': min((elapsed / 3600) * 100, 100)
+        }
     
     def initialize_pyboy(self):
         """Initialize PyBoy emulator"""
@@ -2468,11 +2581,13 @@ class LLMPokemonTrainer:
                 self.stats['llm_decision_count'] += 1
                 
                 # Track recent LLM decisions for web display
-                self.stats['recent_llm_decisions'].append({
+                decision_data = {
                     'action': action,
                     'reasoning': reasoning,
                     'timestamp': time.time()
-                })
+                }
+                self.stats['recent_llm_decisions'].append(decision_data)
+                self.llm_decisions.append(decision_data)  # For new web monitor
                 
                 # Keep only last 5 decisions
                 if len(self.stats['recent_llm_decisions']) > 5:
@@ -3398,7 +3513,7 @@ class LLMPokemonTrainer:
                     pass  # Give up on screenshots
     
     def print_progress(self, action: str, decision_source: str, reward: float, reward_breakdown: Dict):
-        """Print detailed training progress"""
+        """Print detailed training progress with strategic context"""
         elapsed = time.time() - self.start_time
         aps = self.actions_taken / elapsed if elapsed > 0 else 0
         
@@ -3413,6 +3528,31 @@ class LLMPokemonTrainer:
         print(f"⚡ Action {self.actions_taken}/{self.max_actions} | {action.upper()} ({decision_source})")
         print(f"   📊 {aps:.1f} a/s | Screen: {screen_info} | Level: {game_state.get('player_level', 0)} | Badges: {game_state.get('badges_total', 0)}")
         print(f"   💰 Reward: {reward:+.2f} (Total: {self.total_reward:.2f}) | {reward_summary}")
+        
+        # Add strategic context if available
+        if hasattr(self, 'context_builder') and self.context_builder:
+            try:
+                context = self.context_builder.build_context(game_state, action, reward)
+                analysis = context.current_analysis
+                
+                # Show phase and criticality
+                if hasattr(analysis, 'phase') and hasattr(analysis, 'criticality'):
+                    print(f"   🎯 Phase: {analysis.phase.value} | Criticality: {analysis.criticality.value}")
+                
+                # Show immediate threats (limit to 2 for readability)
+                if hasattr(analysis, 'immediate_threats') and analysis.immediate_threats:
+                    threats_display = analysis.immediate_threats[:2]
+                    print(f"   ⚠️ Threats: {', '.join(threats_display)}")
+                
+                # Show opportunities (limit to 2 for readability)  
+                if hasattr(analysis, 'opportunities') and analysis.opportunities:
+                    opps_display = analysis.opportunities[:2]
+                    print(f"   🎯 Opportunities: {', '.join(opps_display)}")
+                    
+            except Exception as e:
+                # Don't break progress display if context analysis fails
+                pass
+        
         print()
     
     def save_training_data(self):
@@ -3444,6 +3584,53 @@ class LLMPokemonTrainer:
         
         with open(stats_file, 'w') as f:
             json.dump(final_stats, f, indent=2)
+        
+        # Save detailed decision log with strategic context (from smart trainer)
+        if self.decision_log:
+            decision_file = os.path.join(logs_dir, f"enhanced_decisions_{timestamp}.json")
+            enhanced_decisions = []
+            
+            for decision in self.decision_log:
+                # Enhance with any available strategic context
+                enhanced_decision = decision.copy()
+                if hasattr(self, 'context_builder') and self.context_builder:
+                    try:
+                        # Add strategic analysis if available
+                        enhanced_decision['enhanced'] = True
+                    except:
+                        enhanced_decision['enhanced'] = False
+                
+                enhanced_decisions.append(enhanced_decision)
+            
+            with open(decision_file, 'w') as f:
+                json.dump(enhanced_decisions, f, indent=2)
+            
+            print(f"📊 Enhanced decisions saved: {decision_file}")
+        
+        # Save performance log (from smart trainer)
+        if self.performance_log:
+            performance_file = os.path.join(logs_dir, f"performance_metrics_{timestamp}.json")
+            with open(performance_file, 'w') as f:
+                json.dump(self.performance_log, f, indent=2)
+            
+            print(f"📈 Performance metrics saved: {performance_file}")
+        
+        # Generate training summary (from smart trainer)
+        summary = {
+            'total_actions': self.actions_taken,
+            'total_reward': self.total_reward,
+            'training_time': time.time() - self.start_time,
+            'avg_reward_per_action': self.total_reward / max(self.actions_taken, 1),
+            'llm_decisions_made': len(self.decision_log),
+            'actions_per_second': self.actions_taken / max(time.time() - self.start_time, 1),
+            'final_performance': self.performance_log[-1] if self.performance_log else {},
+            'hybrid_training': self.enable_dqn,
+            'web_monitoring': self.enable_web
+        }
+        
+        summary_file = os.path.join(logs_dir, f"training_summary_{timestamp}.json")
+        with open(summary_file, 'w') as f:
+            json.dump(summary, f, indent=2)
         
         # Save detailed LLM decisions
         if self.llm_agent.decision_history:
