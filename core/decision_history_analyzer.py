@@ -640,14 +640,17 @@ class DecisionHistoryAnalyzer:
     
     def save_patterns_to_db(self):
         """Save current patterns to database"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            for pattern in self.patterns.values():
-                cursor.execute('''
-                    INSERT OR REPLACE INTO decision_patterns VALUES 
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
+        try:
+            # Ensure parent directory exists
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                for pattern in self.patterns.values():
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO decision_patterns VALUES 
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
                     pattern.pattern_id,
                     pattern.pattern_type.value,
                     json.dumps(pattern.action_sequence),
@@ -663,7 +666,9 @@ class DecisionHistoryAnalyzer:
                     json.dumps(pattern.avoid_contexts)
                 ))
             
-            conn.commit()
+                conn.commit()
+        except (sqlite3.Error, OSError) as e:
+            self.logger.warning(f"Could not save patterns to database: {e}")
     
     def add_decision(self, decision_data: Dict[str, Any]):
         """Add decision (compatibility method for tests)"""
@@ -672,13 +677,17 @@ class DecisionHistoryAnalyzer:
         
         # Mock a game state analysis for compatibility
         mock_state = GameStateAnalysis(
-            phase=GamePhase.OVERWORLD,
-            criticality=SituationCriticality.NORMAL,
+            phase=GamePhase.EXPLORATION,
+            criticality=SituationCriticality.MODERATE,
             health_percentage=80.0,
             progression_score=50.0,
             exploration_score=30.0,
             immediate_threats=[],
             opportunities=[],
+            recommended_priorities=["exploration", "survival"],
+            situation_summary="Test situation for compatibility",
+            strategic_context="Player exploring with moderate health",
+            risk_assessment="Low risk situation",
             state_variables={}
         )
         

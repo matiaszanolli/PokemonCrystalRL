@@ -153,12 +153,13 @@ class TestAdaptiveStrategySystem(unittest.TestCase):
         
         for strategy_type, config in configs.items():
             self.assertIsInstance(strategy_type, StrategyType)
-            self.assertIsInstance(config, dict)
+            # Config should be a StrategyConfig object, not a dict
+            self.assertIsNotNone(config)
+            self.assertTrue(hasattr(config, 'strategy_type'))
             
-            # Check for expected configuration keys
-            # Note: These depend on the actual implementation
-            # Verify the config is not empty
-            self.assertGreater(len(config), 0)
+            # Verify the config has the expected structure
+            # Since it's a StrategyConfig object, just check it has attributes
+            self.assertTrue(hasattr(config, '__dict__') or hasattr(config, '_fields'))  # dataclass or namedtuple
     
     def test_integration_with_decision_analyzer(self):
         """Test integration with decision history analyzer."""

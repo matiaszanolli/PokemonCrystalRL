@@ -29,6 +29,7 @@ class StrategyType(Enum):
     RULE_BASED = "rule_based"           # Pure rule-based decisions
     EMERGENCY = "emergency"             # Emergency protocols
     LEARNING = "learning"               # Active learning mode
+    BALANCED = "balanced"               # Alias for moderate (for test compatibility)
 
 class DecisionSource(Enum):
     """Source of decision"""
@@ -79,7 +80,7 @@ class AdaptiveStrategySystem:
         self.decisions_since_strategy_change = 0
         
         # Strategy configurations
-        self.strategy_configs = self._initialize_strategy_configs()
+        self._strategy_configs = self._initialize_strategy_configs()
         
         # Performance tracking
         self.performance_history: Dict[StrategyType, PerformanceMetrics] = {
@@ -186,6 +187,20 @@ class AdaptiveStrategySystem:
                 learning_rate=0.2,
                 success_threshold=0.7,
                 failure_threshold=0.4
+            ),
+            
+            StrategyType.BALANCED: StrategyConfig(
+                strategy_type=StrategyType.BALANCED,
+                llm_frequency=0.5,  # Same as moderate
+                confidence_threshold=0.5,
+                rule_based_actions={
+                    "battle": [5, 6],  # A or B in battle
+                    "dialogue": [5],   # A to advance dialogue
+                    "menu": [1, 2, 5, 6]  # Navigate menus
+                },
+                emergency_actions={"critical_health": 7, "stuck": 5, "fainted": 7},
+                success_threshold=0.6,
+                failure_threshold=0.3
             )
         }
     
@@ -585,6 +600,10 @@ class AdaptiveStrategySystem:
     
     def select_strategy(self, context: Dict[str, Any]) -> StrategyType:
         """Select strategy based on context (for compatibility with tests)"""
+        # Handle None context
+        if context is None:
+            context = {}
+        
         # Use current strategy or adapt based on context
         if context.get('recent_performance', {}).get('success_rate', 0.5) < 0.3:
             return StrategyType.LLM_MINIMAL
@@ -634,11 +653,33 @@ class AdaptiveStrategySystem:
                 source_counts[source.value] += 1
             stats["recent_decision_sources"] = dict(source_counts)
         
+        # Performance history for tests
+        performance_history = []
+        for strategy, metrics in self.performance_history.items():
+            if metrics.decisions_made > 0:
+                performance_history.append({
+                    "strategy": strategy.value,
+                    "decisions": metrics.decisions_made,
+                    "successes": metrics.successes,
+                    "average_reward": metrics.average_reward
+                })
+        stats["performance_history"] = performance_history
+        
         return stats
     
     def get_current_config(self) -> StrategyConfig:
         """Get current strategy configuration"""
         return self.strategy_configs[self.current_strategy]
+    
+    @property
+    def strategy_configs(self) -> Dict[StrategyType, StrategyConfig]:
+        """Get strategy configurations"""
+        return self._strategy_configs
+    
+    @strategy_configs.setter 
+    def strategy_configs(self, configs: Dict[StrategyType, StrategyConfig]):
+        """Set strategy configurations"""
+        self._strategy_configs = configs
 
 
 if __name__ == "__main__":

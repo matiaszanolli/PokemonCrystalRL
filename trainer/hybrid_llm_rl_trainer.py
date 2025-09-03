@@ -214,9 +214,8 @@ class HybridLLMRLTrainer:
             }
             
             try:
-                # Note: DecisionHistoryAnalyzer uses record_decision, not add_decision
-                # Skip decision recording for now
-                pass
+                # Record decision in the database
+                self.decision_analyzer.add_decision(decision_data)
             except Exception as e:
                 self.logger.warning(f"Failed to record decision: {e}")
     
@@ -233,10 +232,14 @@ class HybridLLMRLTrainer:
             'episode_length': self.episode_lengths[-1] if self.episode_lengths else 0
         }
         
-        # Check if strategy should switch
+        # Evaluate performance and potentially switch strategy
         old_strategy = self.strategy_system.current_strategy
-        # Note: AdaptiveStrategySystem doesn't have evaluate_performance
-        # Skip strategy evaluation for now
+        
+        # Use the strategy system's evaluate_performance method
+        try:
+            self.strategy_system.evaluate_performance(performance_metrics)
+        except Exception as e:
+            self.logger.warning(f"Strategy evaluation failed: {e}")
         
         if self.strategy_system.current_strategy != old_strategy:
             self.training_stats['strategy_switches'] += 1
@@ -403,7 +406,8 @@ def create_trainer_from_config(config_path: str) -> HybridLLMRLTrainer:
     
     # Initialize LLM manager
     llm_manager = LLMManager(
-        model=config.get('llm_model', 'gpt-4'),
+        model=config.get('llm_model', 'smollm2:1.7b'),  # Use appropriate default model
+        interval=config.get('llm_interval', 10),
         max_context_turns=config.get('max_context_turns', 5)
     )
     
