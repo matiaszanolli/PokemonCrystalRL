@@ -18,7 +18,7 @@ import numpy as np
 from typing import Optional, Dict
 from pathlib import Path
 from trainer.trainer import PokemonTrainer, TrainingConfig
-from monitoring.web_server import TrainingWebServer
+# TrainingWebServer functionality has been consolidated into core.web_monitor
 from monitoring.data_bus import DataType
 
 class UnifiedPokemonTrainer(PokemonTrainer):
@@ -122,7 +122,7 @@ class UnifiedPokemonTrainer(PokemonTrainer):
         try:
             # Initialize server instance (might be mocked in tests)
             self.logger.debug("Creating web server instance...")
-            from monitoring.web_server import TrainingWebServer
+            # TrainingWebServer functionality has been consolidated into core.web_monitor
             server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
             self.logger.debug(f"Web server config: port={server_config.port}, host={server_config.host}")
             

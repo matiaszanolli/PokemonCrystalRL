@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pokemon Crystal LLM RL Training Dashboard</title>
+    <style>
+        :root {
+            --bg-dark: #1a1b26;
+            --bg-panel: #24283b;
+            --text-primary: #a9b1d6;
+            --text-secondary: #787c99;
+            --accent: #7aa2f7;
+            --success: #9ece6a;
+            --warning: #e0af68;
+            --error: #f7768e;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: var(--accent);
+            margin: 0;
+        }
+
+        .header .subtitle {
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            margin-left: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+
+        .status-indicator.connected {
+            background: var(--success);
+            color: var(--bg-dark);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .panel {
+            background: var(--bg-panel);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            color: var(--accent);
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .game-screen {
+            text-align: center;
+        }
+
+        #screen {
+            max-width: 100%;
+            height: auto;
+            image-rendering: pixelated;
+            border-radius: 8px;
+        }
+
+        .debug-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .debug-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .debug-label {
+            color: var(--text-secondary);
+        }
+
+        .debug-value {
+            color: var(--success);
+        }
+
+        .recent-decisions {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .decision {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+        }
+
+        .decision-action {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        .decision-reason {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .no-decisions {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 Pokemon Crystal LLM RL Training Dashboard</h1>
+        <div class="subtitle">
+            Advanced reinforcement learning with local LLM decision making and real-time monitoring
+            <span id="connection" class="status-indicator connected">Connected</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <h2>📊 Training Statistics</h2>
+            <div class="stats-grid" id="training-stats">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <div class="panel game-screen">
+            <h2>🖥️ Live Game Screen</h2>
+            <img id="screen" alt="Game screen">
+        </div>
+
+        <div class="panel">
+            <h2>🤖 Recent LLM Decisions</h2>
+            <div id="decisions" class="recent-decisions">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>🔍 Game State</h2>
+            <div class="stats-grid" id="game-state">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>🔎 Live Memory Debug</h2>
+            <div class="debug-grid" id="memory-debug">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Fast polling for local development
+        const SCREEN_INTERVAL = 50;  // 20fps screen updates
+        const STATS_INTERVAL = 100;   // 10 stats updates per second
+        let lastStatsUpdate = 0;
+        let consecutiveErrors = 0;
+        const MAX_ERRORS = 5;
+
+        // Utility functions
+        function formatNumber(num) {
+            return typeof num === 'number' ? num.toFixed(1) : num;
+        }
+
+        function setConnectionStatus(connected) {
+            const indicator = document.getElementById('connection');
+            indicator.textContent = connected ? 'Connected' : 'Disconnected';
+            indicator.className = `status-indicator ${connected ? 'connected' : ''}`;
+        }
+
+        // Update training statistics
+        async function updateStats() {
+            try {
+                const response = await fetch('/stats');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const stats = await response.json();
+                lastStatsUpdate = Date.now();
+                consecutiveErrors = 0;
+                setConnectionStatus(true);
+
+                // Update training stats
+                const trainingStats = document.getElementById('training-stats');
+                trainingStats.innerHTML = '';
+                [
+                    ['Total Actions', stats.total_actions || 0],
+                    ['Actions/Second', formatNumber(stats.actions_per_second) || 0],
+                    ['LLM Decisions', stats.llm_decisions || 0],
+                    ['Total Reward', formatNumber(stats.total_reward) || 0]
+                ].forEach(([label, value]) => {
+                    trainingStats.innerHTML += `
+                        <div class="stat-box">
+                            <div class="stat-label">${label}</div>
+                            <div class="stat-value">${value}</div>
+                        </div>
+                    `;
+                });
+
+                // Update game state
+                const gameState = document.getElementById('game-state');
+                gameState.innerHTML = '';
+                [
+                    ['Map', stats.current_map || '-'],
+                    ['Position', `${stats.player_position?.x || 0},${stats.player_position?.y || 0}`],
+                    ['Money', `¥${stats.money || 0}`],
+                    ['Badges', `${stats.badges_earned || 0}/16`]
+                ].forEach(([label, value]) => {
+                    gameState.innerHTML += `
+                        <div class="stat-box">
+                            <div class="stat-label">${label}</div>
+                            <div class="stat-value">${value}</div>
+                        </div>
+                    `;
+                });
+
+                // Update memory debug
+                if (stats.memory_data) {
+                    const debugGrid = document.getElementById('memory-debug');
+                    debugGrid.innerHTML = '';
+                    Object.entries(stats.memory_data).forEach(([key, value]) => {
+                        debugGrid.innerHTML += `
+                            <div class="debug-item">
+                                <span class="debug-label">${key}:</span>
+                                <span class="debug-value">${value}</span>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Update decisions
+                if (stats.recent_llm_decisions && stats.recent_llm_decisions.length > 0) {
+                    const decisions = document.getElementById('decisions');
+                    decisions.innerHTML = stats.recent_llm_decisions.map(d => `
+                        <div class="decision">
+                            <div class="decision-action">${d.action}</div>
+                            <div class="decision-reason">${d.reasoning}</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Stats update error:', error);
+                consecutiveErrors++;
+                if (consecutiveErrors >= MAX_ERRORS) {
+                    setConnectionStatus(false);
+                }
+            }
+        }
+
+        // Update game screen
+        async function updateScreen() {
+            try {
+                const img = document.getElementById('screen');
+                img.src = `/screen?t=${Date.now()}`; // Force no-cache
+            } catch (error) {
+                console.error('Screen update error:', error);
+            }
+        }
+
+        // Start update loops
+        setInterval(updateScreen, SCREEN_INTERVAL);
+        setInterval(updateStats, STATS_INTERVAL);
+
+        // Initial updates
+        updateStats();
+        updateScreen();
+    </script>
+</body>
+</html>

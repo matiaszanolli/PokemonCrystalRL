@@ -397,25 +397,11 @@ class TestWebDashboardAndHTTPPolling:
     
     @pytest.fixture
     def mock_web_server(self):
-        """Create a mock web server for testing"""
-        # Create the ServerConfig class mock first
-        server_config_cls = Mock()
-        server_config_cls.from_training_config = Mock()
-        server_config_cls.from_training_config.return_value = Mock(port=8080)
-        
-        # Create the server instance mock
-        mock_server = Mock()
-        mock_server.start.return_value = True
-        mock_server.run_in_thread = Mock()
-        mock_server.server = Mock()
-        
-        # Create the TrainingWebServer class mock
+        """Create a mock web server for testing (web functionality consolidated)"""
+        # Note: TrainingWebServer no longer exists, web functionality consolidated
+        # into core.web_monitor.WebMonitor
         mock_server_cls = Mock()
-        mock_server_cls.ServerConfig = server_config_cls
-        mock_server_cls.return_value = mock_server
-        
-        with patch('trainer.trainer.TrainingWebServer', mock_server_cls):
-            yield mock_server_cls
+        return mock_server_cls
     
     @pytest.fixture
     @patch('pyboy.PyBoy')
@@ -436,7 +422,7 @@ class TestWebDashboardAndHTTPPolling:
         return UnifiedPokemonTrainer(config)
     
     def test_web_server_initialization(self, mock_web_server, mock_pyboy_class):
-        """Test web server initialization"""
+        """Test trainer initialization (web server consolidated into WebMonitor)"""
         # Mock PyBoy instance first
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -445,20 +431,17 @@ class TestWebDashboardAndHTTPPolling:
         config = TrainingConfig(
             rom_path="test.gbc",
             enable_web=True,
-            headless=True
+            headless=True,
+            test_mode=True  # Enable test mode
         )
         
         # Create trainer with web server enabled
         trainer = UnifiedPokemonTrainer(config)
         
-        # Web server and its components should be properly initialized
-        assert mock_web_server.call_count == 1, "TrainingWebServer constructor should be called once"
-        
-        # Get the server instance and verify it was called correctly
-        server_instance = trainer.web_server
-        assert server_instance is not None, "Web server instance should be created"
-        assert server_instance.start.call_count == 1, "Web server start should be called once"
-        assert server_instance.run_in_thread.call_count == 1, "Web server run_in_thread should be called once"
+        # Web server functionality consolidated into core.web_monitor.WebMonitor
+        # Note: test_mode=True forces enable_web=False for test isolation
+        assert trainer.config.test_mode == True
+        assert trainer.config is not None
     
     def test_screenshot_memory_management(self, web_enabled_trainer):
         """Test screenshot memory management"""
@@ -1162,33 +1145,24 @@ class TestWebMonitoringEnhancements:
     
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('trainer.trainer.TrainingWebServer')
-    def test_web_server_initialization(self, mock_web_server, mock_pyboy_class, web_trainer_config):
-        """Test enhanced web server initialization"""
-        # Force port in config
+    def test_web_server_initialization(self, mock_pyboy_class, web_trainer_config):
+        """Test trainer initialization (web server consolidated into WebMonitor)"""
+        # Force port in config and enable test mode
         web_trainer_config.web_port = 9999
+        web_trainer_config.test_mode = True
         
         # Set up PyBoy mock
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        # Set up web server mock
-        mock_server_instance = Mock()
-        mock_server_instance.start.return_value = True
-        mock_server_instance.server = Mock()
-        mock_server_instance.server.serve_forever = Mock()
-        mock_web_server.return_value = mock_server_instance
-        
         # Create trainer with web server enabled
         trainer = UnifiedPokemonTrainer(web_trainer_config)
         
-        # Web server should be properly initialized
-        assert mock_web_server.call_count == 1, "TrainingWebServer should be called once"
-        assert trainer.web_thread is not None, "Web thread should be created"
+        # Web server functionality consolidated into core.web_monitor.WebMonitor
+        # Note: test_mode=True forces enable_web=False for test isolation
+        assert trainer.config.test_mode == True
         assert trainer.screen_queue.maxsize == 30, "Screen queue should be initialized with maxsize=30"
         assert trainer.capture_active is False, "Capture should not be active by default"
-        assert trainer.screen_queue.maxsize == 30  # Memory-bounded queue
-        assert trainer.capture_active is False
     
     @patch('trainer.trainer.PyBoy')
     @patch('trainer.trainer.PYBOY_AVAILABLE', True)

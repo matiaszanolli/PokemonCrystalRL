@@ -119,7 +119,7 @@ class ClientMetrics:
             )[:20])  # Top 20 most frequent texts
         }
 
-from .web_server import WebServer, ServerConfig
+from trainer.web_server import ServerConfig, WebServer
 from .web_interface import WebInterface
 from .trainer_monitor_bridge import TrainerMonitorBridge
 from .data_bus import DataType, get_data_bus
@@ -204,9 +204,7 @@ class WebMonitor:
         # Initialize components
         self.server_config = ServerConfig(
             host=self.config.host,
-            port=self.config.port,
-            static_dir=self.config.static_dir,
-            debug=self.config.debug
+            port=self.config.port
         )
         
         self.server = WebServer(self.server_config)
@@ -289,7 +287,7 @@ class WebMonitor:
             
             # Start components
             self.bridge.start_processing()
-            self.stats_collector.start_collecting()
+            self.stats_collector.start_collection()
             await self.server.start()
             
             # Start processing threads
@@ -326,7 +324,7 @@ class WebMonitor:
         
         # Shutdown components
         self.bridge.stop_processing()
-        self.stats_collector.stop_collecting()
+        self.stats_collector.stop_collection()
         await self.server.shutdown()
         
         # Cleanup

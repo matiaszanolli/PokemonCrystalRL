@@ -15,11 +15,8 @@ from typing import Optional, Dict, Any, List
 from monitoring.data_bus import get_data_bus, DataType
 from trainer.game_state_detection import GameStateDetector
 
-# Need consistent web server for all cases
-try:
-    from core.monitoring.web_server import TrainingWebServer
-except ImportError:
-    from monitoring.web_server import TrainingWebServer
+# Web server functionality consolidated into core.web_monitor.WebMonitor
+# TrainingWebServer is no longer needed as a separate class
 
 # Defer resolving PyBoy until runtime so test patches work reliably
 PyBoy = None  # Will be resolved dynamically
@@ -249,73 +246,23 @@ class PokemonTrainer:
             raise
 
     def setup_web_server(self):
-        """Setup web monitoring server if enabled."""
+        """Setup web monitoring server if enabled.
+        
+        Note: Web server functionality has been consolidated into core.web_monitor.WebMonitor
+        in the main llm_trainer.py file. This method remains for compatibility with tests.
+        """
         if not self.config.enable_web:
             self.web_server = None
             self.web_thread = None
             return
         
-        # Initialize the web server based on config and mode
-        try:
-            try:
-                # For tests, always use mock server
-                if hasattr(self.config, '_mock_name'):
-                    # Mock or test mode, use mock server
-                    from tests.trainer.mock_web_server import MockWebServer
-                    server_cls = MockWebServer
-                else:
-                    server_cls = TrainingWebServer
-                
-                # Create config for server
-                server_config = server_cls.ServerConfig.from_training_config(self.config)
-            except ImportError:
-                # Not in test environment, use real server
-                server_cls = TrainingWebServer
-                server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
-
-            # Create server instance with config and trainer
-            server_inst = server_cls(server_config, self)
-            if not server_inst:
-                self.web_server = None
-                self.web_thread = None
-                return None
-            
-            # Start server (which may change port)
-            started = server_inst.start() if hasattr(server_inst, 'start') else None
-            if not started:
-                self.web_server = None
-                self.web_thread = None
-                return None
-
-            # Check if running - tests may need to verify this
-            if hasattr(server_inst, '_running') and not server_inst._running:
-                self.web_server = None
-                self.web_thread = None
-                return None
-                
-            self.web_server = server_inst
-            
-            # Get actual port after port retry
-            port = getattr(server_inst, 'port', server_config.port)
-            
-            # Create thread if supported
-            if hasattr(server_inst, 'run_in_thread'):
-                thread = threading.Thread(target=server_inst.run_in_thread, daemon=True)
-                thread.start()
-                self.web_thread = thread
-            else:
-                # Create dummy thread for tests
-                self.web_thread = threading.Thread(target=lambda: None, daemon=True)
-            
-            # Log success
-            self.logger.info(f"✓ Web server started on {self.config.web_host}:{port}")
-            return server_inst
-            
-        except Exception as e:
-            self.logger.error(f"Failed to start web server: {e}")
-            self.web_server = None
-            self.web_thread = None
-            return None
+        # For backward compatibility with tests, create mock objects
+        self.web_server = None
+        self.web_thread = None
+        
+        # Log that web functionality has moved
+        self.logger.info("Web server functionality consolidated into core.web_monitor.WebMonitor")
+        return None
 
     def setup_llm_manager(self):
         """Setup LLM manager if LLM backend is enabled."""

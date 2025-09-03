@@ -709,6 +709,12 @@ class WebMonitor:
             self.running = False
             return False
     
+    def update_pyboy(self, pyboy):
+        """Update PyBoy instance for screen capture"""
+        if self.screen_capture:
+            self.screen_capture.pyboy = pyboy
+            logger.info("📸 PyBoy instance updated for screen capture")
+    
     def stop(self):
         """Stop the web monitor server"""
         if not self.running:
