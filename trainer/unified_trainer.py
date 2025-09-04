@@ -123,10 +123,11 @@ class UnifiedPokemonTrainer(PokemonTrainer):
             # Initialize server instance (might be mocked in tests)
             self.logger.debug("Creating web server instance...")
             # TrainingWebServer functionality has been consolidated into core.web_monitor
-            server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
-            self.logger.debug(f"Web server config: port={server_config.port}, host={server_config.host}")
+            # server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
+            # self.logger.debug(f"Web server config: port={server_config.port}, host={server_config.host}")
             
-            server_inst = TrainingWebServer(server_config, self)
+            # server_inst = TrainingWebServer(server_config, self)
+            server_inst = None  # Disabled - functionality moved to core.web_monitor
             self.logger.debug("Web server instance created")
             
             # Save server instance

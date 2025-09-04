@@ -387,6 +387,13 @@ def main():
     except KeyboardInterrupt:
         elapsed = time.time() - start_time
         print(f"\n⏸️ Training interrupted after {elapsed:.1f} seconds")
+        if 'trainer' in locals() and hasattr(trainer, 'graceful_shutdown'):
+            print("🛑 Performing graceful shutdown...")
+            try:
+                trainer.graceful_shutdown()
+                print("✅ Graceful shutdown completed")
+            except Exception as shutdown_error:
+                print(f"⚠️ Shutdown error: {shutdown_error}")
         print("📊 Partial results saved to statistics file")
         return 0
         

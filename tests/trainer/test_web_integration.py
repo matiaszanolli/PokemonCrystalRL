@@ -8,7 +8,7 @@ import numpy as np
 from unittest.mock import Mock, patch
 
 from trainer.trainer import TrainingConfig, PokemonTrainer
-from tests.trainer.mock_web_server import MockWebServer, ServerConfig
+from core.web_monitor import WebMonitor
 
 # Mock PyBoy for tests
 @pytest.fixture
@@ -23,108 +23,114 @@ def mock_pyboy():
         yield mock
 
 @pytest.fixture
-def mock_web_server():
-    with patch('core.monitoring.web_server.TrainingWebServer', MockWebServer), \
-         patch('monitoring.web_server.TrainingWebServer', MockWebServer):
-        yield MockWebServer
+def mock_web_monitor():
+    mock = Mock(spec=WebMonitor)
+    mock.running = False
+    mock.port = 8888
+    mock.host = "localhost"
+    mock.start.return_value = True
+    mock.get_url.return_value = "http://localhost:8888"
+    return mock
 
 @pytest.mark.web
 @pytest.mark.integration
-class TestWebServerIntegration:
-    """Test web server initialization and connection."""
+class TestWebMonitorIntegration:
+    """Test web monitor integration with trainer."""
     
-    def test_web_server_initialization(self, mock_pyboy):
-        """Test web server initialization (consolidated into WebMonitor)."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            web_port=8888,  # Use non-standard port
-            enable_web=True,
-            capture_screens=True
-        )
-        
-        trainer = PokemonTrainer(config)
-        # Web server functionality consolidated into core.web_monitor.WebMonitor
-        # Trainer should still initialize successfully
-        assert trainer.config.enable_web == True
-        assert trainer.config.web_port == 8888
-        
-        # Clean up
-        trainer._finalize_training()
-        time.sleep(0.1)
+    def test_web_monitor_initialization(self, mock_pyboy, mock_web_monitor):
+        """Test web monitor initialization."""
+        with patch('core.web_monitor.WebMonitor', return_value=mock_web_monitor):
+            config = TrainingConfig(
+                rom_path='test.gbc',
+                web_port=8888,
+                enable_web=True,
+                capture_screens=True
+            )
+            
+            trainer = PokemonTrainer(config)
+            assert trainer.config.enable_web is True
+            assert trainer.config.web_port == 8888
+            
+            # Should create web monitor
+            assert trainer.web_monitor == mock_web_monitor
+            
+            # Clean up
+            trainer._finalize_training()
+            
+            # Should stop web monitor
+            mock_web_monitor.stop.assert_called_once()
     
-    def test_web_server_disabled(self, mock_pyboy):
-        """Test web server configuration when disabled."""
+    def test_web_monitor_disabled(self, mock_pyboy):
+        """Test behavior when web monitor is disabled."""
         config = TrainingConfig(
             rom_path='test.gbc',
             enable_web=False
         )
         
         trainer = PokemonTrainer(config)
-        # Web server functionality consolidated into core.web_monitor.WebMonitor
-        assert trainer.config.enable_web == False
+        assert trainer.config.enable_web is False
+        assert trainer.web_monitor is None
         
         trainer._finalize_training()
     
-    def test_screenshot_memory_management(self, mock_pyboy):
-        """Test screenshot memory handling."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            enable_web=True,
-            capture_screens=True,
-            capture_fps=30
-        )
-        
-        trainer = PokemonTrainer(config)
-        assert trainer.screen_queue is not None
-        assert trainer.screen_queue.maxsize == 30
-        
-        # Fill queue
-        screens = []
-        for _ in range(35):  # Try to overflow
-            screen = np.random.randint(0, 255, (144, 160, 3))
-            trainer._capture_and_queue_screen()
-            screens.append(screen)
+    def test_web_monitor_pyboy_integration(self, mock_pyboy, mock_web_monitor):
+        """Test web monitor integration with PyBoy."""
+        with patch('core.web_monitor.WebMonitor', return_value=mock_web_monitor):
+            config = TrainingConfig(
+                rom_path='test.gbc',
+                enable_web=True
+            )
             
-        # Queue should maintain size limit
-        assert trainer.screen_queue.qsize() <= 30
-        # Queue should be full after overflow, but no more than maxsize
-        assert trainer.screen_queue.qsize() == min(35, 30)
-        
-        # Clean up
-        trainer._finalize_training()
+            trainer = PokemonTrainer(config)
+            assert trainer.web_monitor == mock_web_monitor
+            
+            # PyBoy initialization should update web monitor
+            mock_web_monitor.update_pyboy.assert_called_once()
+            # Verify it was called with a PyBoy instance (not necessarily the fixture)
+            call_args = mock_web_monitor.update_pyboy.call_args[0]
+            assert len(call_args) == 1  # Should be called with one argument
+            # The argument should be some kind of mock PyBoy instance
+            assert hasattr(call_args[0], 'tick')  # Basic PyBoy interface check
+            
+            trainer._finalize_training()
     
-    def test_web_server_recovery(self, mock_pyboy):
-        """Test web server configuration after failures (consolidated into WebMonitor)."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            enable_web=True,
-            web_port=8889
-        )
-        
-        # Trainer should initialize successfully even with web enabled
-        trainer = PokemonTrainer(config)
-        assert trainer.config.enable_web == True
-        assert trainer.config.web_port == 8889
-        
-        trainer._finalize_training()
+    def test_web_monitor_stats_update(self, mock_pyboy, mock_web_monitor):
+        """Test stats updating through web monitor."""
+        with patch('core.web_monitor.WebMonitor', return_value=mock_web_monitor):
+            config = TrainingConfig(
+                rom_path='test.gbc',
+                enable_web=True
+            )
+            
+            trainer = PokemonTrainer(config)
+            
+            # Simulate some actions
+            trainer.stats['actions_taken'] = 1000
+            trainer.stats['total_reward'] = 50.0
+            trainer.stats['llm_decision_count'] = 100
+            
+            # Get current stats should use these values
+            stats = trainer.get_current_stats()
+            assert stats['total_actions'] == 1000
+            assert stats['total_reward'] == 50.0
+            assert stats['llm_calls'] == 100
+            
+            trainer._finalize_training()
     
-    def test_web_server_port_retry(self, mock_pyboy):
-        """Test web server port configuration (consolidated into WebMonitor)."""
-        config = TrainingConfig(
-            rom_path='test.gbc',
-            enable_web=True,
-            web_port=8890
-        )
-        
-        # Create first trainer
-        trainer1 = PokemonTrainer(config)
-        assert trainer1.config.web_port == 8890
-        
-        # Create second trainer with same config
-        trainer2 = PokemonTrainer(config)
-        assert trainer2.config.web_port == 8890
-        
-        # Clean up
-        trainer1._finalize_training()
-        trainer2._finalize_training()
-        time.sleep(0.1)
+    def test_web_monitor_cleanup(self, mock_pyboy, mock_web_monitor):
+        """Test proper cleanup of web monitor on shutdown."""
+        with patch('core.web_monitor.WebMonitor', return_value=mock_web_monitor):
+            config = TrainingConfig(
+                rom_path='test.gbc',
+                enable_web=True
+            )
+            
+            trainer = PokemonTrainer(config)
+            assert trainer.web_monitor.running is False
+            
+            # Simulate training start
+            trainer.web_monitor.running = True
+            
+            # Finalize should stop the monitor
+            trainer._finalize_training()
+            mock_web_monitor.stop.assert_called_once()

@@ -2,11 +2,13 @@
 """
 LLM-Enhanced Pokemon Crystal RL Training Script
 
-An advanced training script that combines:
-- Local LLM integration for intelligent decision making
-- Sophisticated reward function based on Pokemon game progress
-- Memory map integration for game state analysis
-- Web monitoring with LLM decision tracking
+Main entry point for Pokemon Crystal LLM training system.
+Handles initialization and coordination of:
+- Game emulation (PyBoy)
+- LLM integration for decision making
+- Reward calculation and state tracking
+- Web monitoring interface
+- Training analytics
 """
 
 import time
@@ -22,16 +24,17 @@ import argparse
 import logging
 from datetime import datetime
 from PIL import Image
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from dataclasses import dataclass
 import requests
 from typing import Dict, List, Tuple, Optional, Any
 
-# Import our systems
+# Import core systems and monitoring
+from core.web_monitor import WebMonitor, WebMonitorHandler, ScreenCapture
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.accurate_game_state import AccurateGameState
-from core.game_state_analyzer import GameStateAnalyzer, GameStateAnalysis
+from core.game_state import GameState
+from core.game_state_analyzer import GameStateAnalyzer
 from core.strategic_context_builder import StrategicContextBuilder, DecisionContext
-from core.web_monitor import WebMonitor
+from trainer.web_server import WebServer, ServerConfig
 
 # Memory address mappings for Pokemon Crystal (VALIDATED addresses from your analysis)
 MEMORY_ADDRESSES = {
@@ -1356,6 +1359,11 @@ class LLMPokemonTrainer:
         self.logger = logging.getLogger("LLMTrainer")
         self.logger.setLevel(logging.INFO)
         
+        # Web monitor setup
+        self.web_monitor = None
+        if self.enable_web:
+            self.web_monitor = WebMonitor(self, self.web_port, self.web_host)
+        
         # DQN components
         self.dqn_agent = None
         self.hybrid_agent = None
@@ -1443,9 +1451,13 @@ class LLMPokemonTrainer:
         if self.enable_web:
             self.web_monitor = WebMonitor(self, self.web_port, self.web_host)
         
-        # Legacy web server references for compatibility
-        self.web_server = None
-        self.web_thread = None
+        # Setup graceful shutdown
+        signal.signal(signal.SIGINT, self.shutdown)
+        signal.signal(signal.SIGTERM, self.shutdown)
+        
+        print(f"🤖 LLM Agent: {llm_model} {'✅' if self.llm_agent.available else '❌'}")
+        if self.enable_web:
+            print(f"🌐 Web monitor will start at http://{self.web_host}:{self.web_port}")
         
         # Setup graceful shutdown
         signal.signal(signal.SIGINT, self.shutdown)
@@ -1453,31 +1465,41 @@ class LLMPokemonTrainer:
         
         print(f"🤖 LLM Agent: {llm_model} {'✅' if self.llm_agent.available else '❌'}")
         
-    def shutdown(self, signum, frame):
-        """Graceful shutdown handler"""
+    def shutdown(self, signum=None, frame=None):
+        """Graceful shutdown handler for the training system"""
         print(f"\n⏸️ Shutting down LLM training...")
         self.running = False
         
+        # Stop web monitor first
         if self.web_monitor:
-            print("Stopping web monitor...")
+            print("🛑 Stopping web monitor...")
             try:
                 self.web_monitor.stop()
+                print("✅ Web monitor stopped")
             except Exception as e:
-                print(f"Error stopping web monitor: {e}")
+                print(f"⚠️ Error stopping web monitor: {e}")
         
-        # Legacy web server cleanup
-        if self.web_server:
-            try:
-                self.web_server.shutdown()
-            except:
-                pass
-            
+        # Stop PyBoy
         if self.pyboy:
-            self.pyboy.stop()
-            
-        self.save_training_data()
-        print("✅ Training stopped cleanly")
-        sys.exit(0)
+            print("🎮 Stopping PyBoy...")
+            try:
+                self.pyboy.stop()
+                print("✅ PyBoy stopped")
+            except Exception as e:
+                print(f"⚠️ Error stopping PyBoy: {e}")
+        
+        # Save final training data
+        try:
+            self.save_training_data()
+            print("💾 Training data saved")
+        except Exception as e:
+            print(f"⚠️ Error saving training data: {e}")
+        
+        print("✅ Training system shut down cleanly")
+        
+        # Only exit if called as signal handler
+        if signum is not None:
+            sys.exit(0)
     
     def setup_web_server(self):
         """Setup enhanced web monitoring server"""
@@ -1617,9 +1639,15 @@ class LLMPokemonTrainer:
         
         print("✅ PyBoy initialized successfully")
         
-        # Update web monitor with PyBoy instance
+        # Start web monitor and update with PyBoy instance
         if self.web_monitor:
             self.web_monitor.update_pyboy(self.pyboy)
+            if not self.web_monitor.running:
+                success = self.web_monitor.start()
+                if success:
+                    print(f"🌐 Web monitor started at {self.web_monitor.get_url()}")
+                else:
+                    print("⚠️ Failed to start web monitor")
         
         # Get initial game state
         self.previous_game_state = self.get_game_state()
@@ -2393,7 +2421,7 @@ class LLMPokemonTrainer:
     
     def update_web_data(self):
         """Update data for enhanced web monitoring"""
-        if not self.enable_web or not self.web_server:
+        if not self.enable_web or not self.web_monitor:
             return
             
         try:
@@ -2523,16 +2551,19 @@ class LLMPokemonTrainer:
             self._update_screenshot()
             
             # Update live memory data for debugging
-            self.web_server.live_memory_data = current_game_state.copy()
+            if hasattr(self.web_monitor, 'update_game_state'):
+                self.web_monitor.update_game_state(current_game_state.copy())
             
             # Update final server stats
-            self.web_server.trainer_stats = self.stats
+            if hasattr(self.web_monitor, 'update_stats'):
+                self.web_monitor.update_stats(self.stats)
             
         except Exception as e:
             self.logger.error(f"Web data update error: {str(e)}")
             # Ensure the web interface shows error state
             self.stats['error'] = str(e)
-            self.web_server.trainer_stats = self.stats
+            if hasattr(self.web_monitor, 'update_stats'):
+                self.web_monitor.update_stats(self.stats)
     
     def _calculate_progress_metrics(self, state: Dict) -> Dict:
         """Calculate detailed progress metrics"""
@@ -2605,7 +2636,7 @@ class LLMPokemonTrainer:
     def _update_screenshot(self):
         """Update screenshot with error handling and headless support"""
         try:
-            if not self.pyboy or not self.web_server:
+            if not self.pyboy or not self.web_monitor:
                 return
             
             # Force PyBoy to tick once to ensure screen buffer is updated
@@ -2647,7 +2678,8 @@ class LLMPokemonTrainer:
             screenshot_data = buf.getvalue()
             
             # Update server data
-            self.web_server.screenshot_data = screenshot_data
+            if hasattr(self.web_monitor, 'update_screenshot'):
+                self.web_monitor.update_screenshot(screenshot_data)
             
             # Debug info for first few screenshots
             if not hasattr(self, '_screenshot_debug_count'):
@@ -2681,7 +2713,8 @@ class LLMPokemonTrainer:
                 
                 buf = io.BytesIO()
                 error_img.save(buf, format='PNG')
-                self.web_server.screenshot_data = buf.getvalue()
+                if hasattr(self.web_monitor, 'update_screenshot'):
+                    self.web_monitor.update_screenshot(buf.getvalue())
                 
             except Exception as inner_e:
                 self.logger.error(f"Failed to create error screenshot: {inner_e}")
@@ -2690,7 +2723,8 @@ class LLMPokemonTrainer:
                     minimal_error = Image.new('RGB', (480, 432), (64, 0, 0))
                     buf = io.BytesIO()
                     minimal_error.save(buf, format='PNG')
-                    self.web_server.screenshot_data = buf.getvalue()
+                    if hasattr(self.web_monitor, 'update_screenshot'):
+                        self.web_monitor.update_screenshot(buf.getvalue())
                 except:
                     pass  # Give up on screenshots
     
@@ -2887,9 +2921,9 @@ class LLMPokemonTrainer:
             
         finally:
             # Cleanup
-            if self.web_server:
+            if self.web_monitor:
                 try:
-                    self.web_server.shutdown()
+                    self.web_monitor.stop()
                 except:
                     pass
                     
@@ -3166,7 +3200,10 @@ def main() -> int:
     except KeyboardInterrupt:
         logger.info("\n⚠️ Training interrupted by user")
         if 'trainer' in locals():
-            trainer.shutdown(None, None)
+            if hasattr(trainer, 'graceful_shutdown'):
+                trainer.graceful_shutdown()
+            else:
+                trainer.shutdown(None, None)
         return 0
     except Exception as e:
         logger.error(f"\n❌ Training failed: {e}", exc_info=True)
