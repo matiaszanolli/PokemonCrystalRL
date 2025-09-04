@@ -534,7 +534,8 @@ class TestStreamingIntegration:
                 frame_cycle.extend(frames * 10)  # Initialize with many copies
             return frame_cycle.pop(0)  # Return first frame and remove it
         
-        mock_screen.ndarray = get_frame
+        # Use PropertyMock to make ndarray behave like an attribute that returns frames
+        type(mock_screen).ndarray = PropertyMock(side_effect=get_frame)
         mock_pyboy.screen = mock_screen
         return mock_pyboy
     
@@ -598,7 +599,7 @@ class TestStreamingIntegration:
                 raise Exception("Intermittent screen error")
             return np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         
-        mock_screen.ndarray = Mock(side_effect=screen_side_effect)
+        type(mock_screen).ndarray = PropertyMock(side_effect=screen_side_effect)
         mock_pyboy.screen = mock_screen
         
         streamer.set_pyboy_instance(mock_pyboy)

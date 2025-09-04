@@ -19,16 +19,22 @@ except ImportError:
 class LLMManager:
     """Manages interactions with local LLM models."""
 
-    def __init__(self, model: str = "smollm2:1.7b", interval: int = 10):
+    def __init__(self, model: str = "smollm2:1.7b", interval: int = 10, max_context_turns: int = 5):
         """Initialize LLM manager.
         
         Args:
             model: Name of the LLM model to use
             interval: How often to call LLM (in steps)
+            max_context_turns: Maximum number of previous decisions to remember
         """
         self.model = model
         self.interval = interval
+        self.max_context_turns = max_context_turns
         self.logger = logging.getLogger("pokemon_trainer.llm")
+        
+        # Multi-turn context tracking
+        self.decision_history = []  # List of (game_state, action, reasoning, outcome) tuples
+        self.conversation_memory = []  # List of previous LLM interactions
         
         # Temperature configurations for different states
         self.state_temperatures = {
@@ -74,6 +80,47 @@ class LLMManager:
             ollama.show(model)
         except Exception as e:
             raise RuntimeError(f"Failed to load model {model}: {e}")
+    
+    def add_to_conversation_memory(self, prompt: str, response: str, action: int, game_state: str):
+        """Add a decision to the conversation memory for multi-turn context."""
+        memory_entry = {
+            'prompt': prompt,
+            'response': response, 
+            'action': action,
+            'game_state': game_state,
+            'timestamp': time.time()
+        }
+        
+        self.conversation_memory.append(memory_entry)
+        
+        # Keep only the last N turns
+        if len(self.conversation_memory) > self.max_context_turns:
+            self.conversation_memory = self.conversation_memory[-self.max_context_turns:]
+    
+    def build_context_prompt(self, current_prompt: str) -> str:
+        """Build a prompt that includes previous decision context."""
+        if not self.conversation_memory:
+            return current_prompt
+        
+        context_parts = ["Previous decisions for context:"]
+        
+        for i, memory in enumerate(self.conversation_memory[-3:]):  # Last 3 decisions
+            action_name = self._action_to_name(memory['action'])
+            context_parts.append(f"Turn {i+1}: {memory['game_state']} -> chose {action_name} ({memory['action']})")
+        
+        context_parts.append("\nCurrent situation:")
+        context_parts.append(current_prompt)
+        context_parts.append("\nConsidering your previous decisions, what action should you take now?")
+        
+        return "\n".join(context_parts)
+    
+    def _action_to_name(self, action: int) -> str:
+        """Convert action number to readable name."""
+        action_names = {
+            1: "UP", 2: "DOWN", 3: "LEFT", 4: "RIGHT",
+            5: "A", 6: "B", 7: "START", 8: "SELECT"
+        }
+        return action_names.get(action, f"ACTION_{action}")
 
     # Pre-computed state-specific actions for ultra-fast fallback
     _FAST_ACTIONS = {
@@ -94,14 +141,16 @@ class LLMManager:
 
             start_time = time.time()
             # Get state-specific prompt and temperature
-            prompt = self._get_state_prompt(game_state, stuck_counter)
+            base_prompt = self._get_state_prompt(game_state, stuck_counter)
+            # Build context-aware prompt including previous decisions
+            prompt = self.build_context_prompt(base_prompt)
             temperature = self.state_temperatures.get(game_state, 0.7)
             
             # Call LLM to get action
             response = ollama.generate(
                 model=self.model,
                 prompt=prompt,
-                system="You are an AI player playing Pokemon Crystal. Choose one action in each response.",
+                system="You are an AI player playing Pokemon Crystal. Learn from your previous decisions and choose strategically.",
                 options={
                     'temperature': temperature
                 }
@@ -117,11 +166,16 @@ class LLMManager:
             if action is not None:
                 self.stats['successes'] += 1
                 self._track_prompt_effectiveness(prompt, True)
+                # Add successful decision to conversation memory
+                self.add_to_conversation_memory(base_prompt, response['response'], action, game_state)
                 return action
             else:
                 self.stats['failures'] += 1
                 self._track_prompt_effectiveness(prompt, False)
-                return self._get_fallback_action(game_state, stuck_counter)
+                fallback_action = self._get_fallback_action(game_state, stuck_counter)
+                # Add fallback decision to conversation memory with a note
+                self.add_to_conversation_memory(base_prompt, f"LLM failed, used fallback action {fallback_action}", fallback_action, game_state)
+                return fallback_action
 
         except Exception as e:
             self.stats['failures'] += 1

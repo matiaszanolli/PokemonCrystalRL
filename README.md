@@ -1,14 +1,16 @@
 # 🎮 Pokemon Crystal RL Training Platform
 
-**An advanced reinforcement learning environment for Pokemon Crystal featuring LLM-enhanced decision making, comprehensive memory mapping, and real-time web monitoring.**
+**An advanced reinforcement learning environment for Pokemon Crystal featuring hybrid LLM-RL training, intelligent decision making, comprehensive memory mapping, and real-time web monitoring. Now with unified single entry point architecture and enhanced LLM intelligence.**
 
 ## 🌟 Features
 
-### 🤖 **LLM-Enhanced Training**
-- **Local LLM Integration**: Uses Ollama with models like `smollm2:1.7b` for intelligent decision making
-- **Context-Aware Decisions**: AI receives game state, screen analysis, and recent actions
-- **Hybrid Approach**: Combines LLM intelligence with rule-based fallbacks
-- **Decision Tracking**: Complete LLM reasoning history with context
+### 🤖 **Hybrid LLM-RL Training System**
+- **Intelligent Architecture**: Combines LLM strategic guidance with RL optimization
+- **Curriculum Learning**: Progressive transition from LLM-heavy to RL-optimized decisions
+- **Adaptive Strategies**: Dynamic switching between decision-making approaches based on performance
+- **Decision Pattern Learning**: Learns from decision history with SQLite-backed persistence
+- **Multi-Modal Observations**: Screen capture, state variables, and strategic context integration
+- **Action Masking**: Prevents invalid moves based on current game state
 
 ### 🎮 **Advanced Game Integration**
 - **PyBoy Emulation**: Full Pokemon Crystal emulation with memory access
@@ -22,11 +24,19 @@
 - **Progressive Scaling**: Bigger rewards for major milestones (badges = +500)
 - **Smart Health Logic**: Only applies health rewards when player has Pokemon
 
-### 🌐 **Real-Time Monitoring**
+### 🌐 **Real-Time Monitoring** 
 - **Live Web Dashboard**: Beautiful interface at http://localhost:8080
 - **Game Screen Capture**: Real-time visual monitoring
 - **LLM Decision Display**: See AI reasoning for each decision
 - **Comprehensive Stats**: Performance metrics, rewards, game progress
+- **Integrated Architecture**: Web monitoring built directly into training system
+
+### 🧠 **Enhanced LLM Intelligence** ⭐ **NEW**
+- **Advanced Response Parsing**: Natural language synonyms (north/up, attack/a, flee/b)
+- **Stuck Pattern Detection**: Automatically detects and breaks repetitive loops
+- **Strategic Context Display**: Shows game phase, threats, and opportunities
+- **Phase-Aware Decisions**: Different strategies for early game vs exploration
+- **Comprehensive Logging**: Detailed decision logs with strategic context
 
 ## 🚀 Quick Start
 
@@ -50,18 +60,23 @@ mkdir roms
 # Place pokemon_crystal.gbc in the roms/ directory
 ```
 
-### 4. **Run LLM-Enhanced Training**
+### 4. **Run Training - Single Entry Point** ⭐ **SIMPLIFIED**
 ```bash
-# Basic training
-python3 llm_trainer.py --rom roms/pokemon_crystal.gbc --actions 2000
+# UNIFIED ENTRY POINT - All features in one command!
+python3 llm_trainer.py roms/pokemon_crystal.gbc --max-actions 2000
 
-# Advanced configuration
-python3 llm_trainer.py \
-    --rom roms/pokemon_crystal.gbc \
-    --actions 5000 \
+# Enhanced training with all new features
+python3 llm_trainer.py roms/pokemon_crystal.gbc \
+    --max-actions 3000 \
     --llm-model smollm2:1.7b \
     --llm-interval 15 \
     --web-port 8080
+
+# Advanced hybrid training (coming soon)
+python3 examples/run_hybrid_training.py
+
+# Quick test run
+python3 llm_trainer.py roms/pokemon_crystal.gbc --max-actions 500
 ```
 
 ### 5. **Monitor Training**
@@ -73,11 +88,19 @@ python3 llm_trainer.py \
 
 ### **Core Components**
 
-#### 🧠 **LLM Integration** (`llm_trainer.py`)
-- **LLMAgent**: Handles communication with Ollama
-- **Context Building**: Creates rich prompts with game state
-- **Decision Parsing**: Extracts valid actions from LLM responses
-- **Fallback Logic**: Smart rule-based decisions when LLM unavailable
+#### 🤖 **Hybrid Training System** (`trainer/hybrid_llm_rl_trainer.py`)
+- **HybridLLMRLTrainer**: Main training orchestrator with curriculum learning
+- **AdaptiveStrategySystem**: Performance-based strategy switching (630 lines)
+- **DecisionHistoryAnalyzer**: Pattern learning with SQLite persistence (677 lines)
+- **HybridAgent**: Combines LLM and RL agents with decision arbitration (651 lines)
+- **EnhancedPyBoyPokemonCrystalEnv**: Multi-modal Gymnasium environment (599 lines)
+
+#### 🧠 **Enhanced LLM Integration** (`llm_trainer.py`) ⭐ **CONSOLIDATED**
+- **Single Entry Point**: Unified training system with all features
+- **Enhanced LLMAgent**: Advanced communication with Ollama + smart parsing
+- **Strategic Context Building**: Rich prompts with game state and strategic analysis  
+- **Intelligent Fallback Logic**: Stuck detection, phase-aware decisions
+- **Integrated Web Monitoring**: Built-in real-time dashboard
 
 #### 💰 **Advanced Rewards** (`PokemonRewardCalculator`)
 - **Health Rewards**: Only when player has Pokemon (fixed bug!)
@@ -87,11 +110,12 @@ python3 llm_trainer.py \
 - **Badge Rewards**: +500 per badge (major milestones)
 - **Level Rewards**: +50 per level gained
 
-#### 🌐 **Web Monitoring** (`WebMonitor`)
-- **Real-time Dashboard**: Live stats and game screen
-- **LLM Decision Tracking**: Recent decisions with reasoning
-- **Reward Visualization**: Color-coded reward categories
-- **Performance Metrics**: Actions/sec, total rewards, progress
+#### 🌐 **Consolidated Web Monitoring** (`core/web_monitor.py`) ⭐ **ENHANCED**
+- **Integrated Dashboard**: Live stats and game screen built into trainer
+- **Advanced LLM Decision Tracking**: Recent decisions with strategic reasoning
+- **Real-time Screen Capture**: Threaded screen streaming with error recovery
+- **Enhanced Performance Metrics**: Actions/sec, threats, opportunities, phase info
+- **Single Port Architecture**: Everything accessible at http://localhost:8080
 
 #### 🗺️ **Memory Mapping** (`core/memory_map.py`)
 - **Comprehensive State**: 25+ memory addresses mapped
@@ -109,75 +133,124 @@ Supported LLM models via Ollama:
 
 ## 📊 Training Configuration
 
-### **LLM-Enhanced Training Options**
+### **Hybrid LLM-RL Training Options**
 
 ```bash
-# Standard configuration
-python3 llm_trainer.py \
-    --rom roms/pokemon_crystal.gbc \
-    --actions 3000 \
+# Create configuration file
+cat > hybrid_training_config.json << 'EOF'
+{
+  "rom_path": "roms/pokemon_crystal.gbc",
+  "headless": true,
+  "observation_type": "multi_modal",
+  "llm_model": "gpt-4",
+  "max_context_length": 8000,
+  "initial_strategy": "llm_heavy",
+  "decision_db_path": "pokemon_decisions.db",
+  "save_dir": "training_checkpoints",
+  "log_level": "INFO"
+}
+EOF
+
+# Run hybrid training
+python3 examples/run_hybrid_training.py
+```
+
+### **Enhanced LLM Training Options** ⭐ **UPDATED**
+
+```bash
+# Standard configuration with all enhanced features
+python3 llm_trainer.py roms/pokemon_crystal.gbc \
+    --max-actions 3000 \
     --llm-interval 15 \
     --web-port 8080
 
-# High-intelligence training
-python3 llm_trainer.py \
-    --rom roms/pokemon_crystal.gbc \
-    --actions 5000 \
+# High-intelligence training with advanced parsing
+python3 llm_trainer.py roms/pokemon_crystal.gbc \
+    --max-actions 5000 \
     --llm-model llama3.2:3b \
     --llm-interval 10 \
     --web-port 8080
 
-# Fast training (more rule-based)
-python3 llm_trainer.py \
-    --rom roms/pokemon_crystal.gbc \
-    --actions 2000 \
+# Fast training with smart fallbacks
+python3 llm_trainer.py roms/pokemon_crystal.gbc \
+    --max-actions 2000 \
     --llm-interval 25 \
+    --web-port 8080
+
+# Debug mode with enhanced logging
+python3 llm_trainer.py roms/pokemon_crystal.gbc \
+    --max-actions 1000 \
+    --debug \
     --web-port 8080
 ```
 
-### **Command Line Options**
+### **Command Line Options** ⭐ **ENHANCED**
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--rom` | ROM file path | `roms/pokemon_crystal.gbc` |
-| `--actions` | Number of actions to execute | `2000` |
-| `--llm-model` | LLM model to use | `smollm2:1.7b` |
-| `--llm-interval` | Actions between LLM decisions | `20` |
-| `--web-port` | Web monitoring port | `8080` |
-| `--no-web` | Disable web monitoring | `False` |
+| Option | Description | Default | New Features |
+|--------|-------------|---------|-------------|
+| `rom_path` | ROM file path (positional) | Required | ✅ Simplified syntax |
+| `--max-actions` | Number of actions to execute | `10000` | ✅ Updated default |
+| `--llm-model` | LLM model to use | `smollm2:1.7b` | ✅ Enhanced parsing |
+| `--llm-interval` | Actions between LLM decisions | `20` | ✅ Smart fallbacks |
+| `--web-port` | Web monitoring port | `8080` | ✅ Integrated dashboard |
+| `--headless` | Run without visual output | `False` | ✅ Performance mode |
+| `--debug` | Enable debug mode | `False` | ✅ Enhanced logging |
+| `--no-dqn` | Disable DQN (LLM-only mode) | `False` | ✅ Hybrid training |
 
 ## 🎯 Key Improvements
+
+### **🏗️ Consolidated Architecture** ⭐ **NEW**
+- **Single Entry Point**: `llm_trainer.py` now handles ALL functionality
+- **Unified Web Monitoring**: Built-in dashboard eliminates separate server setup
+- **Enhanced LLM Intelligence**: Advanced parsing, stuck detection, strategic context
+- **Simplified Usage**: One command for complete training with all features
+- **Reduced Complexity**: Eliminated `fix_web_ui.py` and `smart_llm_trainer.py` redundancy
 
 ### **✅ Fixed Reward System**
 - **Bug Fix**: Eliminated incorrect health penalties in early game
 - **Smart Logic**: Health rewards only apply when player has Pokemon
 - **Progression Focus**: Strong incentives for getting first Pokemon
 
-### **🤖 LLM Intelligence**
-- **Contextual Decisions**: AI understands game state and recent actions
-- **Screen Awareness**: Responds appropriately to dialogue, battle, overworld
-- **Strategic Thinking**: Considers long-term goals and immediate needs
+### **🧠 Enhanced LLM Intelligence** ⭐ **NEW**
+- **Natural Language Parsing**: Understands synonyms (north/up, attack/a, flee/b)
+- **Stuck Pattern Breaking**: Automatically detects and resolves repetitive loops
+- **Strategic Context**: Shows game phase, immediate threats, and opportunities
+- **Phase-Aware Decisions**: Different strategies for early game vs exploration phases
+- **Comprehensive Logging**: Detailed decision logs with strategic analysis
 
 ### **📈 Advanced Analytics**
-- **Decision Tracking**: Complete LLM reasoning history
-- **Reward Breakdown**: Detailed category-wise reward analysis
-- **Performance Monitoring**: Real-time stats and progress tracking
+- **Enhanced Decision Tracking**: Complete LLM reasoning with strategic context
+- **Performance Metrics**: Comprehensive session analysis and export
+- **Real-time Strategic Info**: Live threat/opportunity detection
+- **Detailed Summaries**: JSON exports for training analysis
 
 ## 📁 Project Structure
 
 ```
 pokemon_crystal_rl/
-├── llm_trainer.py              # 🤖 LLM-enhanced trainer (MAIN)
-├── enhanced_trainer.py         # 📊 Original enhanced trainer
+├── llm_trainer.py              # 🤖 **MAIN ENTRY POINT** - Enhanced unified trainer
 ├── core/
-│   ├── memory_map.py          # 🗺️ Memory address definitions
-│   └── __init__.py
+│   ├── web_monitor.py          # 🌐 **NEW** - Consolidated web monitoring system
+│   ├── hybrid_agent.py         # 🤝 LLM+RL decision arbitration (651 lines)
+│   ├── adaptive_strategy_system.py # 📊 Performance-based strategies (630 lines)
+│   ├── decision_history_analyzer.py # 🧠 Pattern learning (677 lines)
+│   ├── enhanced_pyboy_env.py   # 🎮 Multi-modal environment (599 lines)
+│   ├── goal_oriented_planner.py # 🎯 Strategic goal planning
+│   ├── state_variable_dictionary.py # 📊 Comprehensive state mapping
+│   └── memory_map.py           # 🗺️ Memory address definitions
+├── examples/
+│   └── run_hybrid_training.py  # 🤖 Hybrid training example
+├── trainer/
+│   ├── hybrid_llm_rl_trainer.py # 🧠 Hybrid LLM-RL trainer (455 lines)
+│   └── llm_manager.py          # 💬 LLM communication manager
+├── tests/
+│   ├── trainer/                # 🧪 Trainer tests (13 test methods)
+│   ├── integration/            # 🔗 Integration tests
+│   └── core/                   # ⚙️ Core component tests
 ├── roms/                       # 💾 ROM files (not included)
-│   ├── pokemon_crystal.gbc     #    Your ROM file
-│   └── *.state                 #    Save states
-├── llm_training_stats_*.json   # 📊 Training statistics
-├── llm_decisions_*.json        # 🧠 LLM decision history
 ├── requirements.txt            # 📦 Dependencies
+├── CONSOLIDATED_WEB_UI.md      # 📋 Web UI consolidation summary
+├── SMART_TRAINER_MERGE.md      # 📋 Smart trainer merge summary
 └── README.md                   # 📖 This documentation
 ```
 
@@ -348,13 +421,33 @@ ls roms/pokemon_crystal.gbc
 
 This project is for **educational and research purposes**. You must own a legal copy of Pokemon Crystal to use this software. ROM files are not included and must be obtained legally.
 
+## 📋 Changelog
+
+### **v2.0.0 - Consolidated Architecture** ⭐ **LATEST**
+- **🏗️ Single Entry Point**: `llm_trainer.py` now handles all functionality
+- **🌐 Integrated Web Monitoring**: Built-in dashboard eliminates separate server setup
+- **🧠 Enhanced LLM Intelligence**: Advanced parsing with natural language synonyms
+- **🎯 Smart Stuck Detection**: Automatic pattern breaking and recovery
+- **📊 Strategic Context Display**: Live threats, opportunities, and phase information
+- **📈 Comprehensive Logging**: Enhanced decision logs with strategic analysis
+- **🗑️ Code Cleanup**: Removed redundant `fix_web_ui.py` and `smart_llm_trainer.py`
+- **✅ Unified Testing**: Single command for complete training experience
+
+### **v1.x - Previous Features**
+- Hybrid LLM-RL training system
+- Advanced reward calculation
+- Memory mapping integration
+- Basic web monitoring
+- PyBoy emulation support
+
 ## 🤝 Contributing
 
 Contributions welcome! Areas of interest:
-- New LLM models and prompt engineering
-- Advanced reward function design
-- Memory mapping improvements
-- Web dashboard enhancements
+- Enhanced LLM intelligence and reasoning
+- Advanced strategic decision making
+- Memory mapping improvements  
+- Web dashboard feature additions
+- Performance optimizations
 
 Please:
 1. Fork the repository

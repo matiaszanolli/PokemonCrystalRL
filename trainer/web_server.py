@@ -15,6 +15,7 @@ class ServerConfig:
     """Web server configuration."""
     host: str = "localhost"
     port: int = 8080
+    static_dir: str = "monitoring/static"
 
     @classmethod
     def from_training_config(cls, training_config):
@@ -59,10 +60,13 @@ class WebServer:
             
         # Create server
         try:
-            self.server = HTTPServer(
+            server = HTTPServer(
                 (self.config.host, self.port),
                 handler_factory
             )
+            # Store static dir in server instance for handler access
+            server.static_dir = self.config.static_dir
+            self.server = server
             self._running = True
             return self.server
         except Exception as e:
@@ -96,19 +100,55 @@ class WebHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests"""
         try:
-            if self.path == "/":
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                self.wfile.write(b"<h1>Pokemon Trainer Web Server</h1>")
+            # Extract base path and query string
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            path = parsed.path
+            query = parse_qs(parsed.query)
+            
+            # Serve static files
+            if path == "/" or path == "":
+                path = "/index.html"
+            
+            # Try to serve from static directory first
+            if not path.startswith(("/stats", "/screen", "/api/")):
+                try:
+                    static_dir = getattr(self.server, 'static_dir', 'monitoring/static')
+                    file_path = static_dir.rstrip('/') + path
+                    with open(file_path, 'rb') as f:
+                        content = f.read()
+                        
+                    # Set content type based on extension
+                    ext = path.split('.')[-1].lower()
+                    content_type = {
+                        'html': 'text/html',
+                        'js': 'application/javascript',
+                        'css': 'text/css',
+                        'png': 'image/png',
+                        'jpg': 'image/jpeg',
+                        'jpeg': 'image/jpeg',
+                        'gif': 'image/gif',
+                        'ico': 'image/x-icon'
+                    }.get(ext, 'application/octet-stream')
+                    
+                    self.send_response(200)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Cache-Control', 'no-store, must-revalidate')
+                    self.end_headers()
+                    self.wfile.write(content)
+                    return
+                except (IOError, OSError):
+                    pass  # Fall through to other handlers if file not found
                 
-            elif self.path == "/screen":
+            elif path == "/screen":
                 if self.trainer and hasattr(self.trainer, 'latest_screen'):
                     screen_data = self.trainer.latest_screen
                     if screen_data and 'image_b64' in screen_data:
                         image_data = base64.b64decode(screen_data['image_b64'])
                         self.send_response(200)
-                        self.send_header('Content-type', 'image/png')
+                        self.send_header('Content-Type', 'image/png')
+                        self.send_header('Cache-Control', 'no-store, must-revalidate')
+                        self.send_header('Access-Control-Allow-Origin', '*')
                         self.end_headers()
                         self.wfile.write(image_data)
                     else:
@@ -116,13 +156,15 @@ class WebHandler(BaseHTTPRequestHandler):
                 else:
                     self.send_error(404)
             
-            elif self.path == "/stats":
+            elif path == "/stats":
                 if self.trainer:
                     stats = {}
                     if hasattr(self.trainer, 'get_current_stats'):
                         stats = self.trainer.get_current_stats()
                     self.send_response(200)
-                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Cache-Control', 'no-store, must-revalidate')
+                    self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     self.wfile.write(json.dumps(stats).encode('utf-8'))
                 else:

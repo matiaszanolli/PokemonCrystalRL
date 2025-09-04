@@ -7,16 +7,15 @@ import tempfile
 import requests
 import socketio
 import time
+import threading
+import io
 import numpy as np
+from PIL import Image
 from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from monitoring import (
-    UnifiedMonitor,
-    MonitorConfig,
-)
-from monitoring.web_monitor import TrainingState
+from core.web_monitor import WebMonitor, ScreenCapture, WebMonitorHandler
 
 @pytest.fixture
 def temp_dir():
@@ -25,26 +24,35 @@ def temp_dir():
         yield Path(tmpdir)
 
 @pytest.fixture
-def test_config(temp_dir):
-    """Create test configuration."""
-    # Find an available port
+def mock_trainer():
+    """Create mock trainer instance."""
+    trainer = Mock()
+    trainer._start_time = time.time()
+    trainer.start_time = property(lambda self: self._start_time)
+    trainer.stats = {
+        'actions_taken': 1000,
+        'training_time': 3600,
+        'actions_per_second': 2.5,
+        'llm_decision_count': 100,
+        'total_reward': 50.0,
+        'player_level': 5,
+        'badges_total': 1
+    }
+    trainer.llm_decisions = [
+        {'action': 'up', 'reasoning': 'Moving to exit', 'timestamp': time.time()},
+        {'action': 'a', 'reasoning': 'Interact with NPC', 'timestamp': time.time()}
+    ]
+    return trainer
+
+@pytest.fixture
+def available_port():
+    """Get an available port for testing."""
     import socket
     sock = socket.socket()
     sock.bind(('', 0))
-    available_port = sock.getsockname()[1]
+    port = sock.getsockname()[1]
     sock.close()
-    
-    return MonitorConfig(
-        db_path=str(temp_dir / "test.db"),
-        data_dir=str(temp_dir / "data"),
-        static_dir=str(temp_dir / "static"),
-        web_port=available_port,  # Use dynamic port
-        update_interval=0.1,
-        snapshot_interval=0.5,
-        max_events=1000,
-        max_snapshots=10,
-        debug=True
-    )
+    return port
 
 @pytest.fixture
 def error_handler():
@@ -53,292 +61,241 @@ def error_handler():
     return ErrorHandler()
 
 @pytest.fixture
-def monitor(test_config, error_handler):
-    """Create and start monitor instance."""
-    monitor = UnifiedMonitor(config=test_config)
-    monitor.error_handler = error_handler
-    
-    # Start training - this will call _ensure_server_started() automatically
-    # which starts the server in a background thread
-    monitor.start_training(config={"test": True})
-    
-    import time
-    import requests
+def web_monitor(mock_trainer, available_port):
+    """Create and start web monitor instance."""
+    monitor = WebMonitor(mock_trainer, available_port, "localhost")
+    assert monitor.start()  # Start the monitor
     
     # Wait for server to become responsive
     start_time = time.time()
-    max_wait = 10  # Maximum wait time in seconds
+    max_wait = 5  # Maximum wait time in seconds
     while time.time() - start_time < max_wait:
         try:
-            response = requests.get(f"http://localhost:{monitor.config.web_port}/api/status", timeout=1)
+            response = requests.get(f"http://localhost:{monitor.port}/api/status", timeout=1)
             if response.status_code == 200:
                 break
         except (requests.ConnectionError, requests.Timeout):
             time.sleep(0.1)
     else:
-        raise TimeoutError(f"Server on port {monitor.config.web_port} did not become responsive within timeout period")
+        raise TimeoutError(f"Server did not become responsive within timeout period")
     
     try:
         yield monitor
     finally:
-        # Comprehensive cleanup
         try:
-            # Stop training and monitoring (this will also stop the server thread)
-            monitor.stop_training()
-            monitor.stop_monitoring()
-            
-            # Give the system time to release the port
-            time.sleep(1.0)
-            
+            monitor.stop()
+            time.sleep(0.5)  # Allow time for cleanup
         except Exception as e:
             print(f"Warning: Error during monitor cleanup: {e}")
 
 @pytest.mark.integration
 @pytest.mark.web
 class TestWebIntegration:
-    """Test web interface integration."""
+    """Test web interface integration with LLMPokemonTrainer."""
     
-    def test_status_endpoint(self, monitor):
+    def test_status_endpoint(self, web_monitor):
         """Test status API endpoint."""
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/api/status"
-        )
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/status")
         assert response.status_code == 200
         
         data = response.json()
         assert data["status"] == "running"
-        assert data["monitoring"] is True
-        assert "current_run_id" in data
-        assert data["current_run_id"] == monitor.current_run_id
+        assert "screen_capture_active" in data
+        assert data["screen_capture_active"] == False  # No PyBoy instance yet
+        assert "uptime" in data
     
-    def test_metrics_endpoint(self, monitor):
-        """Test metrics API endpoint."""
-        # Add some metrics
-        metrics = {
-            "loss": 0.5,
-            "accuracy": 0.8,
-            "reward": 1.0
-        }
-        monitor.update_metrics(metrics)
-        
-        # Get metrics
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/api/metrics"
-        )
+    def test_stats_endpoint(self, web_monitor, mock_trainer):
+        """Test stats API endpoint."""
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/stats")
         assert response.status_code == 200
         
         data = response.json()
-        assert "metrics" in data
-        assert data["metrics"]["loss"] == 0.5
-        assert data["metrics"]["accuracy"] == 0.8
+        assert data["total_actions"] == mock_trainer.stats["actions_taken"]
+        assert data["llm_calls"] == mock_trainer.stats["llm_decision_count"]
+        assert data["total_reward"] == mock_trainer.stats["total_reward"]
         
-        # Test historical metrics
-        response = requests.get(
-            f"http://localhost:{port}/api/metrics/history",
-            params={"metric": "loss", "minutes": 5}
-        )
-        assert response.status_code == 200
+        # Update stats
+        mock_trainer.stats["actions_taken"] = 2000
+        mock_trainer.stats["total_reward"] = 100.0
         
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/stats")
         data = response.json()
-        assert "data" in data
-        assert len(data["data"]) > 0
-        assert "statistics" in data
+        assert data["total_actions"] == 2000
+        assert data["total_reward"] == 100.0
     
-    def test_screenshot_endpoint(self, monitor):
+    def test_screenshot_endpoint(self, web_monitor):
         """Test screenshot API endpoint."""
-        # Add a screenshot
-        screenshot = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
-        monitor.update_screenshot(screenshot)
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/screenshot")
+        assert response.status_code == 200
         
-        # Get screenshot
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/api/screenshot"
-        )
+        # Should return blank image since no PyBoy instance
+        image = Image.open(io.BytesIO(response.content))
+        assert image.size == (320, 288)  # Expected dimensions after resize
+        
+        # Add mock PyBoy with screen
+        mock_pyboy = Mock()
+        mock_pyboy.screen = Mock()
+        # Create actual numpy array to avoid shape attribute issues
+        screen_array = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy.screen.ndarray = screen_array
+        
+        web_monitor.update_pyboy(mock_pyboy)
+        time.sleep(0.3)  # Wait for first capture
+        
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/screenshot")
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "image/png"
+        
+        image = Image.open(io.BytesIO(response.content))
+        assert image.size == (320, 288)
+    
+    def test_llm_decisions_endpoint(self, web_monitor, mock_trainer):
+        """Test LLM decisions API endpoint."""
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/llm_decisions")
         assert response.status_code == 200
         
         data = response.json()
-        assert "image" in data
-        assert data["image"].startswith("data:image/png;base64,")
-        assert "timestamp" in data
-        assert "dimensions" in data
-    
-    def test_websocket_connection(self, monitor):
-        """Test Socket.IO connectivity."""
-        # Create Socket.IO client
-        socket = socketio.Client()
-        port = monitor.config.web_port if monitor.config else monitor.port
-        socket.connect(f"http://localhost:{port}")
-
-        # Initialize response holder
-        response_data = None
-        done = False
-        def handle_response(data):
-            nonlocal response_data, done
-            response_data = data
-            done = True
-
-        # Register handler and emit test message
-        socket.on('test', handle_response)
-        socket.emit('test', {'message': 'test'})
-
-        # Wait for response with timeout
-        start = time.time()
-        while not done and time.time() - start < 5:
-            time.sleep(0.1)
+        assert "recent_decisions" in data
+        assert len(data["recent_decisions"]) == 2  # From mock trainer
         
-        socket.disconnect()
-        
-        assert response_data is not None
-        assert 'type' in response_data
-        assert response_data['type'] == 'test'
-        assert 'timestamp' in response_data
+        # Verify decision content
+        decisions = data["recent_decisions"]
+        assert decisions[0]["action"] == "up"
+        assert decisions[0]["reasoning"] == "Moving to exit"
+        assert decisions[1]["action"] == "a"
+        assert decisions[1]["reasoning"] == "Interact with NPC"
     
-    def test_real_time_updates(self, monitor):
-        """Test real-time updates via Socket.IO."""
-        socket = socketio.Client()
-        port = monitor.config.web_port if monitor.config else monitor.port
-        socket.connect(f"http://localhost:{port}")
-
-        updates_received = []
-        done = False
-
-        def handle_metrics(data):
-            updates_received.append(('metrics', data))
-            check_done()
-
-        def handle_episode(data):
-            updates_received.append(('episode', data))
-            check_done()
-
-        def check_done():
-            nonlocal done
-            done = len(updates_received) >= 2
-
-        socket.on('metrics_update', handle_metrics)
-        socket.on('episode_update', handle_episode)
-
-        # Update metrics
-        monitor.update_metrics({
-            "loss": 0.5,
-            "accuracy": 0.8
-        })
-
-        # Update episode
-        monitor.update_episode(
-            episode=0,
-            total_reward=10.0,
-            steps=100,
-            success=True
-        )
-
-        # Wait for updates with timeout
-        start = time.time()
-        while not done and time.time() - start < 5:
-            time.sleep(0.1)
-
-        socket.disconnect()
-
-        assert len(updates_received) >= 2
-
-        # Get metrics and episode updates
-        metrics_payload = next(data for type, data in updates_received if type == 'metrics')
-        episode_payload = next(data for type, data in updates_received if type == 'episode')
-
-        # metrics_payload is the full event data; access nested structure if present
-        metrics = metrics_payload.get('data', {}).get('metrics') or metrics_payload
-        assert metrics['loss'] == 0.5
-        assert metrics['accuracy'] == 0.8
-
-        # Episode payload may be nested as well
-        episode = episode_payload.get('data') or episode_payload
-        assert episode['episode'] == 0
-        assert episode['total_reward'] == 10.0
-    
-    def test_error_reporting(self, monitor):
-        """Test error reporting via web interface."""
-        # Generate error
-        error = Exception("Test error")
-        from monitoring.error_handler import ErrorSeverity, ErrorCategory
-        monitor.error_handler.handle_error(
-            error=error,
-            message="Test error message",
-            severity=ErrorSeverity.ERROR,
-            category=ErrorCategory.SYSTEM,
-            component="monitor"
-        )
+    def test_stats_update_interval(self, web_monitor, mock_trainer):
+        """Test stats update interval works properly."""
+        # Get initial stats
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/stats")
+        initial_stats = response.json()
         
-        # Check error endpoint
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/api/errors"
-        )
-        assert response.status_code == 200
+        # Update trainer stats
+        mock_trainer.stats["actions_taken"] = 3000
+        mock_trainer.stats["llm_decision_count"] = 200
+        mock_trainer.stats["total_reward"] = 150.0
         
-        data = response.json()
-        assert "errors" in data
-        assert len(data["errors"]) == 1
-        error = data["errors"][0]
-        assert error["message"] == "Test error message"
-        assert error["component"] == "monitor"
-    
-    def test_system_metrics(self, monitor):
-        """Test system metrics reporting."""
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/api/system"
-        )
-        assert response.status_code == 200
+        # Stats should update within 1 second
+        time.sleep(1.0)
         
-        data = response.json()
-        assert "cpu_percent" in data
-        assert "memory_percent" in data
-        assert "disk_usage" in data
-        assert "timestamp" in data
-    
-    def test_training_control(self, monitor):
-        """Test training control via web interface."""
-        port = monitor.config.web_port if monitor.config else monitor.port
-        # Pause training
-        response = requests.post(
-            f"http://localhost:{port}/api/training/control",
-            json={"action": "pause"}
-        )
-        assert response.status_code == 200
-        assert monitor.training_state == TrainingState.PAUSED
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/stats")
+        updated_stats = response.json()
         
-        # Resume training
-        response = requests.post(
-            f"http://localhost:{port}/api/training/control",
-            json={"action": "resume"}
-        )
-        assert response.status_code == 200
-        assert monitor.training_state == TrainingState.RUNNING
+        assert updated_stats["total_actions"] == 3000
+        assert updated_stats["llm_calls"] == 200
+        assert updated_stats["total_reward"] == 150.0
     
-    def test_static_files(self, monitor, test_config):
-        """Test static file serving."""
-        # Create test static file
-        static_dir = Path(test_config.static_dir)
-        static_dir.mkdir(parents=True, exist_ok=True)
-        test_file = static_dir / "test.txt"
-        test_file.write_text("test content")
-        
-        # Get file
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/static/test.txt"
-        )
-        assert response.status_code == 200
-        assert response.text == "test content"
-    
-    def test_dashboard_html(self, monitor):
-        """Test dashboard HTML endpoint."""
-        port = monitor.config.web_port if monitor.config else monitor.port
-        response = requests.get(
-            f"http://localhost:{port}/"
-        )
+    def test_dashboard_loads(self, web_monitor):
+        """Test that the dashboard UI loads properly."""
+        response = requests.get(f"http://localhost:{web_monitor.port}/")
         assert response.status_code == 200
         assert "text/html" in response.headers["Content-Type"]
-        assert "Pokemon Crystal RL Training Monitor" in response.text
+        
+        html = response.text
+        # Check for key dashboard elements
+        required_elements = [
+            "Pokemon Crystal LLM RL Training Dashboard",
+            "Training Statistics",
+            "Live Game Screen",
+            "Game State",
+            "Recent LLM Decisions",
+            "Live Memory Debug"
+        ]
+        
+        for element in required_elements:
+            assert element in html, f"Missing dashboard element: {element}"
+    
+    def test_screen_update_interval(self, web_monitor):
+        """Test screen update interval."""
+        # Add mock PyBoy with screen
+        mock_pyboy = Mock()
+        mock_pyboy.screen = Mock()
+        # Create actual numpy array to avoid shape attribute issues
+        screen_array = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy.screen.ndarray = screen_array
+        
+        web_monitor.update_pyboy(mock_pyboy)
+        
+        # Should capture at ~5 FPS
+        time.sleep(0.5)
+        capture_stats = web_monitor.screen_capture.stats
+        
+        # Should have captured 2-3 frames in 0.5 seconds at 5 FPS
+        assert 1 <= capture_stats['frames_captured'] <= 3
+    
+    def test_concurrent_requests(self, web_monitor):
+        """Test handling concurrent API requests."""
+        request_results = []
+        request_errors = []
+        
+        def make_requests(endpoint):
+            try:
+                for _ in range(10):
+                    response = requests.get(f"http://localhost:{web_monitor.port}{endpoint}")
+                    request_results.append((endpoint, response.status_code))
+                    time.sleep(0.01)  # Small delay
+            except Exception as e:
+                request_errors.append((endpoint, str(e)))
+        
+        # Create threads for different endpoints
+        threads = [
+            threading.Thread(target=make_requests, args=("/api/stats",)),
+            threading.Thread(target=make_requests, args=("/api/screenshot",)),
+            threading.Thread(target=make_requests, args=("/api/llm_decisions",))
+        ]
+        
+        # Start all threads
+        for thread in threads:
+            thread.start()
+        
+        # Wait for completion
+        for thread in threads:
+            thread.join()
+        
+        assert not request_errors, f"Errors during concurrent requests: {request_errors}"
+        assert len(request_results) == 30  # 10 requests * 3 endpoints
+        
+        # All requests should have succeeded
+        for _, status_code in request_results:
+            assert status_code == 200
+    
+    def test_port_conflict_resolution(self):
+        """Test handling of port conflicts."""
+        mock_trainer = Mock()
+        
+        # Start first monitor
+        port = 8888
+        monitor1 = WebMonitor(mock_trainer, port, "localhost")
+        assert monitor1.start()
+        assert monitor1.port == port
+        
+        # Try to start second monitor on same port
+        monitor2 = WebMonitor(mock_trainer, port, "localhost")
+        assert monitor2.port != port  # Should have picked different port
+        assert monitor2.start()
+        
+        # Verify both are running
+        assert requests.get(f"http://localhost:{monitor1.port}/api/status").status_code == 200
+        assert requests.get(f"http://localhost:{monitor2.port}/api/status").status_code == 200
+        
+        # Clean up
+        monitor1.stop()
+        monitor2.stop()
+    
+    def test_error_handling(self, web_monitor):
+        """Test error handling in web monitor."""
+        # Test non-existent endpoint
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/nonexistent")
+        assert response.status_code == 404
+        
+        # Test missing PyBoy
+        response = requests.get(f"http://localhost:{web_monitor.port}/api/screenshot")
+        assert response.status_code == 200  # Should return blank image
+        
+        # Test malformed requests
+        response = requests.post(
+            f"http://localhost:{web_monitor.port}/api/status",
+            data="invalid json"
+        )
+        assert response.status_code in [400, 404, 405]  # Depending on implementation

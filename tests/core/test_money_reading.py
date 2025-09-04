@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from core.pyboy_env import PyBoyPokemonCrystalEnv
 
+
 class MemoryMock:
     """Mock memory class for testing."""
     def __init__(self, data):
@@ -11,6 +12,7 @@ class MemoryMock:
     
     def __getitem__(self, addr):
         return self.data.get(addr, 0)
+
 
 @pytest.fixture
 def money_env():
@@ -27,12 +29,14 @@ def money_env():
     yield test_env
     test_env.close()
 
+
 def test_bcd_money_empty(money_env):
     """Test reading empty/zero money value."""
     # Set up memory mock to return 0 for all bytes
     money_env.pyboy.memory = MemoryMock({})
     
     assert money_env._read_bcd_money() == 0
+
 
 def test_bcd_money_100(money_env):
     """Test reading ¥100 value."""
@@ -46,6 +50,7 @@ def test_bcd_money_100(money_env):
     
     assert money_env._read_bcd_money() == 100
 
+
 def test_bcd_money_large_value(money_env):
     """Test reading large money value (¥999999)."""
     # Set up memory mock to return BCD for 999999 (0x99, 0x99, 0x99)
@@ -57,6 +62,7 @@ def test_bcd_money_large_value(money_env):
     })
     
     assert money_env._read_bcd_money() == 999999
+
 
 def test_bcd_money_invalid_digits(money_env):
     """Test handling invalid BCD digits (>9)."""
@@ -70,6 +76,7 @@ def test_bcd_money_invalid_digits(money_env):
     
     assert money_env._read_bcd_money() == 0  # Should return 0 for invalid BCD
 
+
 def test_bcd_money_typical_value(money_env):
     """Test reading typical money value (¥1234)."""
     # Set up memory mock to return BCD for 1234 (0x00, 0x12, 0x34)
@@ -81,6 +88,7 @@ def test_bcd_money_typical_value(money_env):
     })
     
     assert money_env._read_bcd_money() == 1234
+
 
 def test_bcd_money_starting_value(money_env):
     """Test reading starting money value (¥3000)."""

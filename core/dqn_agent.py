@@ -361,8 +361,52 @@ class DQNAgent:
             'avg_recent_loss': np.mean(recent_losses),
             'avg_recent_reward': np.mean(recent_rewards),
             'total_episodes': len(self.episode_rewards),
-            'device': str(self.device)
+            'device': str(self.device),
+            'recent_losses': recent_losses[-10:] if len(recent_losses) > 10 else recent_losses,
+            'exploration_rate': self.epsilon
         }
+    
+    def get_memory_usage(self) -> Dict:
+        """Get memory usage statistics for monitoring"""
+        try:
+            # Calculate memory usage for the replay buffer
+            buffer_size = len(self.memory)
+            buffer_capacity = self.memory.capacity
+            buffer_usage_pct = (buffer_size / buffer_capacity) * 100 if buffer_capacity > 0 else 0
+            
+            # Calculate approximate memory size
+            # Each experience contains: state(32), action(1), reward(1), next_state(32), done(1) = ~67 floats
+            # Approximate bytes per experience: 67 * 4 bytes (float32) = 268 bytes
+            estimated_buffer_mb = (buffer_size * 268) / (1024 * 1024)
+            
+            # Model parameter count
+            model_params = sum(p.numel() for p in self.q_network.parameters())
+            target_params = sum(p.numel() for p in self.target_network.parameters())
+            total_params = model_params + target_params
+            
+            # Approximate model memory usage (assuming float32)
+            model_memory_mb = (total_params * 4) / (1024 * 1024)
+            
+            return {
+                'replay_buffer': {
+                    'size': buffer_size,
+                    'capacity': buffer_capacity,
+                    'usage_percent': buffer_usage_pct,
+                    'estimated_mb': estimated_buffer_mb
+                },
+                'model': {
+                    'parameters': total_params,
+                    'estimated_mb': model_memory_mb
+                },
+                'total_estimated_mb': estimated_buffer_mb + model_memory_mb,
+                'device': str(self.device)
+            }
+        except Exception as e:
+            return {
+                'error': str(e),
+                'replay_buffer': {'size': len(self.memory) if hasattr(self, 'memory') else 0},
+                'device': str(self.device) if hasattr(self, 'device') else 'unknown'
+            }
 
 class HybridAgent:
     """Hybrid agent that combines LLM reasoning with DQN action values"""

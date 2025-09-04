@@ -26,25 +26,45 @@ function initMonitoring() {
 // WebSocket handling
 function initWebSocket() {
     try {
-        socket = io();
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+        socket = new WebSocket(wsUrl);
         
-        socket.on('connect', () => {
+        socket.onopen = () => {
             console.log('WebSocket connected');
             updateConnectionStatus(true);
-        });
+        };
         
-        socket.on('disconnect', () => {
+        socket.onclose = () => {
             console.log('WebSocket disconnected');
             updateConnectionStatus(false);
-            
             // Fallback to polling
             initPollingFallback();
-        });
+        };
         
-        socket.on('screenshot_update', handleScreenUpdate);
-        socket.on('stats_update', handleStatsUpdate);
-        socket.on('text_update', handleTextUpdate);
-        socket.on('action_update', handleActionUpdate);
+        socket.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                switch (msg.type) {
+                    case 'screenshot_update':
+                        handleScreenUpdate(msg.payload);
+                        break;
+                    case 'stats_update':
+                        handleStatsUpdate(msg.payload);
+                        break;
+                    case 'text_update':
+                        handleTextUpdate(msg.payload);
+                        break;
+                    case 'action_update':
+                        handleActionUpdate(msg.payload);
+                        break;
+                    default:
+                        break;
+                }
+            } catch (e) {
+                console.error('WS message parse error', e);
+            }
+        };
         
     } catch (err) {
         console.error('WebSocket initialization error:', err);
@@ -58,8 +78,8 @@ function initScreenUpdates() {
 }
 
 function requestScreenUpdate() {
-    if (socket && socket.connected) {
-        socket.emit('request_screenshot');
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'request_screenshot' }));
     } else {
         fetchScreenUpdate();
     }
@@ -80,8 +100,8 @@ function initStatsUpdates() {
 }
 
 function requestStatsUpdate() {
-    if (socket && socket.connected) {
-        socket.emit('request_stats');
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'request_stats' }));
     } else {
         fetchStatsUpdate();
     }

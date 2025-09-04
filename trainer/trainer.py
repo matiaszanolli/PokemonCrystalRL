@@ -14,12 +14,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from monitoring.data_bus import get_data_bus, DataType
 from trainer.game_state_detection import GameStateDetector
+from core.web_monitor import WebMonitor
 
-# Need consistent web server for all cases
-try:
-    from core.monitoring.web_server import TrainingWebServer
-except ImportError:
-    from monitoring.web_server import TrainingWebServer
+# Web server functionality consolidated into core.web_monitor.WebMonitor
+# TrainingWebServer is no longer needed as a separate class
 
 # Defer resolving PyBoy until runtime so test patches work reliably
 PyBoy = None  # Will be resolved dynamically
@@ -79,6 +77,12 @@ class PokemonTrainer:
 
         self.config = config
         self.data_bus = None  # Initialize data bus to None
+        
+        # Initialize synchronization primitives FIRST
+        self._shared_lock = threading.RLock()  # Re-entrant lock for thread safety
+        self._sync_lock = self._shared_lock  # Alias for backward compatibility
+        self._shutdown_event = threading.Event()
+        
         self.setup_logging()
         self.init_error_tracking()
         self._setup_queues()  # Initialize queues early
@@ -250,72 +254,50 @@ class PokemonTrainer:
 
     def setup_web_server(self):
         """Setup web monitoring server if enabled."""
+        # Ensure attribute exists for tests even when disabled
+        self.web_monitor = None
+        if not self.config.enable_web:
+            return
+            
+        try:
+            from core.web_monitor import WebMonitor
+            self.web_monitor = WebMonitor(
+                trainer=self,
+                port=self.config.web_port,
+                host=self.config.web_host
+            )
+            
+            if self.web_monitor.start():
+                self.logger.info(f"Web monitor started at {self.web_monitor.get_url()}")
+                # If PyBoy is already initialized, update the web monitor
+                try:
+                    if getattr(self, 'pyboy', None):
+                        self.web_monitor.update_pyboy(self.pyboy)
+                except Exception:
+                    pass
+            else:
+                self.logger.error("Failed to start web monitor")
+                self.web_monitor = None
+        except Exception as e:
+            self.logger.error(f"Failed to initialize web monitor: {e}")
+            self.web_monitor = None
+        """Setup web monitoring server if enabled.
+        
+        Note: Web server functionality has been consolidated into core.web_monitor.WebMonitor
+        in the main llm_trainer.py file. This method remains for compatibility with tests.
+        """
         if not self.config.enable_web:
             self.web_server = None
             self.web_thread = None
             return
         
-        # Initialize the web server based on config and mode
-        try:
-            try:
-                # For tests, always use mock server
-                if hasattr(self.config, '_mock_name'):
-                    # Mock or test mode, use mock server
-                    from tests.trainer.mock_web_server import MockWebServer
-                    server_cls = MockWebServer
-                else:
-                    server_cls = TrainingWebServer
-                
-                # Create config for server
-                server_config = server_cls.ServerConfig.from_training_config(self.config)
-            except ImportError:
-                # Not in test environment, use real server
-                server_cls = TrainingWebServer
-                server_config = TrainingWebServer.ServerConfig.from_training_config(self.config)
-
-            # Create server instance with config and trainer
-            server_inst = server_cls(server_config, self)
-            if not server_inst:
-                self.web_server = None
-                self.web_thread = None
-                return None
-            
-            # Start server (which may change port)
-            started = server_inst.start() if hasattr(server_inst, 'start') else None
-            if not started:
-                self.web_server = None
-                self.web_thread = None
-                return None
-
-            # Check if running - tests may need to verify this
-            if hasattr(server_inst, '_running') and not server_inst._running:
-                self.web_server = None
-                self.web_thread = None
-                return None
-                
-            self.web_server = server_inst
-            
-            # Get actual port after port retry
-            port = getattr(server_inst, 'port', server_config.port)
-            
-            # Create thread if supported
-            if hasattr(server_inst, 'run_in_thread'):
-                thread = threading.Thread(target=server_inst.run_in_thread, daemon=True)
-                thread.start()
-                self.web_thread = thread
-            else:
-                # Create dummy thread for tests
-                self.web_thread = threading.Thread(target=lambda: None, daemon=True)
-            
-            # Log success
-            self.logger.info(f"✓ Web server started on {self.config.web_host}:{port}")
-            return server_inst
-            
-        except Exception as e:
-            self.logger.error(f"Failed to start web server: {e}")
-            self.web_server = None
-            self.web_thread = None
-            return None
+        # For backward compatibility with tests, create mock objects
+        self.web_server = None
+        self.web_thread = None
+        
+        # Log that web functionality has moved
+        self.logger.info("Web server functionality consolidated into core.web_monitor.WebMonitor")
+        return None
 
     def setup_llm_manager(self):
         """Setup LLM manager if LLM backend is enabled."""
@@ -369,10 +351,16 @@ class PokemonTrainer:
         if self._training_active:
             self._update_stats()
         
-        # Combine stats with error counts for comprehensive API data
-        combined_stats = self.stats.copy()
-        combined_stats.update(self.error_count)
-        return combined_stats
+        # Normalize commonly used aliases for tests/web
+        out = self.stats.copy()
+        if 'actions_taken' in out:
+            out['total_actions'] = out['actions_taken']  # Always use actions_taken as the source
+        if 'llm_decision_count' in out:
+            out['llm_calls'] = out['llm_decision_count']  # Always use llm_decision_count as the source
+        
+        # Combine with error counts for comprehensive API data
+        out.update(self.error_count)
+        return out
 
     def _run_legacy_fast_training(self):
         """Run training in legacy fast mode with basic monitoring."""
@@ -731,6 +719,10 @@ class PokemonTrainer:
 
     def _finalize_training(self):
         """Clean up resources after training."""
+        # Set shutdown signal
+        if hasattr(self, '_shutdown_event'):
+            self._shutdown_event.set()
+            
         # Stop capture threads first
         if hasattr(self, 'capture_active') and self.capture_active:
             try:
@@ -744,22 +736,15 @@ class PokemonTrainer:
             except Exception as e:
                 self.logger.error(f"Error stopping screen capture: {e}")
 
-        # Shutdown web server before unregistering from data bus
+        # Shutdown web monitor before unregistering from data bus
         # to prevent requests during cleanup
-        if self.web_server:
+        if self.web_monitor:
             try:
-                self.logger.debug("Stopping web server...")
-                # Force shutdown flag in case server is stuck
-                if hasattr(self.web_server, '_running'):
-                    self.web_server._running = False
-                # Call shutdown which should trigger thread cleanup
-                self.web_server.shutdown()
-                # Give thread time to stop
-                if hasattr(self, 'web_thread') and self.web_thread and self.web_thread.is_alive():
-                    self.web_thread.join(timeout=1.0)
-                self.logger.debug("Web server stopped")
+                self.logger.debug("Stopping web monitor...")
+                self.web_monitor.stop()
+                self.logger.debug("Web monitor stopped")
             except Exception as e:
-                self.logger.error(f"Error stopping web server: {e}")
+                self.logger.error(f"Error stopping web monitor: {e}")
 
         # Unregister from data bus
         if self.data_bus:
@@ -842,6 +827,10 @@ class PokemonTrainer:
     
     def _simple_screenshot_capture(self) -> Optional[np.ndarray]:
         """Capture screenshot without additional processing"""
+        # Check for shutdown signal
+        if getattr(self, '_shutdown_event', None) and self._shutdown_event.is_set():
+            return None
+            
         # Handle Mock objects in tests
         if hasattr(self.pyboy, '_mock_name'):
             # Return a default test screen for Mock PyBoy objects
@@ -849,9 +838,14 @@ class PokemonTrainer:
         
         if not self.pyboy or not hasattr(self.pyboy, 'screen'):
             return None
-        # Let errors propagate so the error handler context can publish events
-        screen = self.pyboy.screen.ndarray
-        return self._convert_screen_format(screen)
+            
+        try:
+            # Get screen data with error handling
+            screen = self.pyboy.screen.ndarray
+            return self._convert_screen_format(screen)
+        except Exception as e:
+            self.logger.warning(f"Screenshot capture failed: {e}")
+            return None
     
     def _safe_queue_put(self, data: dict, queue_obj: queue.Queue) -> bool:
         """Safely put data in queue, removing oldest item if full.
@@ -911,19 +905,21 @@ class PokemonTrainer:
             # Queue for web display
             try:
                 if self.config.enable_web:
-                    # Add new data with thread safety
-                    with threading.Lock():
-                        # Always remove oldest if full
+                    # Add new data with thread safety using the shared lock
+                    if self._sync_lock.acquire(timeout=0.05):  # 50ms timeout to prevent blocking
                         try:
-                            # Check if queue is full and get oldest if needed
+                            # Always remove oldest if full
                             while self.screen_queue.full():
-                                self.screen_queue.get_nowait()
+                                try:
+                                    self.screen_queue.get_nowait()
+                                except queue.Empty:
+                                    break
                             self.screen_queue.put_nowait(screen_data)
                             self.latest_screen = screen_data
-                        except queue.Empty:
+                        except (queue.Empty, queue.Full):
                             pass
-                        except queue.Full:
-                            pass
+                        finally:
+                            self._sync_lock.release()
                     
                     # Mirror to list for test compatibility
                     self.screenshot_queue.append(screen_data)
@@ -1025,23 +1021,28 @@ class PokemonTrainer:
                         if image_b64:
                             screen_data['image_b64'] = image_b64
                         
-                        # Update queues with thread safety
-                        with threading.Lock():
-                            # Always remove oldest when full
-                            if self.screen_queue.full():
-                                try:
-                                    self.screen_queue.get_nowait()
-                                except queue.Empty:
-                                    pass
-                                    
-                            # Add new screen data
-                            self.screen_queue.put_nowait(screen_data)
-                            self.latest_screen = screen_data
-                            
-                            # Mirror to list queue for tests
-                            self.screenshot_queue.append(screen_data)
-                            if len(self.screenshot_queue) > self.screen_queue.maxsize:
-                                self.screenshot_queue = self.screenshot_queue[-self.screen_queue.maxsize:]
+                        # Update queues with thread safety using shared lock
+                        if self._sync_lock.acquire(timeout=0.05):  # 50ms timeout
+                            try:
+                                # Always remove oldest when full
+                                while self.screen_queue.full():
+                                    try:
+                                        self.screen_queue.get_nowait()
+                                    except queue.Empty:
+                                        break
+                                        
+                                # Add new screen data
+                                self.screen_queue.put_nowait(screen_data)
+                                self.latest_screen = screen_data
+                                
+                                # Mirror to list queue for tests
+                                self.screenshot_queue.append(screen_data)
+                                if len(self.screenshot_queue) > self.screen_queue.maxsize:
+                                    self.screenshot_queue = self.screenshot_queue[-self.screen_queue.maxsize:]
+                            except (queue.Empty, queue.Full):
+                                pass
+                            finally:
+                                self._sync_lock.release()
                     
                     # Wait for next capture
                     time.sleep(capture_interval)
@@ -1056,3 +1057,54 @@ class PokemonTrainer:
             # Critical error, stop capture
             self.logger.error(f"Screen capture loop failed: {e}")
             self.capture_active = False
+    
+    def graceful_shutdown(self, timeout=10):
+        """Perform a graceful shutdown of the trainer.
+        
+        Args:
+            timeout: Maximum time to wait for threads to stop (seconds)
+        """
+        self.logger.info("Initiating graceful shutdown...")
+        
+        # Signal shutdown to all threads
+        if hasattr(self, '_shutdown_event'):
+            self._shutdown_event.set()
+        
+        try:
+            # Stop screen capture first
+            if hasattr(self, 'capture_active') and self.capture_active:
+                with self._shared_lock:
+                    self._stop_screen_capture()
+                    
+            # Stop web monitor
+            if hasattr(self, 'web_monitor') and self.web_monitor:
+                try:
+                    if hasattr(self.web_monitor, 'screen_capture'):
+                        self.web_monitor.screen_capture.stop_capture()
+                    self.web_monitor.stop()
+                    # Give web server time to stop
+                    import time
+                    time.sleep(1)
+                except Exception as e:
+                    self.logger.error(f"Error stopping web monitor: {e}")
+            
+            # Join capture threads with timeout
+            if hasattr(self, 'capture_thread') and self.capture_thread:
+                if self.capture_thread.is_alive():
+                    self.capture_thread.join(timeout=timeout)
+                    if self.capture_thread.is_alive():
+                        self.logger.warning(f"Capture thread did not stop within timeout")
+                            
+            # Clear queues
+            if hasattr(self, 'screen_queue'):
+                try:
+                    while not self.screen_queue.empty():
+                        self.screen_queue.get_nowait()
+                except Exception:
+                    pass
+                    
+            self.logger.info("Graceful shutdown completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error during graceful shutdown: {e}")
+            raise
