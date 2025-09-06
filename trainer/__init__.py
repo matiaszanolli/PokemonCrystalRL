@@ -14,7 +14,6 @@ from .training_strategies import TrainingStrategy, CurriculumStrategy
 # from .pokemon_trainer import LLMPokemonTrainer as LegacyLLMPokemonTrainer  # Disabled due to missing dependencies
 from .llm_pokemon_trainer import LLMPokemonTrainer
 # from .llm import LLMAgent  # Disabled due to import issues
-from .rewards import PokemonRewardCalculator
 from .monitoring import WebMonitor
 from core.choice_recognition import ChoiceRecognitionSystem, ChoiceType, ChoicePosition, ChoiceContext, RecognizedChoice
 
@@ -31,7 +30,6 @@ __all__ = [
     # 'LLMAgent',  # Disabled due to import issues
     'LLMBackend',
     'PokemonTrainer',
-    'PokemonRewardCalculator',
     'WebMonitor',
     'TrainingStrategy',
     'CurriculumStrategy'

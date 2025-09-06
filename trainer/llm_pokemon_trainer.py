@@ -145,7 +145,7 @@ class LLMPokemonTrainer:
             self.llm_agent = self._create_mock_llm_agent()
             
         try:
-            from trainer.rewards import PokemonRewardCalculator
+            from rewards.calculator import PokemonRewardCalculator
             self.reward_calculator = PokemonRewardCalculator()
         except ImportError:
             print("⚠️  PokemonRewardCalculator not available - using mock calculator")

@@ -25,6 +25,14 @@ from shared_types import (
     VisualContext,
     PyBoyGameState
 )
+from .image_utils import (
+    upscale_screenshot,
+    hash_image,
+    get_dominant_colors,
+    encode_screenshot_for_llm,
+    validate_image,
+    resize_image
+)
 
 class UnifiedVisionProcessor:
     """Unified vision processor for Pokemon Crystal screenshots."""
@@ -94,7 +102,7 @@ class UnifiedVisionProcessor:
         
         try:
             # Check cache first
-            screen_hash = self._hash_image(screen)
+            screen_hash = hash_image(screen)
             if screen_hash in self.context_cache:
                 self.recognition_stats['cache_hits'] += 1
                 return self.context_cache[screen_hash]
@@ -103,7 +111,7 @@ class UnifiedVisionProcessor:
             
             try:
                 # Attempt upscaling before processing - may help with detail detection
-                screen = self._upscale_screenshot(screen, scale_factor=2)
+                screen = upscale_screenshot(screen, scale_factor=2)
             except Exception as e:
                 self.logger.debug(f"Upscaling skipped: {e}")
                 # Return empty context when upscaling fails
@@ -119,7 +127,7 @@ class UnifiedVisionProcessor:
             screen_type = self._classify_screen_type(screen, detected_text, ui_elements)
             
             # Extract dominant colors
-            dominant_colors = self._get_dominant_colors(screen)
+            dominant_colors = get_dominant_colors(screen)
             
             # Determine game phase
             game_phase = self._determine_game_phase(screen_type, detected_text)
@@ -331,23 +339,6 @@ class UnifiedVisionProcessor:
         
         return "unknown"
     
-    def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
-        """Get dominant colors from image."""
-        if image is None or image.size == 0:
-            return [(128, 128, 128)]
-        
-        # Check if image has valid dimensions for color analysis
-        if len(image.shape) != 3 or image.shape[2] != 3:
-            return [(128, 128, 128)]
-        
-        try:
-            pixels = image.reshape(-1, 3).astype(np.float32)
-            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-            _, labels, centers = cv2.kmeans(pixels, k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
-            return [tuple(map(int, color)) for color in centers]
-        except Exception as e:
-            self.logger.error(f"⚠️ Color analysis error: {e}")
-            return [(128, 128, 128)]
     
     def _determine_game_phase(self, screen_type: str, detected_text: List[DetectedText]) -> str:
         """Determine the current game phase."""
@@ -401,51 +392,7 @@ class UnifiedVisionProcessor:
         
         return " | ".join(summary_parts)
     
-    def _upscale_screenshot(self, screenshot: np.ndarray, scale_factor: int = 2) -> np.ndarray:
-        """Upscale screenshot for better processing.
-        
-        Args:
-            screenshot: Input screenshot to upscale
-            scale_factor: Factor by which to upscale the image
-            
-        Returns:
-            Upscaled screenshot
-            
-        Raises:
-            ValueError: If screenshot is None or invalid
-        """
-        if screenshot is None:
-            raise ValueError("Screenshot cannot be None")
-        
-        if not isinstance(screenshot, np.ndarray):
-            raise ValueError("Screenshot must be a numpy array")
-        
-        if screenshot.size == 0:
-            raise ValueError("Screenshot cannot be empty")
-        
-        if len(screenshot.shape) != 3 or screenshot.shape[2] != 3:
-            raise ValueError("Screenshot must be a 3-channel RGB image")
-        
-        height, width = screenshot.shape[:2]
-        if height == 0 or width == 0:
-            raise ValueError("Screenshot dimensions cannot be zero")
-        
-        try:
-            # Use nearest neighbor interpolation to maintain pixel art style
-            upscaled = cv2.resize(
-                screenshot, 
-                (width * scale_factor, height * scale_factor), 
-                interpolation=cv2.INTER_NEAREST
-            )
-            return upscaled
-        except cv2.error as e:
-            raise ValueError(f"Failed to upscale screenshot: {e}")
     
-    def _hash_image(self, image: np.ndarray) -> str:
-        """Create a hash for image caching."""
-        # Downsample for faster hashing
-        small = cv2.resize(image, (32, 32))
-        return hashlib.md5(small.tobytes()).hexdigest()
     
     def get_stats(self) -> Dict[str, Any]:
         """Get vision processing statistics."""
@@ -474,30 +421,7 @@ class UnifiedVisionProcessor:
         Returns:
             Base64 encoded screenshot
         """
-        import base64
-        import io
-        from PIL import Image
-        
-        if screenshot is None or screenshot.size == 0:
-            return ""
-        
-        try:
-            # Convert numpy array to PIL Image
-            if len(screenshot.shape) == 3:
-                image = Image.fromarray(screenshot)
-            else:
-                image = Image.fromarray(screenshot)
-            
-            # Save to bytes buffer
-            buffer = io.BytesIO()
-            image.save(buffer, format='PNG')
-            
-            # Encode to base64
-            encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return encoded
-        except Exception as e:
-            self.logger.error(f"Failed to encode screenshot: {e}")
-            return ""
+        return encode_screenshot_for_llm(screenshot)
     
     def _simple_text_detection(self, region: np.ndarray) -> str:
         """Simple text detection fallback.
@@ -550,203 +474,12 @@ class UnifiedVisionProcessor:
         else:
             return "TEXT" * min(char_count, 3)
     
-    def _detect_dialogue_box(self, image: np.ndarray, hsv_image: np.ndarray) -> Optional[GameUIElement]:
-        """Detect dialogue box in image.
-        
-        Args:
-            image: RGB image
-            hsv_image: HSV version of image
-            
-        Returns:
-            Detected dialogue box or None
-        """
-        if image is None or image.size == 0:
-            return None
-        
-        if len(image.shape) != 3 or image.shape[0] < 40 or image.shape[1] < 80:
-            return None
-        
-        try:
-            height, width = image.shape[:2]
-            
-            # Check bottom area for dialogue box (typical location)
-            dialogue_region = image[int(height * 0.7):, :]
-            
-            # Look for bright/white areas that could be dialogue boxes
-            brightness = np.mean(dialogue_region, axis=2)
-            bright_mask = brightness > 200
-            
-            if np.sum(bright_mask) > dialogue_region.size * 0.3:
-                return GameUIElement(
-                    element_type="dialogue_box",
-                    bbox=(0, int(height * 0.7), width, int(height * 0.3)),
-                    confidence=0.8
-                )
-            
-            return None
-        except Exception:
-            return None
     
-    def _detect_health_bars(self, image: np.ndarray, hsv_image: np.ndarray) -> List[GameUIElement]:
-        """Detect health bars in image.
-        
-        Args:
-            image: RGB image
-            hsv_image: HSV version of image
-            
-        Returns:
-            List of detected health bars
-        """
-        health_bars = []
-        
-        if image is None or image.size == 0:
-            return health_bars
-        
-        try:
-            height, width = image.shape[:2]
-            
-            # Check top area for health bars
-            top_region = image[:int(height * 0.4), :]
-            
-            # Look for green areas (health bars)
-            green_mask = (top_region[:, :, 1] > 200) & (top_region[:, :, 0] < 100) & (top_region[:, :, 2] < 100)
-            
-            if np.sum(green_mask) > 50:  # Minimum pixels for health bar
-                health_bars.append(GameUIElement(
-                    element_type="healthbar",
-                    bbox=(50, 15, 80, 10),
-                    confidence=0.9
-                ))
-            
-            return health_bars
-        except Exception:
-            return health_bars
     
-    def _detect_menus(self, image: np.ndarray, hsv_image: np.ndarray) -> List[GameUIElement]:
-        """Detect menus in image.
-        
-        Args:
-            image: RGB image
-            hsv_image: HSV version of image
-            
-        Returns:
-            List of detected menus
-        """
-        menus = []
-        
-        if image is None or image.size == 0:
-            return menus
-        
-        try:
-            height, width = image.shape[:2]
-            
-            # Check right side for menus
-            menu_region = image[:, int(width * 0.6):]
-            
-            # Look for structured areas with edges
-            gray = cv2.cvtColor(menu_region, cv2.COLOR_RGB2GRAY)
-            edges = cv2.Canny(gray, 50, 150)
-            
-            if np.sum(edges) > menu_region.size * 0.05:
-                menus.append(GameUIElement(
-                    element_type="menu",
-                    bbox=(int(width * 0.6), 0, int(width * 0.4), height),
-                    confidence=0.7
-                ))
-            
-            return menus
-        except Exception:
-            return menus
     
-    def _is_indoor_environment(self, image: np.ndarray, detected_text: List[DetectedText], all_text: str) -> bool:
-        """Check if environment is indoor.
-        
-        Args:
-            image: Screenshot image
-            detected_text: Detected text objects
-            all_text: Combined text string
-            
-        Returns:
-            True if indoor environment detected
-        """
-        # Check for intro screen exclusion
-        intro_keywords = ['new game', 'continue', 'pokemon crystal']
-        if any(keyword in all_text.lower() for keyword in intro_keywords):
-            return False
-        
-        # Check for indoor indicators
-        indoor_keywords = ['mom', 'bed', 'home', 'house', 'room']
-        return any(keyword in all_text.lower() for keyword in indoor_keywords)
     
-    def _is_actual_battle(self, image: np.ndarray, detected_text: List[DetectedText], health_bars: List[GameUIElement]) -> bool:
-        """Check if this is an actual battle screen.
-        
-        Args:
-            image: Screenshot image
-            detected_text: Detected text objects
-            health_bars: Detected health bars
-            
-        Returns:
-            True if actual battle detected
-        """
-        # Check for indoor exclusion
-        all_text = ' '.join([t.text for t in detected_text]).lower()
-        if self._is_indoor_environment(image, detected_text, all_text):
-            return False
-        
-        # Check for battle indicators
-        battle_keywords = ['fight', 'run', 'item', 'pokemon', 'pkmn']
-        has_battle_text = any(keyword in all_text for keyword in battle_keywords)
-        
-        # Less strict check - either health bars or battle text suggests a battle
-        return len(health_bars) > 0 or has_battle_text
     
-    def _is_actual_dialogue(self, dialogue_texts: List[DetectedText], dialogue_boxes: List[GameUIElement], all_text: str) -> bool:
-        """Check if this is actual dialogue.
-        
-        Args:
-            dialogue_texts: Detected dialogue text
-            dialogue_boxes: Detected dialogue boxes
-            all_text: Combined text string
-            
-        Returns:
-            True if actual dialogue detected
-        """
-        # Check for minimal home context exclusion
-        home_keywords = ['mom', 'home']
-        has_home_context = any(keyword in all_text.lower() for keyword in home_keywords)
-        
-        # If very short text in home context, likely not real dialogue
-        if has_home_context and len(all_text.strip()) <= 2:
-            return False
-        
-        # More strict check: if we have minimal text (single character) and home context, reject
-        dialogue_text_content = ' '.join([t.text for t in dialogue_texts]).strip()
-        if has_home_context and len(dialogue_text_content) <= 1:
-            return False
-        
-        # Need either dialogue box or substantial text
-        return len(dialogue_boxes) > 0 or len(all_text.strip()) > 5
     
-    def _is_actual_menu(self, menu_texts: List[DetectedText], menu_boxes: List[GameUIElement], all_text: str) -> bool:
-        """Check if this is an actual menu.
-        
-        Args:
-            menu_texts: Detected menu text
-            menu_boxes: Detected menu boxes
-            all_text: Combined text string
-            
-        Returns:
-            True if actual menu detected
-        """
-        # Check for home exclusion
-        home_keywords = ['home', 'mom', 'bed']
-        if any(keyword in all_text.lower() for keyword in home_keywords):
-            return False
-        
-        # Check for menu indicators
-        menu_keywords = ['new game', 'continue', 'option', 'menu', 'save']
-        return any(keyword in all_text.lower() for keyword in menu_keywords)
     
     def _guess_dense_text_content(self, region: np.ndarray, char_count: int) -> str:
         """Guess dense text content.
