@@ -11,7 +11,7 @@ try:
     from monitoring.data_bus import DataBus, DataType, get_data_bus
     from monitoring.bridge import TrainerMonitorBridge
     from monitoring.unified_monitor import UnifiedMonitor
-    from monitoring.web_monitor import WebMonitor
+    from core.web_monitor import WebMonitor
     from monitoring.error_handler import ErrorHandler
 except ImportError as e:
     # Fallback for when monitoring modules are not available

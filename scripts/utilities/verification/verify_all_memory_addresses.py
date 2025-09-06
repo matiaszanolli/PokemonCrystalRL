@@ -353,7 +353,7 @@ def test_comparison_with_trainer_addresses():
     
     # Import the trainer's addresses
     try:
-        from llm_trainer import MEMORY_ADDRESSES
+        from config.memory_addresses import MEMORY_ADDRESSES
         trainer_addresses = MEMORY_ADDRESSES
         
         print("Addresses used by trainer vs our verified ones:")

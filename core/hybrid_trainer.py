@@ -25,7 +25,9 @@ from core.enhanced_reward_system import RewardCalculator
 from core.state.analyzer import GameStateAnalyzer
 from core.decision_validator import DecisionValidator
 from core.strategic_context_builder import StrategicContextBuilder
-from llm_trainer import LLMAgent, WebMonitor, build_observation
+from agents.llm_agent import LLMAgent
+from core.web_monitor import WebMonitor  
+from utils.memory_reader import build_observation
 
 
 @dataclass

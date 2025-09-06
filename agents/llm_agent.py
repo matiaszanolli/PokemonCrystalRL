@@ -18,7 +18,7 @@ Features:
 import time
 import requests
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any, Optional
 
 from utils.action_parser import parse_action_response
 from config.constants import TRAINING_PARAMS
@@ -35,7 +35,7 @@ from .base_agent import BaseAgent
 class LLMAgent(BaseAgent):
     """Enhanced LLM agent with strategic decision-making capabilities"""
     
-def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """Initialize LLM agent.
         
         Backward compatible with previous signature:

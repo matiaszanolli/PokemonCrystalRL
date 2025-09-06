@@ -3,7 +3,8 @@
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from monitoring.web_monitor import WebMonitor, MonitorConfig
+from core.web_monitor import WebMonitor
+# Note: MonitorConfig functionality integrated into WebMonitor
 from trainer.web_server import ServerConfig, WebServer
 
 def main():

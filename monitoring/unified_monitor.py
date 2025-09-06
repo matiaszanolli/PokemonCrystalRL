@@ -38,7 +38,17 @@ import cv2
 import numpy as np
 
 # Import TrainingState from web_monitor
-from .web_monitor import TrainingState
+# TrainingState consolidated into core.web_monitor
+# Using local enum for now to avoid circular dependencies
+from enum import Enum, auto
+
+class TrainingState(Enum):
+    INITIALIZING = auto()
+    RUNNING = auto()
+    PAUSED = auto()
+    STOPPED = auto()
+    ERROR = auto()
+    COMPLETED = auto()
 
 # Import get_data_bus to make it available for tests
 from .data_bus import get_data_bus

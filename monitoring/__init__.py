@@ -17,7 +17,8 @@ from .stats_collector import StatsCollector
 from .text_logger import TextLogger
 from .trainer_monitor_bridge import TrainerMonitorBridge
 from .web_interface import WebInterface
-from .web_monitor import WebMonitor, MonitorConfig, TrainingState
+from core.web_monitor import WebMonitor
+# Note: MonitorConfig and TrainingState consolidated into core implementation
 # Note: WebServer, TrainingWebServer, TrainingHandler consolidated into core.web_monitor
 from .error_handler import ErrorHandler, ErrorSeverity, ErrorCategory, RecoveryStrategy, ErrorEvent
 
