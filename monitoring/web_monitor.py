@@ -187,6 +187,8 @@ class WebMonitor:
     
     def __init__(self, config: Optional[MonitorConfig] = None, auto_connect: bool = True):
         self.config = config or MonitorConfig()
+        self._original_port = self.config.port  # Save original port
+        self._port_retries = 5  # Number of ports to try
         
         # Initialize database
         self.db = DatabaseManager(self.config.db_path)
@@ -282,6 +284,19 @@ class WebMonitor:
     async def start(self) -> None:
         """Start the monitoring system."""
         try:
+            # Find available port
+            for port_offset in range(self._port_retries):
+                try:
+                    test_port = self._original_port + port_offset
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.bind(('', test_port))
+                        self.config.port = test_port
+                        break
+                except OSError:
+                    if port_offset == self._port_retries - 1:
+                        raise
+                    continue
+            
             # Build interface components
             self.interface.build_components()
             
@@ -310,8 +325,15 @@ class WebMonitor:
     
     async def shutdown(self) -> None:
         """Shutdown the monitoring system."""
+        if not self.is_running:
+            return
+            
         self.logger.info("Shutting down web monitor...")
         self.is_running = False
+        
+        # Close any active client connections
+        with self._client_lock:
+            self.connected_clients.clear()
         
         # Stop processing threads
         if self._update_thread and self._update_thread.is_alive():
@@ -329,6 +351,13 @@ class WebMonitor:
         
         # Cleanup
         self.executor.shutdown(wait=True)
+        
+        # Release the port
+        if hasattr(self, '_server_socket'):
+            try:
+                self._server_socket.close()
+            except:
+                pass
         
         self.logger.info("👋 Web monitor stopped")
     

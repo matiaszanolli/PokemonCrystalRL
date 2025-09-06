@@ -16,7 +16,7 @@ import cv2
 from collections import deque
 import logging
 
-from core.memory_map import MEMORY_ADDRESSES
+from .state.memory_map import MEMORY_ADDRESSES
 from core.state.analyzer import GameStateAnalyzer, GamePhase
 from core.state.variables import STATE_VARIABLES
 from core.strategic_context_builder import StrategicContextBuilder

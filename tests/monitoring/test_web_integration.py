@@ -90,7 +90,20 @@ def web_monitor(mock_trainer, available_port):
 
 @pytest.mark.integration
 @pytest.mark.web
+from ..fixtures.socket_helpers import temp_server, SocketTestManager
+
 class TestWebIntegration:
+    @pytest.fixture(scope='class')
+    def socket_manager(self):
+        manager = SocketTestManager()
+        yield manager
+        manager.cleanup()
+        
+    @pytest.fixture
+    def test_port(self, socket_manager):
+        """Get test port for each test"""
+        with temp_server() as port:
+            yield port
     """Test web interface integration with LLMPokemonTrainer."""
     
     def test_status_endpoint(self, web_monitor):

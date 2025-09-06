@@ -29,7 +29,7 @@ class SituationCriticality(Enum):
     OPTIMAL = "optimal"  # Can focus on optimization
 
 @dataclass
-class AnalysisAnalysisStateVariable:
+class AnalysisStateVariable:
     """Definition of a game state variable for analysis purposes"""
     name: str
     type: str  # 'int', 'float', 'bool', 'tuple', 'bitfield'

@@ -17,22 +17,14 @@ from dataclasses import dataclass
 from enum import Enum, auto
 import logging
 
-from .memory_map import (
+from .state.analyzer import GamePhase, SituationCriticality
+from .state.memory_map import (
     IMPORTANT_LOCATIONS, 
     POKEMON_SPECIES, 
     BADGE_MASKS, 
     STATUS_CONDITIONS,
     get_badges_earned
 )
-
-class IntelligenceGamePhase(Enum):
-    """High-level game progression phases for intelligence module"""
-    TUTORIAL = auto()           # Getting first Pokemon
-    EARLY_EXPLORATION = auto()  # First routes and towns
-    GYM_CHALLENGE = auto()      # Preparing for/challenging gyms
-    MID_GAME = auto()          # Multiple badges, exploring Johto
-    LATE_GAME = auto()         # Elite Four preparation
-    POST_GAME = auto()         # Kanto region
 
 class LocationType(Enum):
     """Types of locations with different strategic contexts"""
@@ -48,7 +40,7 @@ class LocationType(Enum):
 @dataclass
 class IntelligenceGameContext:
     """Rich context about current game situation for intelligence module"""
-    phase: IntelligenceGamePhase
+    phase: GamePhase
     location_type: LocationType
     location_name: str
     immediate_goals: List[str]
@@ -57,6 +49,9 @@ class IntelligenceGameContext:
     party_status: str
     recommended_actions: List[str]
     urgency_level: int  # 1-5, higher means more urgent action needed
+
+# Backward-compatibility alias expected by other modules/tests
+GameContext = IntelligenceGameContext
 
 @dataclass
 class ActionPlan:

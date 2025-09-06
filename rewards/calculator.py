@@ -306,7 +306,7 @@ class PokemonRewardCalculator:
         """Reward for exploring new areas - ONLY in overworld state"""
         # CRITICAL FIX: Only reward exploration when actually in overworld
         # This prevents menu state coordinate fluctuations from giving false rewards
-        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        curr_screen_state = getattr(self, 'last_screen_state', 'overworld')
         prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
         
         # Only consider exploration rewards in overworld state
@@ -380,7 +380,7 @@ class PokemonRewardCalculator:
     def _calculate_movement_reward(self, current: Dict, previous: Dict) -> float:
         """Small reward for any coordinate movement - with anti-farming protection"""
         # CRITICAL: Only reward movement when actually in overworld
-        curr_screen_state = getattr(self, 'last_screen_state', 'unknown')
+        curr_screen_state = getattr(self, 'last_screen_state', 'overworld')
         prev_screen_state = getattr(self, 'prev_screen_state', curr_screen_state)
         
         # Only consider movement rewards in overworld state

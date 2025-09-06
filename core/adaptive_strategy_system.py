@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timedelta
 import statistics
 
-from .game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+from .state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
 from .decision_history_analyzer import DecisionHistoryAnalyzer, OutcomeType, PatternType
 from .goal_oriented_planner import GoalOrientedPlanner
 

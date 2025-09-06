@@ -47,7 +47,20 @@ def mock_monitor_config(temp_dir):
     )
 
 
+from ..fixtures.socket_helpers import temp_server, SocketTestManager
+
 class TestUnifiedMonitor:
+    @pytest.fixture(scope='class')
+    def socket_manager(self):
+        manager = SocketTestManager()
+        yield manager
+        manager.cleanup()
+        
+    @pytest.fixture
+    def test_port(self, socket_manager):
+        """Get test port for each test"""
+        with temp_server() as port:
+            yield port
     """Test UnifiedMonitor functionality."""
     
     def test_monitor_initialization(self, mock_monitor_config, mock_data_bus):

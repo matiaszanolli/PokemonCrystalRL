@@ -1,5 +1,4 @@
-"""
-Simplified integration test for the hybrid LLM-RL system components.
+"""Simplified integration test for the hybrid LLM-RL system components.
 Tests basic functionality and integration between major components.
 """
 
@@ -16,7 +15,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from core.decision_history_analyzer import DecisionHistoryAnalyzer
 from core.adaptive_strategy_system import AdaptiveStrategySystem
-from trainer.llm_manager import LLMManager
+from core.strategic_context_builder import StrategicContextBuilder
+from agents.llm_agent import LLMAgent
+from rewards.calculator import PokemonRewardCalculator
+
+from utils.memory_reader import build_observation
+from utils.screen_analyzer import analyze_screen_state
+from utils.action_parser import (
+    parse_action_response,
+    get_context_specific_action
+)
+from utils.reward_helpers import get_reward_summary
+
+from config.constants import SCREEN_STATES, REWARD_VALUES
+from tests.fixtures.pyboy_helpers import create_game_state
 
 
 class TestSimplifiedIntegration(unittest.TestCase):
@@ -30,15 +42,29 @@ class TestSimplifiedIntegration(unittest.TestCase):
         # Initialize components
         self.decision_analyzer = DecisionHistoryAnalyzer(str(self.db_path))
         self.strategy_system = AdaptiveStrategySystem(history_analyzer=self.decision_analyzer)
+        self.context_builder = StrategicContextBuilder()
+        self.reward_calculator = PokemonRewardCalculator()
         
-        # Mock LLM manager
-        self.llm_manager = Mock()
-        self.llm_manager.get_action.return_value = (
-            3, {
-                'source': 'llm',
-                'confidence': 0.8,
-                'reasoning': 'Strategic move'
-            }
+        # Mock LLM agent
+        self.llm_agent = Mock()
+        self.llm_agent.get_decision.return_value = (
+            'up', 
+            'Move up to explore new area'
+        )
+        
+        # Create test game states
+        self.initial_state = create_game_state(
+            player_map=24,  # Player's room
+            player_x=1,
+            player_y=1,
+            party_count=0
+        )
+        
+        self.next_state = create_game_state(
+            player_map=24,
+            player_x=1,
+            player_y=2,  # Moved up
+            party_count=0
         )
     
     def tearDown(self):
@@ -162,19 +188,63 @@ class TestSimplifiedIntegration(unittest.TestCase):
         # 4. Verify strategy system is responsive
         self.assertIsNotNone(self.strategy_system.current_strategy)
         
-    def test_llm_manager_integration(self):
-        """Test LLM manager integration (mocked)."""
-        # Test LLM manager mock
-        action, info = self.llm_manager.get_action()
+    def test_state_analysis_integration(self):
+        """Test integration between memory reading and state analysis."""
+        # Create mock screen state
+        screen_state = {
+            'state': SCREEN_STATES['OVERWORLD'],
+            'variance': 5000,
+            'colors': 12,
+            'brightness': 150
+        }
         
-        self.assertIsInstance(action, int)
-        self.assertIn('source', info)
-        self.assertIn('confidence', info)
-        self.assertEqual(info['source'], 'llm')
+        # Test game state observation building
+        observation = self.initial_state
+        self.assertEqual(observation['player_map'], 24)
+        self.assertEqual(observation['party_count'], 0)
         
-        # Verify mock was called
-        self.llm_manager.get_action.assert_called_once()
-
+        # Test action decision flow
+        action, reason = get_context_specific_action(
+            screen_state['state'],
+            observation,
+            ['up', 'right']
+        )
+        self.assertIn(action, ['up', 'down', 'left', 'right', 'a'])
+        
+    def test_reward_calculation_integration(self):
+        """Test integration between state changes and reward calculation."""
+        # Calculate rewards for state transition
+        reward, rewards = self.reward_calculator.calculate_reward(
+            self.next_state,
+            self.initial_state
+        )
+        
+        # Should get exploration reward for movement
+        self.assertGreater(reward, 0)
+        self.assertIn('movement', rewards)
+        
+        # Test reward summary
+        summary = get_reward_summary(rewards)
+        self.assertIsInstance(summary, str)
+        
+    def test_llm_decision_integration(self):
+        """Test integration of LLM decisions with game state."""
+        screen_state = {
+            'state': SCREEN_STATES['OVERWORLD'],
+            'variance': 5000,
+            'colors': 12,
+            'brightness': 150
+        }
+        
+        # Test LLM decision flow
+        action, reason = self.llm_agent.get_decision(self.initial_state, screen_state, [])
+        
+        self.assertIsInstance(action, str)
+        self.assertEqual(action, 'up')
+        self.assertIsInstance(reason, str)
+        
+        # Verify LLM was called
+        self.llm_agent.get_decision.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,7 +15,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
-from core.memory_map import DERIVED_VALUES, get_badges_earned, BADGE_MASKS
+from core.state.memory_map import DERIVED_VALUES, get_badges_earned, BADGE_MASKS
 from llm_trainer import PokemonRewardCalculator
 
 

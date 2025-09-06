@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, '.')
 
 from pyboy import PyBoy
-from core.memory_map import MEMORY_ADDRESSES
+from core.state.memory_map import MEMORY_ADDRESSES
 
 
 def test_coordinate_tracking():

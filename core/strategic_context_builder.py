@@ -12,7 +12,7 @@ from collections import deque
 import json
 from datetime import datetime
 
-from .game_state_analyzer import GameStateAnalyzer, GameStateAnalysis, GamePhase, SituationCriticality
+from .state.analyzer import GameStateAnalyzer, GameStateAnalysis, GamePhase, SituationCriticality
 from .goal_oriented_planner import GoalOrientedPlanner
 from .decision_history_analyzer import DecisionHistoryAnalyzer
 from .adaptive_strategy_system import AdaptiveStrategySystem

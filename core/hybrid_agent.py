@@ -405,6 +405,7 @@ class HybridAgent:
         # Performance tracking
         self.agent_usage_stats = {"llm": 0, "rl": 0, "hybrid": 0}
         self.performance_by_agent = {"llm": deque(maxlen=100), "rl": deque(maxlen=100)}
+        self.recent_rewards = deque(maxlen=100)  # Initialize recent_rewards
         
         # Curriculum learning parameters
         self.llm_confidence_threshold = 0.7
@@ -467,26 +468,14 @@ class HybridAgent:
         if 'agent_usage_stats' in state_dict:
             self.agent_usage_stats = state_dict['agent_usage_stats']
     
-    def update(self, observation: Dict[str, Any], action: int, reward: float, 
-               next_observation: Dict[str, Any], done: bool):
-        """Update agent with experience"""
-        # Update RL agent
-        self.rl_agent.update(observation, action, reward, next_observation, done)
-        
-        # Track performance for curriculum learning
-        self.recent_rewards.append(reward)
-        
-        # Update performance metrics (basic implementation)
-        if done and hasattr(self, 'recent_rewards'):
-            avg_reward = sum(self.recent_rewards) / len(self.recent_rewards) if self.recent_rewards else 0
-            self.logger.debug(f"Episode completed, avg reward: {avg_reward:.2f}")
     
     def _arbitrate_decision(self, llm_decision: AgentDecision, rl_decision: AgentDecision,
                            observation: Dict[str, Any], info: Dict[str, Any]) -> Tuple[str, AgentDecision]:
         """Arbitrate between LLM and RL decisions"""
         
         # Curriculum learning - adjust weights based on stage
-        current_stage = self.curriculum_config["stages"][min(self.curriculum_stage, len(self.curriculum_config["stages"]) - 1)]
+        stages = self.curriculum_config["stages"]
+        current_stage = stages[min(self.curriculum_stage, len(stages) - 1)]
         llm_weight = current_stage["llm_weight"]
         
         # Situation-based arbitration

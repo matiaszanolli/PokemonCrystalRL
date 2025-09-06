@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import statistics
 import logging
 
-from .game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+from .state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
 
 class OutcomeType(Enum):
     """Types of decision outcomes"""
@@ -250,6 +250,53 @@ class DecisionHistoryAnalyzer:
             }
         }
     
+    def analyze_patterns(self, min_frequency: int = 2) -> List[Dict[str, Any]]:
+        """Analyze decision patterns with minimum frequency.
+
+        Args:
+            min_frequency: Minimum number of times a pattern must be observed
+
+        Returns:
+            List of pattern dictionaries
+        """
+        # Aggregate patterns by occurrence
+        pattern_occurrences = {}
+        for record in self.decision_history:
+            pattern_key = (record.action_taken, record.game_phase.value,
+                         record.criticality.value)
+            if pattern_key not in pattern_occurrences:
+                pattern_occurrences[pattern_key] = {
+                    'count': 0,
+                    'success_count': 0,
+                    'rewards': [],
+                    'action': record.action_taken,
+                    'phase': record.game_phase.value,
+                    'criticality': record.criticality.value
+                }
+            
+            pattern = pattern_occurrences[pattern_key]
+            pattern['count'] += 1
+            if record.outcome_type == OutcomeType.SUCCESS:
+                pattern['success_count'] += 1
+            pattern['rewards'].append(record.reward_received)
+        
+        # Filter and format patterns that meet frequency threshold
+        patterns = []
+        for pattern in pattern_occurrences.values():
+            if pattern['count'] >= min_frequency:
+                patterns.append({
+                    'action': pattern['action'],
+                    'context': {
+                        'phase': pattern['phase'],
+                        'criticality': pattern['criticality']
+                    },
+                    'frequency': pattern['count'],
+                    'success_rate': pattern['success_count'] / pattern['count'],
+                    'avg_reward': statistics.mean(pattern['rewards'])
+                })
+        
+        return sorted(patterns, key=lambda x: x['frequency'], reverse=True)
+
     def _analyze_recent_patterns(self):
         """Analyze recent decision history for patterns"""
         if len(self.decision_history) < self.min_pattern_observations:
@@ -673,7 +720,7 @@ class DecisionHistoryAnalyzer:
     def add_decision(self, decision_data: Dict[str, Any]):
         """Add decision (compatibility method for tests)"""
         # Convert test format to proper format
-        from .game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+        from core.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         # Mock a game state analysis for compatibility
         mock_state = GameStateAnalysis(

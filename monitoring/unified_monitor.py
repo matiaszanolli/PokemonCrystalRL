@@ -842,16 +842,42 @@ class UnifiedMonitor:
             except Exception as e:
                 self.logger.error(f"Failed to record event in database: {e}")
     
-    def run(self, debug=False):
-        """Run the monitoring server."""
+    def run(self, debug=False, max_retries=5):
+        """Run the monitoring server.
+        
+        Args:
+            debug (bool): Enable debug mode
+            max_retries (int): Number of alternate ports to try if default is in use
+        """
         # Load web_port from config if available
-        if self.config and hasattr(self.config, 'web_port'):
-            port = self.config.web_port
-        else:
-            port = self.port
-            
-        self.logger.info(f"🌐 Starting web monitor on http://{self.host}:{port}")
-        self.socketio.run(self.app, host=self.host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+        base_port = self.config.web_port if self.config and hasattr(self.config, 'web_port') else self.port
+        
+        # Try progressively higher ports if default is taken
+        last_error = None
+        for retry in range(max_retries):
+            try:
+                port = base_port + retry
+                self.logger.info(f"🌐 Starting web monitor on http://{self.host}:{port}")
+                self.socketio.run(
+                    self.app,
+                    host=self.host,
+                    port=port, 
+                    debug=debug,
+                    allow_unsafe_werkzeug=True
+                )
+                return  # Server started successfully
+            except OSError as e:
+                if e.errno == 98:  # Address already in use
+                    last_error = e
+                    if retry < max_retries - 1:
+                        self.logger.warning(f"Port {port} is in use, trying {port + 1}")
+                        continue
+                raise
+            except Exception as e:
+                raise
+                
+        if last_error:
+            raise OSError(f"All ports in range {base_port}-{base_port+max_retries-1} are in use")
     
     def _ensure_server_started(self):
         """Start the HTTP server in a background thread if not already running."""
@@ -860,14 +886,8 @@ class UnifiedMonitor:
         
         def _run_server():
             try:
-                # Use web_port from config if available
-                if self.config and hasattr(self.config, 'web_port'):
-                    port = self.config.web_port
-                else:
-                    port = self.port
-                    
-                # Use allow_unsafe_werkzeug=True for test environment
-                self.socketio.run(self.app, host=self.host, port=port, debug=False, allow_unsafe_werkzeug=True)
+                # Start server with port retries
+                self.run(debug=False, max_retries=5)
             except Exception as e:
                 self.logger.error(f"Failed to start server: {e}")
         
