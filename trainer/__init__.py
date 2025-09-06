@@ -11,8 +11,9 @@ from .dialogue_state_machine import DialogueStateMachine, DialogueState
 from .game_state_detection import GameStateDetector
 from .llm_manager import LLMManager
 from .training_strategies import TrainingStrategy, CurriculumStrategy
-from .pokemon_trainer import LLMPokemonTrainer
-from .llm import LLMAgent
+# from .pokemon_trainer import LLMPokemonTrainer as LegacyLLMPokemonTrainer  # Disabled due to missing dependencies
+from .llm_pokemon_trainer import LLMPokemonTrainer
+# from .llm import LLMAgent  # Disabled due to import issues
 from .rewards import PokemonRewardCalculator
 from .monitoring import WebMonitor
 from core.choice_recognition import ChoiceRecognitionSystem, ChoiceType, ChoicePosition, ChoiceContext, RecognizedChoice
@@ -22,11 +23,12 @@ __all__ = [
     'TrainingConfig',
     'UnifiedPokemonTrainer',
     'LLMPokemonTrainer',
+    # 'LegacyLLMPokemonTrainer',  # Disabled due to missing dependencies
     'DialogueStateMachine',
     'DialogueState',
     'GameStateDetector',
     'LLMManager',
-    'LLMAgent',
+    # 'LLMAgent',  # Disabled due to import issues
     'LLMBackend',
     'PokemonTrainer',
     'PokemonRewardCalculator',
