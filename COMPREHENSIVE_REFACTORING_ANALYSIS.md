@@ -395,16 +395,52 @@ src/pokemon_crystal_rl/
 ## IMPLEMENTATION PRIORITY MATRIX
 
 ### Phase 1: Critical Issues (Immediate - 1-2 weeks)
-1. **Split llm_trainer.py** - Extract LLMAgent and PokemonRewardCalculator
-2. **Resolve WebMonitor duplication** - Consolidate implementations
-3. **Fix circular dependencies** - Implement dependency injection
-4. **Organize root-level scripts** - Move to appropriate directories
+1. ~~**Fix circular dependencies** - Implement dependency injection~~ (✓ COMPLETED)
+   - Created /interfaces/ package with core abstractions
+   - Implemented monitoring, trainer, and vision interfaces
+   - Fixed web_monitor circular dependency
+   - Added interface tests
 
-### Phase 2: High Priority (2-4 weeks)  
-1. **Refactor core/web_monitor.py** - Split into focused modules
-2. **Consolidate reward systems** - Single canonical implementation
-3. **Establish trainer hierarchy** - Clear inheritance structure
-4. **Create shared interfaces** - Agent, Trainer, Monitor protocols
+2. **Split llm_trainer.py** - NEXT PRIORITY
+   - Extract LLMAgent to agents/llm_agent.py
+   - Extract PokemonRewardCalculator to rewards/calculator.py
+   - Update imports to use new interfaces
+
+3. **Resolve WebMonitor duplication** - IN PROGRESS
+   - Choose canonical web monitor implementation
+   - Deprecate redundant implementations
+   - Update all imports
+
+4. **Organize root-level scripts** - PENDING
+   - Move debug scripts to scripts/debug/
+   - Move utilities to scripts/utilities/
+   - Move startup scripts to scripts/startup/
+   - Update imports and paths
+
+### Phase 2: High Priority (2-4 weeks)
+1. **Update Implementations to Use Interfaces** - NEXT AFTER PHASE 1
+   - Update vision_processor.py to implement VisionProcessorInterface
+   - Update WebMonitor to implement WebMonitorInterface
+   - Update reward calculators to implement RewardCalculatorInterface
+   - Update tests to use interface contracts
+
+2. **Refactor core/web_monitor.py** - PENDING
+   - Split into focused modules using new interfaces
+   - Extract screen capture component
+   - Extract HTTP server component
+   - Create clean web API layer
+
+3. **Consolidate reward systems** - PENDING
+   - Identify most complete implementation
+   - Merge features from other implementations
+   - Update to use new interfaces
+   - Add comprehensive tests
+
+4. **Establish trainer hierarchy** - PENDING
+   - Create base trainer using TrainerInterface
+   - Implement LLM, RL, and hybrid variants
+   - Add factory for trainer creation
+   - Update configuration system
 
 ### Phase 3: Medium Priority (4-8 weeks)
 1. **Complete directory reorganization** - Implement new structure

@@ -1,115 +1,127 @@
 """
 Pokemon Crystal RL Reward Calculator
 
-Sophisticated reward calculation for Pokemon Crystal RL training, including:
-- Exploration rewards and progression tracking
-- Battle performance evaluation
-- Health and level progression rewards
-- Badge milestone rewards
-- Anti-farming and anti-glitch protection
-- Movement and dialogue interaction rewards
+This module provides the component-based reward calculator implementation for
+Pokemon Crystal RL training. The calculator composes multiple reward components
+to evaluate game progress and provide appropriate reinforcement signals.
 
-This module provides comprehensive reward calculation functionality for training
-reinforcement learning agents to play Pokemon Crystal effectively.
+Features:
+- Modular reward component system
+- Comprehensive state validation
+- Anti-farming and anti-glitch protection
+- Screen state awareness
+- Action-specific reward adjustments
+
+The reward calculator implements the RewardCalculatorInterface and orchestrates
+multiple reward components, each handling specific aspects of reward calculation.
 """
 
-import time
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
+from .interface import RewardCalculatorInterface
 
 
-class PokemonRewardCalculator:
-    """Sophisticated reward calculation for Pokemon Crystal"""
+class PokemonRewardCalculator(RewardCalculatorInterface):
+    """Sophisticated reward calculation for Pokemon Crystal using component system."""
     
     def __init__(self):
-        self.previous_state = {}
-        self.exploration_bonus = {}
-        self.last_reward_time = time.time()
-        # Track visited locations to prevent reward farming
-        self.visited_locations = set()  # Will store (map_id, x, y) tuples
-        # Track visited maps to prevent repeated large map-entry rewards
-        self.visited_maps = set()
-        # Simple step counter and rate limit for map-entry rewards
-        self.step_counter = 0
-        self.last_map_reward_step = -10_000
+        self._last_screen_state = 'unknown'
+        self._prev_screen_state = 'unknown'
+        self._last_action = None
         
-        # ANTI-FARMING: Track recent location history to prevent back-and-forth movement farming
-        self.recent_locations = []  # Store last N locations as (map, x, y) tuples
-        self.location_history_size = 10  # Track last 10 locations
-        self.movement_penalty_tracker = {}  # Track repeated movements between same locations
+        # Initialize all reward components
+        from .components.progress import HealthRewardComponent, LevelRewardComponent, BadgeRewardComponent
+        from .components.movement import ExplorationRewardComponent, MovementRewardComponent, BlockedMovementComponent
+        from .components.interaction import BattleRewardComponent, DialogueRewardComponent, MoneyRewardComponent, ProgressionRewardComponent
         
-        # Track repeated blocked movements for escalating penalties
-        self.blocked_movement_tracker = {}  # (map, x, y, direction) -> consecutive_count
-        self.max_blocked_penalty = -0.1  # Maximum penalty for being very stuck
+        self.components = [
+            HealthRewardComponent(),
+            LevelRewardComponent(),
+            BadgeRewardComponent(),
+            ExplorationRewardComponent(),
+            MovementRewardComponent(),
+            BlockedMovementComponent(),
+            BattleRewardComponent(),
+            DialogueRewardComponent(),
+            MoneyRewardComponent(),
+            ProgressionRewardComponent()
+        ]
+    
+    @property
+    def last_screen_state(self) -> str:
+        return self._last_screen_state
         
+    @last_screen_state.setter
+    def last_screen_state(self, state: str):
+        self._last_screen_state = state
+        # Propagate to components
+        for component in self.components:
+            component.last_screen_state = state
+            
+    @property
+    def prev_screen_state(self) -> str:
+        return self._prev_screen_state
+        
+    @prev_screen_state.setter
+    def prev_screen_state(self, state: str):
+        self._prev_screen_state = state
+        # Propagate to components
+        for component in self.components:
+            component.prev_screen_state = state
+            
+    @property
+    def last_action(self) -> Optional[str]:
+        return self._last_action
+        
+    @last_action.setter
+    def last_action(self, action: Optional[str]):
+        self._last_action = action
+        # Propagate to components
+        for component in self.components:
+            component.last_action = action
+    
     def calculate_reward(self, current_state: Dict, previous_state: Dict) -> Tuple[float, Dict[str, float]]:
-        """Calculate comprehensive reward based on game progress"""
-        # Increment internal step counter for simple rate limiting
-        self.step_counter += 1
+        """Calculate comprehensive reward using all components.
         
-        rewards = {}
+        Args:
+            current_state: Current game state dictionary
+            previous_state: Previous game state dictionary
+            
+        Returns:
+            tuple: (total_reward, reward_breakdown)
+                - total_reward (float): Sum of all component rewards
+                - reward_breakdown (dict): Detailed breakdown by component
+        """
         total_reward = 0.0
+        all_rewards = {}
         
-        # 1. Health and survival rewards
-        hp_reward = self._calculate_hp_reward(current_state, previous_state)
-        rewards['health'] = hp_reward
-        total_reward += hp_reward
+        # Calculate rewards from each component
+        for component in self.components:
+            reward, details = component.calculate(current_state, previous_state)
+            all_rewards.update(details)  # Merge component reward details
+            total_reward += reward
         
-        # 2. Level progression rewards
-        level_reward = self._calculate_level_reward(current_state, previous_state)
-        rewards['level'] = level_reward
-        total_reward += level_reward
-        
-        # 3. Badge progression rewards (major milestone)
-        badge_reward = self._calculate_badge_reward(current_state, previous_state)
-        rewards['badges'] = badge_reward
-        total_reward += badge_reward
-        
-        # 4. Money and item rewards
-        money_reward = self._calculate_money_reward(current_state, previous_state)
-        rewards['money'] = money_reward
-        total_reward += money_reward
-        
-        # 5. Coordinate movement rewards (small rewards for any position change)
-        movement_reward = self._calculate_movement_reward(current_state, previous_state)
-        rewards['movement'] = movement_reward
-        total_reward += movement_reward
-        
-        # 6. Exploration rewards (larger rewards for completely new areas)
-        exploration_reward = self._calculate_exploration_reward(current_state, previous_state)
-        rewards['exploration'] = exploration_reward
-        total_reward += exploration_reward
-        
-        # 7. Battle performance rewards
-        battle_reward = self._calculate_battle_reward(current_state, previous_state)
-        rewards['battle'] = battle_reward
-        total_reward += battle_reward
-        
-        # 8. Progress and efficiency penalties
-        efficiency_penalty = self._calculate_efficiency_penalty(current_state)
-        rewards['efficiency'] = efficiency_penalty
-        total_reward += efficiency_penalty
-        
-        # 9. Early game progression rewards (getting first Pokemon, etc.)
-        progression_reward = self._calculate_progression_reward(current_state, previous_state)
-        rewards['progression'] = progression_reward
-        total_reward += progression_reward
-        
-        # 10. Dialogue and interaction rewards (to guide toward first Pokemon)
-        dialogue_reward = self._calculate_dialogue_reward(current_state, previous_state)
-        rewards['dialogue'] = dialogue_reward
-        total_reward += dialogue_reward
-        
-        # 11. Blocked movement penalty (escalating for repeated attempts)
-        blocked_penalty = self._calculate_blocked_movement_penalty(current_state, previous_state)
-        rewards['blocked_movement'] = blocked_penalty
-        total_reward += blocked_penalty
-        
-        # 12. Time-based small negative reward to encourage efficiency
-        time_penalty = -0.01  # Small penalty each step
-        rewards['time'] = time_penalty
+        # Add time-based efficiency penalty
+        time_penalty = -0.01
+        all_rewards['time'] = time_penalty
         total_reward += time_penalty
         
-        return total_reward, rewards
+        return total_reward, all_rewards
+        
+    def get_reward_summary(self, rewards: Dict[str, float]) -> str:
+        """Get a human-readable summary of rewards.
+        
+        Args:
+            rewards: Dictionary mapping reward categories to values
+            
+        Returns:
+            str: Human-readable summary string
+        """
+        summary_parts = []
+        for category, value in rewards.items():
+            if abs(value) > 0.01:  # Only show significant rewards
+                summary_parts.append(f"{category}: {value:+.2f}")
+        
+        return " | ".join(summary_parts) if summary_parts else "no rewards"
     
     def _calculate_hp_reward(self, current: Dict, previous: Dict) -> float:
         """Reward for maintaining/improving health"""

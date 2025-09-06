@@ -84,101 +84,21 @@ except ImportError:
     print("⚠️  DQN agents not available")
     DQNAgent = HybridAgent = None
 
-# Memory address mappings for Pokemon Crystal (VALIDATED addresses)
-MEMORY_ADDRESSES = {
-    # Party and Pokemon data - Based on party structure analysis
-    'party_count': 0xD163,      # Number of Pokemon in party
-    'player_species': 0xD163,   # Species of first Pokemon (party slot 0 + 0)
-    'player_held_item': 0xD164, # Held item of first Pokemon (party slot 0 + 1)
-    'player_hp': 0xD167,        # Current HP of first Pokemon (party slot 0 + 4, low byte)
-    'player_hp_high': 0xD168,   # Current HP of first Pokemon (party slot 0 + 4, high byte)
-    'player_max_hp': 0xD169,    # Max HP of first Pokemon (party slot 0 + 6, low byte)
-    'player_max_hp_high': 0xD16A, # Max HP of first Pokemon (party slot 0 + 6, high byte)
-    'player_level': 0xD16B,     # Level of first Pokemon (party slot 0 + 8)
-    'player_status': 0xD16C,    # Status condition of first Pokemon (party slot 0 + 9)
-    
-    # Location and movement - VERIFIED ADDRESSES from coordinate testing
-    'player_map': 0xDCBA,       # Current map ID (VERIFIED)
-    'player_x': 0xDCB8,         # Player X coordinate (VERIFIED)
-    'player_y': 0xDCB9,         # Player Y coordinate (VERIFIED)
-    'player_direction': 0xDCBB, # Direction player is facing (VERIFIED)
-    
-    # Resources and progress - From money/badge analysis
-    'money_low': 0xD347,        # Money (low byte, 3 bytes little-endian)
-    'money_mid': 0xD348,        # Money (mid byte)
-    'money_high': 0xD349,       # Money (high byte)
-    'badges': 0xD359,           # Badge flags (bit flags for 8 Johto badges)
-    
-    # Battle state - From battle analysis
-    'in_battle': 0xD057,        # Battle active flag (0=overworld, 1=battle)
-    'battle_turn': 0xD068,      # Turn counter in battle
-    'enemy_species': 0xD0A5,    # Opponent Pokemon species
-    'enemy_hp_low': 0xD0A8,     # Opponent HP (low byte, 2 bytes)
-    'enemy_hp_high': 0xD0A9,    # Opponent HP (high byte)
-    'enemy_level': 0xD0AA,      # Opponent Pokemon level
-    'player_active_slot': 0xD05E, # Player active Pokemon slot (0-5)
-    'move_selected': 0xD05F,    # Move selected (0-3)
-    
-    # Misc useful - From misc analysis
-    'step_counter': 0xD164,     # Step counter for movement tracking
-    'game_time_hours': 0xD3E1,  # Time played (hours)
-}
+from config.memory_addresses import MEMORY_ADDRESSES
+from utils.memory_reader import build_observation
 
+# Import core systems and monitoring (try/except for optional dependencies)
+try:
+    from core.web_monitor import WebMonitor, WebMonitorHandler, ScreenCapture
+except ImportError:
+    print("⚠️  WebMonitor not available - web monitoring disabled")
+    WebMonitor = WebMonitorHandler = ScreenCapture = None
 
-def build_observation(memory) -> Dict:
-    """Build complete game state observation using validated memory addresses"""
-    
-    # Party data - using party structure (44 bytes per Pokemon)
-    party = []
-    party_count = memory[0xD163] if memory[0xD163] <= 6 else 0  # Validate party count
-    
-    for i in range(6):  # Always check all 6 slots
-        base = 0xD163 + i * 44
-        try:
-            # PyBoy memory access doesn't support len(), so we'll use try/except for bounds checking
-
-            species = memory[base] if i < party_count else 0
-            held_item = memory[base + 1] if i < party_count else 0
-            hp = memory[base + 4] + (memory[base + 5] << 8) if i < party_count else 0
-            max_hp = memory[base + 6] + (memory[base + 7] << 8) if i < party_count else 0
-            level = memory[base + 8] if i < party_count else 0
-            status = memory[base + 9] if i < party_count else 0
-            moves = [memory[base + 10 + j] for j in range(4)] if i < party_count else [0, 0, 0, 0]
-            pp = [memory[base + 14 + j] for j in range(4)] if i < party_count else [0, 0, 0, 0]
-
-            # Validate critical values
-            if i < party_count:
-                # Pokemon level should be between 1-100
-                if not 0 <= level <= 100:
-                    print(f"Warning: Invalid level {level} for Pokemon {i}, resetting to 0")
-                    level = 0
-                # HP should never be more than max HP
-                if hp > max_hp:
-                    print(f"Warning: HP {hp} exceeds max HP {max_hp} for Pokemon {i}, capping")
-                    hp = max_hp
-            
-            party.append({
-                "species": species,
-                "held_item": held_item,
-                "hp": hp,
-                "max_hp": max_hp,
-                "level": level,
-                "status": status,
-                "moves": moves,
-                "pp": pp
-            })
-        except (IndexError, KeyError) as e:
-            print(f"Error reading Pokemon {i} data: {str(e)}")
-            party.append({
-                "species": 0, "held_item": 0, "hp": 0, "max_hp": 0,
-                "level": 0, "status": 0, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0]
-            })
-        except Exception as e:
-            print(f"Unexpected error reading Pokemon {i} data: {str(e)}")
-            party.append({
-                "species": 0, "held_item": 0, "hp": 0, "max_hp": 0,
-                "level": 0, "status": 0, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0]
-            })
+try:
+    from core.memory.reader import GameState
+except ImportError:
+    print("⚠️  GameState not available")
+    GameState = None
     
     # Money - using 3-byte little-endian structure
     try:

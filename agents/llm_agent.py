@@ -28,10 +28,39 @@ from core.experience_memory import ExperienceMemory
 from core.strategic_context_builder import StrategicContextBuilder, DecisionContext
 
 
-class LLMAgent:
+from interfaces.trainers import AgentInterface, GameState
+from .base_agent import BaseAgent
+
+
+class LLMAgent(BaseAgent):
     """Enhanced LLM agent with strategic decision-making capabilities"""
     
-    def __init__(self, model_name="smollm2:1.7b", base_url="http://localhost:11434"):
+def __init__(self, *args, **kwargs):
+        """Initialize LLM agent.
+        
+        Backward compatible with previous signature:
+        __init__(model_name: str = 'smollm2:1.7b', base_url: str = 'http://localhost:11434')
+        
+        And new signature:
+        __init__(config: Dict[str, Any])
+        """
+        # Detect old vs new signature
+        if args and isinstance(args[0], str):
+            # Old style: (model_name, base_url)
+            model_name = args[0]
+            base_url = args[1] if len(args) > 1 else 'http://localhost:11434'
+            config = {'model_name': model_name, 'base_url': base_url}
+        else:
+            config = args[0] if args else kwargs.get('config', {})
+            if config is None:
+                config = {}
+        
+        super().__init__(config)
+        self.model_name = config.get('model_name', 'smollm2:1.7b')
+        self.base_url = config.get('base_url', 'http://localhost:11434')
+        self.use_game_intelligence = config.get('use_game_intelligence', True)
+        self.use_experience_memory = config.get('use_experience_memory', True)
+        self.use_strategic_context = config.get('use_strategic_context', True)
         self.model_name = model_name
         self.base_url = base_url
         self.decision_history = []
@@ -47,6 +76,24 @@ class LLMAgent:
         if not self.available:
             print("⚠️ LLM not available - will use rule-based fallbacks")
         
+    def get_action(self, observation: Dict[str, Any], info: Optional[Dict[str, Any]] = None) -> str:
+        """Get next action using LLM.
+        
+        Args:
+            observation: Current game state observation
+            info: Additional state information
+            
+        Returns:
+            Action to take
+        """
+        game_state = observation.copy()  # Maintain compatibility with old code
+        screen_analysis = info or {}
+        
+        # Get decision with fallback
+        action, reasoning = self.get_decision(game_state, screen_analysis, [])
+        
+        return action
+
     def _test_llm_connection(self) -> bool:
         """Test if LLM is available"""
         try:

@@ -57,7 +57,10 @@ def get_available_port(start_port=8080):
     return None
 
 
-class ScreenCapture:
+from interfaces.monitoring import ScreenCaptureComponent
+
+
+class ScreenCapture(ScreenCaptureComponent):
     """Handles game screen capture with error recovery"""
     
     def __init__(self, pyboy=None):

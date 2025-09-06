@@ -1,4 +1,32 @@
 #!/usr/bin/env python3
+
+### DEPRECATION NOTICE ###
+# This module has been split into:
+# - main.py: Entry point and orchestration
+# - trainer/llm_pokemon_trainer.py: Core trainer implementation
+# - config/memory_addresses.py: Memory address mappings
+# - utils/memory_reader.py: Memory reading utilities
+#
+# Please use those modules instead of this one.
+### END NOTICE ###
+
+import warnings
+warnings.warn(
+    'llm_trainer.py is deprecated. Use main.py as entry point instead.',
+    DeprecationWarning,
+stacklevel=2
+)
+
+# Re-export key components for backwards compatibility
+from config.memory_addresses import MEMORY_ADDRESSES
+from utils.memory_reader import build_observation
+from trainer.llm_pokemon_trainer import LLMPokemonTrainer
+
+# Alias main entry point
+from main import main
+
+if __name__ == '__main__':
+    main()
 """
 LLM-Enhanced Pokemon Crystal RL Training Script
 
