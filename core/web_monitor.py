@@ -115,6 +115,10 @@ class ScreenCapture:
                 
                 if screen_array is not None:
                     try:
+                        # Debug: Log screen capture success
+                        if self.stats['frames_captured'] % 50 == 0:  # Log every 50 frames
+                            logger.info(f"📸 Screen captured: shape={screen_array.shape}, frame={self.stats['frames_captured']}")
+                        
                         # Convert to PIL Image
                         if len(screen_array.shape) == 3 and screen_array.shape[2] >= 3:
                             # RGB/RGBA
@@ -177,19 +181,20 @@ class ScreenCapture:
         if not self.ws_clients or not self.latest_frame:
             return
         
-        # Create a copy of clients to avoid issues if set changes during iteration
-        clients = self.ws_clients.copy() if self.ws_clients else set()
+        # Store frame in a simple queue for WebSocket handler to pickup
+        # This avoids complex async synchronization from capture thread
+        if not hasattr(self, '_frame_queue'):
+            self._frame_queue = queue.Queue(maxsize=5)
         
-        # Send to each client (this will be async from the capture thread)
-        for client in clients:
+        try:
+            # Add latest frame to queue (non-blocking)
+            self._frame_queue.put_nowait(self.latest_frame)
+        except queue.Full:
+            # Queue full, drop oldest frame
             try:
-                # Schedule the send operation in the event loop
-                if hasattr(client, 'send') and not client.closed:
-                    # This is a synchronous call from capture thread
-                    # The actual async handling is done in the WebSocket handler
-                    pass
-            except Exception as e:
-                # Client disconnected or error - will be cleaned up by handler
+                self._frame_queue.get_nowait()
+                self._frame_queue.put_nowait(self.latest_frame)
+            except queue.Empty:
                 pass
     
     def get_latest_screen_bytes(self):
@@ -547,17 +552,60 @@ class WebMonitorHandler(BaseHTTPRequestHandler):
         const STATS_UPDATE_MS = 1000;  // 1 second
         const LLM_UPDATE_MS = 2000;    // 2 seconds
         
-        // Start update loops
-        setInterval(updateScreen, SCREEN_UPDATE_MS);
+        // Start update loops (stats and LLM only - screen via WebSocket)
         setInterval(updateStats, STATS_UPDATE_MS);
         setInterval(updateLLMDecisions, LLM_UPDATE_MS);
         
         // Initial updates
-        updateScreen();
+        initWebSocketStream();
         updateStats();
         updateLLMDecisions();
         
-        async function updateScreen() {
+        function initWebSocketStream() {
+            try {
+                const wsPort = window.location.port ? parseInt(window.location.port) + 1 : 8081;
+                const ws = new WebSocket(`ws://${window.location.hostname}:${wsPort}/stream`);
+                const img = document.getElementById('game-screen');
+                
+                ws.onopen = function() {
+                    console.log('📡 WebSocket stream connected');
+                };
+                
+                ws.onmessage = function(event) {
+                    // Convert binary data to blob URL
+                    const blob = new Blob([event.data], { type: 'image/png' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    // Update image source
+                    const oldUrl = img.src;
+                    img.src = url;
+                    
+                    // Clean up old blob URL
+                    if (oldUrl.startsWith('blob:')) {
+                        URL.revokeObjectURL(oldUrl);
+                    }
+                };
+                
+                ws.onclose = function() {
+                    console.log('📡 WebSocket stream disconnected - attempting reconnect in 3s');
+                    setTimeout(initWebSocketStream, 3000);
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('WebSocket stream error:', error);
+                };
+                
+            } catch (error) {
+                console.error('WebSocket initialization error:', error);
+                // Fallback to HTTP polling
+                console.log('Falling back to HTTP polling');
+                setInterval(updateScreenHTTP, SCREEN_UPDATE_MS);
+                updateScreenHTTP();
+            }
+        }
+        
+        // Fallback HTTP polling function
+        async function updateScreenHTTP() {
             try {
                 const img = document.getElementById('game-screen');
                 img.src = '/api/screenshot?t=' + Date.now();
@@ -951,17 +999,45 @@ class WebMonitorHandler(BaseHTTPRequestHandler):
 async def websocket_handler(websocket, path, web_monitor):
     """WebSocket handler for streaming game screen"""
     web_monitor.ws_clients.add(websocket)
-    logger.info(f"📡 WebSocket client connected: {websocket.remote_address}")
+    logger.info(f"📡 WebSocket client connected: {websocket.remote_address} (path: {path})")
+    logger.info(f"📡 Total WebSocket clients: {len(web_monitor.ws_clients)}")
     
     try:
         # Send initial frame immediately
         if web_monitor.screen_capture.latest_frame:
             await websocket.send(web_monitor.screen_capture.latest_frame)
         
-        # Keep connection alive and handle messages
-        async for message in websocket:
-            if message == "ping":
-                await websocket.send("pong")
+        # Start frame streaming task
+        async def stream_frames():
+            while True:
+                try:
+                    # Check for new frames in queue (non-blocking)
+                    if hasattr(web_monitor.screen_capture, '_frame_queue'):
+                        try:
+                            frame = web_monitor.screen_capture._frame_queue.get_nowait()
+                            await websocket.send(frame)
+                        except queue.Empty:
+                            pass
+                    
+                    # Wait before checking again (60 FPS max)
+                    await asyncio.sleep(1/60)
+                except websockets.exceptions.ConnectionClosed:
+                    break
+                except Exception as e:
+                    logger.debug(f"Frame streaming error: {e}")
+                    break
+        
+        # Start streaming and handle incoming messages
+        streaming_task = asyncio.create_task(stream_frames())
+        
+        try:
+            # Handle incoming messages
+            async for message in websocket:
+                if message == "ping":
+                    await websocket.send("pong")
+        finally:
+            streaming_task.cancel()
+            
     except websockets.exceptions.ConnectionClosed:
         pass
     except Exception as e:
@@ -1020,14 +1096,22 @@ class WebMonitor:
             self.server = HTTPServer((self.host, self.port), WebMonitorHandler)
             self.running = True
             
-            # Start server in daemon thread
+            # Start HTTP server in daemon thread
             self.server_thread = threading.Thread(
                 target=self.server.serve_forever,
                 daemon=True
             )
             self.server_thread.start()
             
+            # Start WebSocket server in daemon thread
+            self.ws_thread = threading.Thread(
+                target=self._start_websocket_server,
+                daemon=True
+            )
+            self.ws_thread.start()
+            
             logger.info(f"🚀 Web monitor started at http://{self.host}:{self.port}")
+            logger.info(f"📡 WebSocket streaming at ws://{self.host}:{self.ws_port}/stream")
             return True
             
         except OSError as e:
@@ -1072,6 +1156,49 @@ class WebMonitor:
             self.screen_capture.start_capture()
             
             logger.info("📸 PyBoy instance updated for screen capture")
+    
+    def _start_websocket_server(self):
+        """Start WebSocket server for streaming"""
+        async def ws_handler(websocket):
+            # In newer websockets, path is accessible via websocket.path
+            path = getattr(websocket, 'path', '/stream')
+            return await websocket_handler(websocket, path, self)
+        
+        try:
+            logger.info(f"📡 Starting WebSocket server on {self.host}:{self.ws_port}")
+            
+            # Check for existing event loop
+            try:
+                loop = asyncio.get_running_loop()
+                logger.warning("Event loop already running, creating new one")
+                loop = None
+            except RuntimeError:
+                pass  # No running loop, which is what we want
+            
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Define async function to start server
+            async def start_ws_server():
+                # For websockets 15.x, we need to use the newer API
+                import websockets.asyncio.server
+                server = await websockets.asyncio.server.serve(
+                    ws_handler, 
+                    self.host, 
+                    self.ws_port
+                )
+                logger.info(f"📡 WebSocket server started successfully on port {self.ws_port}")
+                return server
+            
+            # Run the server setup and keep loop running
+            self.ws_server = loop.run_until_complete(start_ws_server())
+            loop.run_forever()
+            
+        except Exception as e:
+            logger.error(f"WebSocket server error: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
     
     def stop(self):
         """Stop the web monitor server"""

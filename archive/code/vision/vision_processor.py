@@ -14,7 +14,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import base64
 import io
 from dataclasses import dataclass
-from core.game_states import PyBoyGameState
+from core.state_machine import PyBoyGameState
 
 # Visual context classes
 @dataclass

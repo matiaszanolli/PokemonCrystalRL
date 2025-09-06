@@ -6,7 +6,7 @@ other shared functionality.
 """
 
 from shared_types import PyBoyGameState
-from .game_states import STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
+from .state_machine import STATE_UI_ELEMENTS, STATE_TRANSITION_REWARDS
 from .choice_recognition import (
     ChoiceType,
     ChoicePosition,
