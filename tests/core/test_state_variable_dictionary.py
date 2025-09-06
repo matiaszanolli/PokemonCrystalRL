@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from core.state_variable_dictionary import (
+from core.state.variables import (
     StateVariableDictionary, StateVariable, VariableType, 
     ImpactCategory, STATE_VARIABLES, analyze_game_state_comprehensive
 )
@@ -175,7 +175,7 @@ class TestStateVariableDictionary:
         assert len(STATE_VARIABLES.variables) >= 20
         
         # Test convenience function
-        from core.state_variable_dictionary import get_state_variable_info
+        from core.state.variables import get_state_variable_info
         
         hp_info = get_state_variable_info('player_hp')
         assert hp_info is not None

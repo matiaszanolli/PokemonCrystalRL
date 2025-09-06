@@ -17,8 +17,8 @@ from collections import deque
 import logging
 
 from core.memory_map import MEMORY_ADDRESSES
-from core.game_state_analyzer import GameStateAnalyzer, GamePhase
-from core.state_variable_dictionary import STATE_VARIABLES
+from core.state.analyzer import GameStateAnalyzer, GamePhase
+from core.state.variables import STATE_VARIABLES
 from core.strategic_context_builder import StrategicContextBuilder
 
 
@@ -313,7 +313,7 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
         observation['action_history'] = np.array(action_history, dtype=np.int8)
         
         # 5. Game phase and criticality (use list index for discrete spaces)
-        from core.game_state_analyzer import GamePhase, SituationCriticality
+        from core.state.analyzer import GamePhase, SituationCriticality
         observation['game_phase'] = list(GamePhase).index(game_analysis.phase)
         observation['criticality'] = list(SituationCriticality).index(game_analysis.criticality)
         

@@ -25,8 +25,8 @@ from .memory_map import (
     get_badges_earned
 )
 
-class GamePhase(Enum):
-    """High-level game progression phases"""
+class IntelligenceGamePhase(Enum):
+    """High-level game progression phases for intelligence module"""
     TUTORIAL = auto()           # Getting first Pokemon
     EARLY_EXPLORATION = auto()  # First routes and towns
     GYM_CHALLENGE = auto()      # Preparing for/challenging gyms
@@ -46,9 +46,9 @@ class LocationType(Enum):
     UNKNOWN = auto()          # Unrecognized location
 
 @dataclass
-class GameContext:
-    """Rich context about current game situation"""
-    phase: GamePhase
+class IntelligenceGameContext:
+    """Rich context about current game situation for intelligence module"""
+    phase: IntelligenceGamePhase
     location_type: LocationType
     location_name: str
     immediate_goals: List[str]

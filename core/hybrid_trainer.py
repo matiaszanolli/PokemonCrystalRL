@@ -22,7 +22,7 @@ from pyboy import PyBoy
 from http.server import HTTPServer
 
 from core.enhanced_reward_system import RewardCalculator
-from core.game_state_analyzer import GameStateAnalyzer
+from core.state.analyzer import GameStateAnalyzer
 from core.decision_validator import DecisionValidator
 from core.strategic_context_builder import StrategicContextBuilder
 from llm_trainer import LLMAgent, WebMonitor, build_observation

@@ -31,8 +31,8 @@ from typing import Dict, List, Tuple, Optional, Any
 # Import core systems and monitoring
 from core.web_monitor import WebMonitor, WebMonitorHandler, ScreenCapture
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.memory_reader import GameState
-from core.game_state_analyzer import GameStateAnalyzer
+from core.memory.reader import GameState
+from core.state.analyzer import GameStateAnalyzer
 from core.strategic_context_builder import StrategicContextBuilder, DecisionContext
 from trainer.web_server import WebServer, ServerConfig
 

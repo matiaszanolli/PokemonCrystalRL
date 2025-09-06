@@ -14,7 +14,7 @@ sys.path.insert(0, str(project_root))
 from core.goal_oriented_planner import (
     GoalOrientedPlanner, Goal, GoalPriority, GoalStatus
 )
-from core.game_state_analyzer import (
+from core.state.analyzer import (
     GameStateAnalysis, GamePhase, SituationCriticality
 )
 
@@ -156,7 +156,7 @@ class TestGoalOrientedPlanner:
         
         # Add party_size to state_variables if provided
         if 'party_size' in kwargs:
-            from core.game_state_analyzer import StateVariable
+            from core.state.analyzer import AnalysisStateVariable as StateVariable
             defaults['state_variables']['party_size'] = StateVariable(
                 name='party_size',
                 type='int',

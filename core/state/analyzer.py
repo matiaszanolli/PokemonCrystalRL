@@ -29,8 +29,8 @@ class SituationCriticality(Enum):
     OPTIMAL = "optimal"  # Can focus on optimization
 
 @dataclass
-class StateVariable:
-    """Definition of a game state variable"""
+class AnalysisAnalysisStateVariable:
+    """Definition of a game state variable for analysis purposes"""
     name: str
     type: str  # 'int', 'float', 'bool', 'tuple', 'bitfield'
     current_value: Any
@@ -63,7 +63,7 @@ class GameStateAnalysis:
     risk_assessment: str
     
     # Raw state variables
-    state_variables: Dict[str, StateVariable]
+    state_variables: Dict[str, 'AnalysisStateVariable']
 
 class GameStateAnalyzer:
     """Analyzes game state and provides strategic insights"""
@@ -231,14 +231,14 @@ class GameStateAnalyzer:
             158: {'name': 'Totodile', 'type': ['Water'], 'base_stats': {'hp': 50}},
         }
     
-    def _parse_state_variables(self, raw_state: Dict) -> Dict[str, StateVariable]:
-        """Parse raw state into structured StateVariable objects"""
+    def _parse_state_variables(self, raw_state: Dict) -> Dict[str, 'AnalysisStateVariable']:
+        """Parse raw state into structured AnalysisStateVariable objects"""
         state_vars = {}
         
         for var_name, definition in self.state_variable_definitions.items():
             current_value = raw_state.get(var_name, 0)
             
-            state_vars[var_name] = StateVariable(
+            state_vars[var_name] = AnalysisStateVariable(
                 name=var_name,
                 type=definition['type'],
                 current_value=current_value,
@@ -251,11 +251,11 @@ class GameStateAnalyzer:
         
         return state_vars
     
-    def _determine_game_phase(self, state_vars: Dict[str, StateVariable]) -> GamePhase:
+    def _determine_game_phase(self, state_vars: Dict[str, 'AnalysisStateVariable']) -> GamePhase:
         """Determine what phase of the game we're in"""
         party_count = state_vars['party_count'].current_value
         badges = state_vars['badges'].current_value
-        player_level = state_vars.get('player_level', StateVariable('', '', 0, (0, 0), {}, [], 0.0, '')).current_value
+        player_level = state_vars.get('player_level', AnalysisStateVariable('', '', 0, (0, 0), {}, [], 0.0, '')).current_value
         
         # Count actual badges (number of set bits)
         if isinstance(badges, int):
@@ -277,7 +277,7 @@ class GameStateAnalyzer:
         else:
             return GamePhase.POST_GAME
     
-    def _assess_criticality(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> SituationCriticality:
+    def _assess_criticality(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase) -> SituationCriticality:
         """Assess how critical the current situation is"""
         # Check for emergency conditions
         if self._has_emergency_conditions(state_vars):
@@ -293,7 +293,7 @@ class GameStateAnalyzer:
         
         return SituationCriticality.MODERATE
     
-    def _has_emergency_conditions(self, state_vars: Dict[str, StateVariable]) -> bool:
+    def _has_emergency_conditions(self, state_vars: Dict[str, 'AnalysisStateVariable']) -> bool:
         """Check for conditions requiring immediate action"""
         # Only check survival conditions if we have Pokemon
         party_count = state_vars.get('party_count')
@@ -316,7 +316,7 @@ class GameStateAnalyzer:
         
         return False
     
-    def _has_urgent_conditions(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> bool:
+    def _has_urgent_conditions(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase) -> bool:
         """Check for conditions requiring prompt attention"""
         party_count = state_vars.get('party_count')
         
@@ -341,7 +341,7 @@ class GameStateAnalyzer:
         
         return False
     
-    def _is_optimal_state(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> bool:
+    def _is_optimal_state(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase) -> bool:
         """Check if we're in an optimal state for strategic planning"""
         party_count = state_vars.get('party_count')
         
@@ -370,7 +370,7 @@ class GameStateAnalyzer:
         
         return True
     
-    def _calculate_health_percentage(self, state_vars: Dict[str, StateVariable]) -> float:
+    def _calculate_health_percentage(self, state_vars: Dict[str, 'AnalysisStateVariable']) -> float:
         """Calculate current health as a percentage"""
         hp = state_vars.get('player_hp')
         max_hp = state_vars.get('player_max_hp')
@@ -380,7 +380,7 @@ class GameStateAnalyzer:
         
         return (hp.current_value / max_hp.current_value) * 100
     
-    def _calculate_progression_score(self, state_vars: Dict[str, StateVariable]) -> float:
+    def _calculate_progression_score(self, state_vars: Dict[str, 'AnalysisStateVariable']) -> float:
         """Calculate overall progression score (0-100)"""
         score = 0.0
         
@@ -407,7 +407,7 @@ class GameStateAnalyzer:
         
         return min(score, 100.0)
     
-    def _calculate_exploration_score(self, state_vars: Dict[str, StateVariable]) -> float:
+    def _calculate_exploration_score(self, state_vars: Dict[str, 'AnalysisStateVariable']) -> float:
         """Calculate exploration score based on current location"""
         # This would be enhanced with actual exploration tracking
         # For now, just use map ID as a proxy
@@ -418,7 +418,7 @@ class GameStateAnalyzer:
         # Higher map IDs generally mean more exploration
         return min(map_id.current_value * 2.0, 100.0)
     
-    def _identify_threats(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> List[str]:
+    def _identify_threats(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase) -> List[str]:
         """Identify immediate threats requiring attention"""
         threats = []
         
@@ -448,7 +448,7 @@ class GameStateAnalyzer:
         
         return threats
     
-    def _identify_opportunities(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> List[str]:
+    def _identify_opportunities(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase) -> List[str]:
         """Identify opportunities for advancement"""
         opportunities = []
         
@@ -475,7 +475,7 @@ class GameStateAnalyzer:
         
         return opportunities
     
-    def _recommend_priorities(self, state_vars: Dict[str, StateVariable], phase: GamePhase, criticality: SituationCriticality) -> List[str]:
+    def _recommend_priorities(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase, criticality: SituationCriticality) -> List[str]:
         """Recommend strategic priorities based on current state"""
         priorities = []
         
@@ -520,12 +520,12 @@ class GameStateAnalyzer:
         
         return priorities
     
-    def _generate_situation_summary(self, state_vars: Dict[str, StateVariable], phase: GamePhase) -> str:
+    def _generate_situation_summary(self, state_vars: Dict[str, 'AnalysisStateVariable'], phase: GamePhase) -> str:
         """Generate a human-readable summary of the current situation"""
-        party_count = state_vars.get('party_count', StateVariable('', '', 0, (0, 0), {}, [], 0.0, '')).current_value
+        party_count = state_vars.get('party_count', AnalysisStateVariable('', '', 0, (0, 0), {}, [], 0.0, '')).current_value
         hp_pct = self._calculate_health_percentage(state_vars)
-        in_battle = state_vars.get('in_battle', StateVariable('', '', False, (False, True), {}, [], 0.0, '')).current_value
-        map_id = state_vars.get('player_map', StateVariable('', '', 0, (0, 0), {}, [], 0.0, '')).current_value
+        in_battle = state_vars.get('in_battle', AnalysisStateVariable('', '', False, (False, True), {}, [], 0.0, '')).current_value
+        map_id = state_vars.get('player_map', AnalysisStateVariable('', '', 0, (0, 0), {}, [], 0.0, '')).current_value
         
         location_name = self.location_knowledge.get(map_id, {}).get('name', f'Map {map_id}')
         
@@ -564,7 +564,7 @@ class GameStateAnalyzer:
         
         return context.strip()
     
-    def _generate_risk_assessment(self, state_vars: Dict[str, StateVariable], threats: List[str]) -> str:
+    def _generate_risk_assessment(self, state_vars: Dict[str, 'AnalysisStateVariable'], threats: List[str]) -> str:
         """Generate risk assessment for current situation"""
         risk_level = "LOW"
         

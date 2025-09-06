@@ -56,7 +56,7 @@ def test_state_variable_dictionary():
     print("\n📊 Testing State Variable Dictionary...")
     
     try:
-        from core.state_variable_dictionary import STATE_VARIABLES, ImpactCategory
+        from core.state.variables import STATE_VARIABLES, ImpactCategory
         
         # Test basic functionality
         summary = STATE_VARIABLES.get_variable_summary()
@@ -87,7 +87,7 @@ def test_decision_validation():
     
     try:
         from core.decision_validator import DecisionValidator, ValidationResult, ActionRisk
-        from core.game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+        from core.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         validator = DecisionValidator()
         
@@ -128,7 +128,7 @@ def test_strategic_integration():
     
     try:
         from core.strategic_context_builder import StrategicContextBuilder
-        from core.game_state_analyzer import GameStateAnalyzer
+        from core.state.analyzer import GameStateAnalyzer
         
         builder = StrategicContextBuilder()
         

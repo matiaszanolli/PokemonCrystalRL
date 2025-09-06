@@ -16,7 +16,7 @@ import json
 import time
 from collections import deque
 
-from core.game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+from core.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
 from core.adaptive_strategy_system import AdaptiveStrategySystem, StrategyType, DecisionSource
 from core.decision_validator import DecisionValidator, ValidationResult
 from trainer.llm_manager import LLMManager
@@ -153,7 +153,7 @@ class LLMAgent(BaseAgent):
     def _obs_to_game_analysis(self, observation: Dict[str, Any], info: Dict[str, Any]) -> GameStateAnalysis:
         """Convert observation to GameStateAnalysis"""
         # This is a simplified conversion - in practice, you'd reconstruct the full analysis
-        from core.game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+        from core.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         # Get phase and criticality from observation
         phase_idx = int(observation.get('game_phase', 0))

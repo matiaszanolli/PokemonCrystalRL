@@ -18,7 +18,7 @@ from core.hybrid_agent import HybridAgent
 from core.adaptive_strategy_system import AdaptiveStrategySystem
 from core.decision_history_analyzer import DecisionHistoryAnalyzer
 from trainer.llm_manager import LLMManager
-from core.game_state_analyzer import GameStateAnalysis
+from core.state.analyzer import GameStateAnalysis
 
 
 class HybridLLMRLTrainer:
