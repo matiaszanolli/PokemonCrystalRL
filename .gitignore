@@ -389,3 +389,4 @@ docs/build/
 # Git hooks (keep as examples)
 .git/hooks/*
 !.git/hooks/*.sample
+.aider*

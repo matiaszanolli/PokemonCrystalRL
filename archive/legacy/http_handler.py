@@ -26,7 +26,7 @@ except ImportError:
     PokemonCrystalMemoryReader = None
 
 
-class HttpHandler(BaseHTTPRequestHandler):
+class WebMonitorHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the web monitoring interface"""
     
     trainer = None  # Will be set by WebMonitor

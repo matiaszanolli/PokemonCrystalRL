@@ -12,8 +12,8 @@ better separation of concerns.
 """
 
 from .screen_capture import ScreenCapture
-from .http_handler import WebMonitorHandler  
-from .web_api import WebAPI
+from .http_handler import HttpHandler as WebMonitorHandler  
+from .compat import WebAPICompat as WebAPI
 from .monitor import WebMonitor
 
 # Maintain backward compatibility

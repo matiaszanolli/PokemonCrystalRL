@@ -1,27 +1,26 @@
-#!/usr/bin/env python3
 """
-Screen Capture Module for Pokemon Crystal RL
+Screen Capture Component
 
 Handles game screen capture with error recovery and WebSocket streaming.
-Extracted from web_monitor.py for better organization.
+Implements the ScreenCaptureComponent interface with threading support.
 """
 
-import os
 import threading
 import queue
 import base64
-import json
 import time
 import io
 import logging
 import numpy as np
 from PIL import Image
-from typing import Optional, Dict, Any
+from typing import Optional
+
+from interfaces.monitoring import ScreenCaptureComponent
 
 logger = logging.getLogger(__name__)
 
 
-class ScreenCapture:
+class ScreenCapture(ScreenCaptureComponent):
     """Handles game screen capture with error recovery"""
     
     def __init__(self, pyboy=None):
@@ -39,15 +38,55 @@ class ScreenCapture:
         self._lock = threading.Lock()
         self.ws_clients = None  # Will be set by WebMonitor
     
+    def start(self) -> bool:
+        """Start the monitoring component."""
+        return self.start_capture()
+    
+    def stop(self) -> bool:
+        """Stop the monitoring component."""
+        self.stop_capture()
+        return True
+    
+    def update_stats(self, stats) -> None:
+        """Update component statistics."""
+        # ScreenCapture manages its own stats internally
+        pass
+    
+    def capture_screen(self) -> Optional[np.ndarray]:
+        """Capture current screen state."""
+        if not self.pyboy:
+            return None
+        
+        try:
+            return self.pyboy.screen.ndarray
+        except Exception as e:
+            logger.warning(f"Screen capture failed: {e}")
+            return None
+    
+    def get_latest_screen(self) -> Optional[np.ndarray]:
+        """Get most recent captured screen."""
+        if self._lock.acquire(timeout=0.1):
+            try:
+                if self.latest_screen:
+                    # Convert base64 back to numpy array if needed
+                    # For now, return None as this interface expects raw arrays
+                    # but our implementation stores processed images
+                    return None
+                return None
+            finally:
+                self._lock.release()
+        return None
+
     def start_capture(self):
         """Start screen capture thread"""
         if self.capture_active or not self.pyboy:
-            return
+            return False
         
         self.capture_active = True
         self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.capture_thread.start()
         logger.info("📸 Screen capture started")
+        return True
     
     def stop_capture(self):
         """Stop screen capture"""
@@ -190,7 +229,3 @@ class ScreenCapture:
                 self._lock.release()
         else:
             return None
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Get capture statistics"""
-        return self.stats.copy()

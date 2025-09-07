@@ -17,8 +17,8 @@ from typing import Dict, Any, Optional, Set
 
 from interfaces.monitoring import WebMonitorInterface, MonitoringStats
 from .screen_capture import ScreenCapture
-from .http_handler import WebMonitorHandler
-from .web_api import WebAPI
+from .http_handler import HttpHandler as WebMonitorHandler
+from .compat import WebAPICompat as WebAPI
 
 logger = logging.getLogger(__name__)
 

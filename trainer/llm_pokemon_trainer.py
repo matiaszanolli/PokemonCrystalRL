@@ -41,10 +41,10 @@ from collections import deque
 
 # Import core systems and monitoring (try/except for optional dependencies)
 try:
-    from core.web_monitor import WebMonitor, WebMonitorHandler, ScreenCapture
+    from trainer.compat import WebMonitor
 except ImportError:
     print("⚠️  WebMonitor not available - web monitoring disabled")
-    WebMonitor = WebMonitorHandler = ScreenCapture = None
+    WebMonitor = None
 
 try:
     from core.memory.reader import GameState
@@ -59,10 +59,10 @@ except ImportError:
     GameStateAnalyzer = None
 
 try:
-    from trainer.web_server import WebServer, ServerConfig
+    from trainer.compat import WebAPI
 except ImportError:
-    print("⚠️  WebServer not available")
-    WebServer = ServerConfig = None
+    print("⚠️  WebAPI not available")
+    WebAPI = None
 
 # Import game intelligence and experience systems (optional)
 try:
