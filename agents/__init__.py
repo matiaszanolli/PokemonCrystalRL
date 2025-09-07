@@ -1,10 +1,23 @@
 """
-Agents module for Pokemon Crystal RL
+Agents Package
 
-This module contains AI agents for Pokemon Crystal decision-making,
-including LLM-based agents and rule-based fallback systems.
+This package contains all AI agents for Pokemon Crystal decision-making:
+- LLM-based agents for intelligent decision making
+- RL-based agents (DQN) for learned behavior  
+- Hybrid agents combining multiple approaches
+- Base agent abstractions
 """
 
+from .base_agent import BaseAgent
 from .llm_agent import LLMAgent
+from .dqn_agent import DQNAgent
+from .hybrid_agent import HybridAgent
+from .hybrid_trainer import HybridTrainer
 
-__all__ = ['LLMAgent']
+__all__ = [
+    'BaseAgent',
+    'LLMAgent', 
+    'DQNAgent',
+    'HybridAgent',
+    'HybridTrainer'
+]

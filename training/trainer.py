@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from monitoring.data_bus import get_data_bus, DataType
-from trainer.game_state_detection import GameStateDetector
+from environments.game_state_detection import GameStateDetector
 from core.web_monitor import WebMonitor
 
 # Web server functionality consolidated into core.web_monitor.WebMonitor

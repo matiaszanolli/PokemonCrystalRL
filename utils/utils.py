@@ -1,7 +1,7 @@
 """Utility functions for Pokemon Crystal RL trainer."""
 
 from typing import Dict, Optional
-from core.state.machine import PyBoyGameState, STATE_TRANSITION_REWARDS
+from environments.state.machine import PyBoyGameState, STATE_TRANSITION_REWARDS
 
 
 def calculate_reward(current_state: Dict, previous_state: Optional[Dict] = None) -> float:

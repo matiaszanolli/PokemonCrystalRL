@@ -17,11 +17,12 @@ from pyboy import PyBoy
 from core.web_monitor import WebMonitor
 from core.game_intelligence import GameIntelligence
 from core.experience_memory import ExperienceMemory
-from core.dqn_agent import DQNAgent, HybridAgent
+from agents.dqn_agent import DQNAgent
+from agents.hybrid_agent import HybridAgent
 from core.strategic_context_builder import StrategicContextBuilder
 
 from agents.llm_agent import LLMAgent
-from trainer.llm_pokemon_trainer import LLMPokemonTrainer
+from training.llm_pokemon_trainer import LLMPokemonTrainer
 from rewards.calculator import PokemonRewardCalculator
 
 from utils.memory_reader import build_observation
