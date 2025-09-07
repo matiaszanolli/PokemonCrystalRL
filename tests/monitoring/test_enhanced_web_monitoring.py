@@ -379,11 +379,11 @@ import os
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from trainer.trainer import (
+from training.trainer import (
     TrainingConfig,
 )
 
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from trainer.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.web_monitoring
@@ -427,7 +427,7 @@ class TestWebServerIntegration:
         mock_web_server_instance.server = Mock()  # Mock the server attribute
         mock_web_server_class.return_value = mock_web_server_instance
         
-        trainer = UnifiedPokemonTrainer(web_config)
+        trainer = UnifiedTrainer(web_config)
         trainer.mock_server = mock_web_server_instance.server
         
         return trainer
@@ -537,7 +537,7 @@ class TestOCRDisplaySystem:
             headless=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_ocr_data_structure(self, trainer):
         """Test OCR data structure for web display"""
@@ -643,7 +643,7 @@ class TestRealTimePerformanceCharts:
             web_port=random_port
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Initialize stats tracking
         trainer.stats.update({
@@ -775,7 +775,7 @@ class TestMemoryEfficientStreaming:
             web_port=random_port
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_screenshot_compression_efficiency(self, streaming_trainer):
         """Test screenshot compression for efficient streaming"""
@@ -884,7 +884,7 @@ class TestMultiClientSupport:
             headless=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_concurrent_client_data_access(self, multi_client_trainer):
         """Test concurrent client access to monitoring data"""
@@ -1036,7 +1036,7 @@ class TestWebMonitoringEndToEnd:
             max_actions=50
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_complete_monitoring_workflow(self, e2e_trainer):
         """Test complete monitoring workflow from training to web display"""

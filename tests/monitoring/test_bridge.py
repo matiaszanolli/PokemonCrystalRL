@@ -23,7 +23,7 @@ def get_free_port():
     return port
 
 from core.monitoring.bridge import TrainerWebBridge
-from trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
+from training.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
 
 
 @pytest.fixture

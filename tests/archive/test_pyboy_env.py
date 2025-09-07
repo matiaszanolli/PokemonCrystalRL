@@ -4,8 +4,8 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch
 
-from core.pyboy_env import PyBoyPokemonCrystalEnv
-from core.state.machine import PyBoyGameState
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
+from environments.state.machine import PyBoyGameState
 
 
 @pytest.fixture

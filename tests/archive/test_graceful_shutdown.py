@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode
+from training.trainer import PokemonTrainer, TrainingConfig, TrainingMode
 
 
 def test_graceful_shutdown():

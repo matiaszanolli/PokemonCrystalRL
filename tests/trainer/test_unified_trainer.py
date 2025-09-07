@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-test_unified_trainer.py - Comprehensive tests for UnifiedPokemonTrainer
+test_unified_trainer.py - Comprehensive tests for UnifiedTrainer
 
-This test file covers all aspects of the UnifiedPokemonTrainer including:
+This test file covers all aspects of the UnifiedTrainer including:
 - Initialization and configuration
 - PyBoy stability and recovery
 - Error handling and logging
@@ -27,8 +27,8 @@ import os
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from trainer.unified_trainer import UnifiedPokemonTrainer
-from trainer.trainer import (
+from trainer.unified_trainer import UnifiedTrainer
+from training.trainer import (
     TrainingConfig,
     TrainingMode,
     LLMBackend
@@ -82,7 +82,7 @@ class TestTrainingConfig:
 
 
 @pytest.mark.unified_trainer
-class TestUnifiedPokemonTrainerInit:
+class TestUnifiedTrainerInit:
     """Test initialization and setup"""
     
     @pytest.fixture
@@ -111,7 +111,7 @@ class TestUnifiedPokemonTrainerInit:
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         # Create trainer with mocked PyBoy
-        trainer = UnifiedPokemonTrainer(base_config)
+        trainer = UnifiedTrainer(base_config)
         
         # Verify initialization
         assert trainer is not None
@@ -123,7 +123,7 @@ class TestUnifiedPokemonTrainerInit:
     @patch('trainer.trainer.PYBOY_AVAILABLE', False)
     def test_initialization_no_pyboy(self, base_config):
         """Test initialization when PyBoy is not available"""
-        trainer = UnifiedPokemonTrainer(base_config)
+        trainer = UnifiedTrainer(base_config)
         
         assert trainer is not None
         assert trainer.config == base_config
@@ -136,7 +136,7 @@ class TestUnifiedPokemonTrainerInit:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(base_config)
+        trainer = UnifiedTrainer(base_config)
         
         assert hasattr(trainer, 'logger')
         assert trainer.logger.level == logging.DEBUG
@@ -148,7 +148,7 @@ class TestUnifiedPokemonTrainerInit:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(base_config)
+        trainer = UnifiedTrainer(base_config)
         
         assert hasattr(trainer, 'error_counts')
         assert trainer.error_counts['pyboy_crashes'] == 0
@@ -189,7 +189,7 @@ class TestPyBoyStabilityAndRecovery:
         )
         
         # Return trainer instance
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_pyboy_alive_check_success(self, trainer):
         """Test successful PyBoy alive check"""
@@ -332,7 +332,7 @@ class TestErrorHandlingAndLogging:
             capture_screens=False
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_error_context_manager_success(self, trainer):
         """Test error context manager with successful operation"""
@@ -419,7 +419,7 @@ class TestWebDashboardAndHTTPPolling:
             capture_screens=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_web_server_initialization(self, mock_web_server, mock_pyboy_class):
         """Test trainer initialization (web server consolidated into WebMonitor)"""
@@ -436,7 +436,7 @@ class TestWebDashboardAndHTTPPolling:
         )
         
         # Create trainer with web server enabled
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Web server functionality consolidated into core.web_monitor.WebMonitor
         # Note: test_mode=True forces enable_web=False for test isolation
@@ -499,7 +499,7 @@ class TestRuleBasedActionSystem:
             capture_screens=False
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         # Initialize stuck detection attributes
         trainer.consecutive_same_screens = 0
         trainer.last_screen_hash = None
@@ -658,7 +658,7 @@ class TestTrainingModes:
             capture_screens=False
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     @pytest.fixture
     @patch('pyboy.PyBoy')
@@ -683,7 +683,7 @@ class TestTrainingModes:
             capture_screens=False
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_fast_monitored_training_execution(self, trainer_fast_monitored):
         """Test fast monitored training execution"""
@@ -833,7 +833,7 @@ class TestIntegrationScenarios:
 
         try:
             # Create and configure trainer
-            trainer = UnifiedPokemonTrainer(integration_config)
+            trainer = UnifiedTrainer(integration_config)
             trainer._start_screen_capture = Mock()  # Prevent screen capture thread
             trainer._training_active = True
             
@@ -932,7 +932,7 @@ class TestIntegrationScenarios:
         mock_pyboy_instance.frame_count = 1000
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(integration_config)
+        trainer = UnifiedTrainer(integration_config)
         
         # Test screen queue management
         test_screen_data = {'image_b64': 'test_data', 'timestamp': time.time()}
@@ -962,7 +962,7 @@ class TestIntegrationScenarios:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(minimal_config)
+        trainer = UnifiedTrainer(minimal_config)
         
         assert trainer.config.max_actions == 1
         assert trainer.config.max_episodes == 1
@@ -985,7 +985,7 @@ class TestIntegrationScenarios:
         mock_ollama.show.side_effect = Exception("Model not available")
         mock_ollama.pull.return_value = None
         
-        trainer = UnifiedPokemonTrainer(integration_config)
+        trainer = UnifiedTrainer(integration_config)
         
         # Should fallback to rule-based when LLM fails
         action = trainer._get_llm_action()
@@ -1023,7 +1023,7 @@ class TestEnhancedStateDetection:
             headless=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
 
     @pytest.fixture
     @patch('pyboy.PyBoy')
@@ -1048,7 +1048,7 @@ class TestEnhancedStateDetection:
             debug_mode=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     @pytest.fixture
     @patch('pyboy.PyBoy')
@@ -1073,7 +1073,7 @@ class TestEnhancedStateDetection:
             debug_mode=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
 
     def test_improved_dialogue_detection(self, trainer):
         """Test improved dialogue state detection"""
@@ -1156,7 +1156,7 @@ class TestWebMonitoringEnhancements:
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         # Create trainer with web server enabled
-        trainer = UnifiedPokemonTrainer(web_trainer_config)
+        trainer = UnifiedTrainer(web_trainer_config)
         
         # Web server functionality consolidated into core.web_monitor.WebMonitor
         # Note: test_mode=True forces enable_web=False for test isolation
@@ -1171,7 +1171,7 @@ class TestWebMonitoringEnhancements:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(web_trainer_config)
+        trainer = UnifiedTrainer(web_trainer_config)
         
         # Initialize all required stats
         initial_time = time.time()
@@ -1205,7 +1205,7 @@ class TestWebMonitoringEnhancements:
         mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(web_trainer_config)
+        trainer = UnifiedTrainer(web_trainer_config)
         
         with patch.object(trainer, '_simple_screenshot_capture') as mock_capture:
             test_screen = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
@@ -1259,7 +1259,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         
         # Check performance tracking attributes are initialized
         assert hasattr(trainer, 'llm_response_times')
@@ -1279,7 +1279,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         # Initialize stats to avoid empty arrays
         trainer.llm_response_times = []
         trainer.stats['llm_total_time'] = 0.0
@@ -1308,7 +1308,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         trainer.config.debug_mode = True  # Enable debug output
         
         original_interval = trainer.adaptive_llm_interval
@@ -1329,7 +1329,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         trainer.config.debug_mode = True  # Enable debug output
         
         # First increase the interval
@@ -1356,7 +1356,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         
         # Initialize stats and response times array
         trainer.llm_response_times = []
@@ -1385,7 +1385,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         
         assert trainer.config.llm_backend == LLMBackend.SMOLLM2
         # Would test model-specific configuration
@@ -1397,7 +1397,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['smollm2'])
+        trainer = UnifiedTrainer(model_configs['smollm2'])
         
         with patch('trainer.llm_manager.ollama') as mock_ollama:
             # Mock LLM failure
@@ -1417,7 +1417,7 @@ class TestLLMBackendSwitching:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        trainer = UnifiedPokemonTrainer(model_configs['none'])
+        trainer = UnifiedTrainer(model_configs['none'])
         
         start_time = time.time()
         
@@ -1459,7 +1459,7 @@ class TestUnifiedTrainerOptimizations:
         mock_pyboy_instance.send_input = Mock()
         mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
-        return UnifiedPokemonTrainer(mock_config)
+        return UnifiedTrainer(mock_config)
     
     def test_synchronized_training_performance(self, optimized_trainer):
         """Test synchronized training mode performance"""

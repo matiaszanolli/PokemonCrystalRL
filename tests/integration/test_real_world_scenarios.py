@@ -28,13 +28,13 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-from trainer.trainer import (
+from training.trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend,
 )
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from trainer.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.integration
@@ -67,7 +67,7 @@ class TestSmolLM2GameplayScenarios:
         mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        return UnifiedPokemonTrainer(gameplay_config)
+        return UnifiedTrainer(gameplay_config)
     
     def test_new_game_introduction_sequence(self, gameplay_trainer):
         """Test new game introduction sequence handling"""
@@ -232,7 +232,7 @@ class TestStateTransitionScenarios:
             capture_screens=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_overworld_to_battle_transition(self, state_transition_trainer):
         """Test transitions between overworld and battle states"""
@@ -369,7 +369,7 @@ class TestExtendedPlayScenarios:
             max_actions=500
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_extended_play_stability(self, extended_trainer):
         """Test system stability during extended play sessions"""
@@ -561,7 +561,7 @@ class TestMonitoredPlayScenarios:
             headless=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     @patch('http.server.HTTPServer')
     def test_monitored_gameplay_with_stats(self, mock_http_server, monitored_trainer):

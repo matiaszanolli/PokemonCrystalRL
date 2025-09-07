@@ -26,13 +26,13 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
 # Import the enhanced trainer system
-from trainer.trainer import (
+from training.trainer import (
     PokemonTrainer,
     TrainingConfig,
     TrainingMode,
     LLMBackend
 )
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from trainer.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.benchmarking
@@ -63,7 +63,7 @@ class TestActionPerformanceBenchmarks:
             enable_web=False  # Disable web for pure performance testing
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     @pytest.fixture
     @patch('trainer.trainer.PyBoy')
@@ -86,7 +86,7 @@ class TestActionPerformanceBenchmarks:
             capture_screens=False
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_target_actions_per_second_benchmark(self, trainer_fast_monitored):
         """Test that system achieves ~2.3 actions/second in fast monitored mode"""
@@ -224,7 +224,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         expectations = performance_expectations[backend]
         
         # Mock response with realistic delay
@@ -278,7 +278,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Mock LLM failure
         mock_ollama.generate.side_effect = Exception("LLM unavailable")
@@ -323,7 +323,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Mock slow LLM responses initially
         def slow_generate(*args, **kwargs):
@@ -381,7 +381,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Test performance tracking overhead
         start_time = time.perf_counter()
@@ -425,7 +425,7 @@ class TestMemoryPerformanceBenchmarks:
             capture_screens=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_memory_usage_baseline(self, trainer):
         """Test baseline memory usage of trainer system"""
@@ -554,7 +554,7 @@ class TestRealWorldPerformanceBenchmarks:
             )
         }
         
-        return {name: UnifiedPokemonTrainer(config) for name, config in scenarios.items()}
+        return {name: UnifiedTrainer(config) for name, config in scenarios.items()}
     
     def test_content_creation_performance(self, training_scenarios):
         """Test performance for content creation scenario"""

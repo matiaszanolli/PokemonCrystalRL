@@ -22,8 +22,8 @@ from pathlib import Path
 from monitoring.data_bus import DataBus, DataType
 from trainer.web_server import WebServer as TrainingWebServer
 from .mock_llm_manager import MockLLMManager
-from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from training.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
+from trainer.unified_trainer import UnifiedTrainer
 from monitoring.error_handler import ErrorHandler
 
 
@@ -112,7 +112,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
 
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
 
             # Check registration
             components = data_bus.get_component_status()
@@ -154,7 +154,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance.frame_count = 1000
             mock_pyboy.return_value = mock_pyboy_instance
     
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
             
             trainer._capture_and_queue_screen()
             
@@ -180,7 +180,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance.frame_count = 1000
             mock_pyboy.return_value = mock_pyboy_instance
     
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
 
             # Web server functionality consolidated into core.web_monitor.WebMonitor
             # Note: test_mode=True forces enable_web=False in trainer for isolation
@@ -199,7 +199,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
     
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
             
             # Check trainer is registered
             components = data_bus.get_component_status()
@@ -228,7 +228,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance.screen_image = Mock(return_value=mock_screen)
             mock_pyboy.return_value = mock_pyboy_instance
 
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
 
             # Generate lots of monitoring data
             for i in range(100):
@@ -282,7 +282,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance.frame_count = 1000
             mock_pyboy.return_value = mock_pyboy_instance
 
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
             
             # Force test_mode off and enable screen capture
             trainer.config.test_mode = False
@@ -344,7 +344,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
 
             print("DEBUG: Initializing trainer...")
             # Initialize components
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
             print("DEBUG: Trainer initialized")
 
             # Wait for components to register
@@ -432,7 +432,7 @@ patch('llm.local_llm_agent.LLMManager', return_value=MockLLMManager()):
             mock_pyboy_instance = Mock()
             mock_pyboy.return_value = mock_pyboy_instance
     
-            trainer = UnifiedPokemonTrainer(mock_config)
+            trainer = UnifiedTrainer(mock_config)
             
             # Simulate some training progress
             for i in range(3):

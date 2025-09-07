@@ -7,7 +7,7 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch
 
-from trainer.trainer import TrainingConfig, PokemonTrainer
+from training.trainer import TrainingConfig, PokemonTrainer
 from core.web_monitor import WebMonitor
 
 # Mock PyBoy for tests

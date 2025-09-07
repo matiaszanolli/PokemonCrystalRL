@@ -15,8 +15,8 @@ import numpy as np
 import time
 from unittest.mock import Mock, patch, MagicMock
 from collections import deque
-from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from training.trainer import TrainingConfig, TrainingMode, LLMBackend
+from trainer.unified_trainer import UnifiedTrainer
 from trainer.game_state_detection import get_unstuck_action
 from trainer.training_strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
 
@@ -42,7 +42,7 @@ class TestScreenHashDetection:
             capture_screens=False
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_screen_hash_calculation_consistency(self, trainer):
         """Test that identical screens produce identical hashes"""
@@ -152,7 +152,7 @@ class TestIntelligentRecoveryActions:
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(rom_path="test.gbc", headless=True)
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_unstuck_action_variety(self, trainer):
         """Test that unstuck actions show good variety"""
@@ -267,7 +267,7 @@ class TestStateAwareAntiStuck:
             debug_mode=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_dialogue_stuck_handling(self, trainer):
         """Test anti-stuck behavior in dialogue state"""
@@ -348,7 +348,7 @@ class TestAntiStuckPerformance:
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(rom_path="test.gbc", headless=True)
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_detection_overhead(self, trainer):
         """Test that stuck detection adds minimal overhead"""
@@ -446,7 +446,7 @@ class TestAntiStuckIntegration:
             debug_mode=True
         )
         
-        return UnifiedPokemonTrainer(config)
+        return UnifiedTrainer(config)
     
     def test_stuck_detection_with_llm_integration(self, trainer):
         """Test anti-stuck works with LLM system"""

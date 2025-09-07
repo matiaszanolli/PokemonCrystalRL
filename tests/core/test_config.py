@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import json
 
-from core.config import (
+from config.config import (
     UnifiedConfig,
     TrainingMode,
     LLMBackend,

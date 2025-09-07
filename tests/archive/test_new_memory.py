@@ -9,7 +9,7 @@ from pyboy import PyBoy
 
 # Add the core module to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.state.memory_map import MEMORY_ADDRESSES
+from environments.state.memory_map import MEMORY_ADDRESSES
 
 def test_new_addresses():
     rom_path = "roms/pokemon_crystal.gbc"

@@ -14,8 +14,8 @@ from utils.memory_reader import (
     build_observation
 )
 
+from config.memory_addresses import MEMORY_ADDRESSES
 from config.constants import (
-    MEMORY_ADDRESSES,
     POKEMON_SPECIES,
     STATUS_CONDITIONS,
     TRAINING_PARAMS

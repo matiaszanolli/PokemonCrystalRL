@@ -16,8 +16,8 @@ import os
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from trainer.unified_trainer import UnifiedPokemonTrainer
-from trainer.trainer import (
+from trainer.unified_trainer import UnifiedTrainer
+from training.trainer import (
     TrainingConfig,
     LLMBackend
 )
@@ -57,7 +57,7 @@ class TestAdaptiveLLMIntervals:
             capture_screens=False
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         return trainer
     
     def test_adaptive_interval_initialization(self, trainer_with_llm):
@@ -177,7 +177,7 @@ class TestAdaptiveLLMIntervals:
         for i in range(9):
             trainer._track_llm_performance(4.0)
         
-        # For UnifiedPokemonTrainer, the interval will already have increased
+        # For UnifiedTrainer, the interval will already have increased
         # Check that it's within expected bounds
         assert trainer.adaptive_llm_interval >= original_interval
         assert trainer.adaptive_llm_interval <= 50  # Max allowed value

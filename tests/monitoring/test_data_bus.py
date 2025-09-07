@@ -7,9 +7,9 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch
 
-from trainer.trainer import TrainingConfig, PokemonTrainer
+from training.trainer import TrainingConfig, PokemonTrainer
 from monitoring.data_bus import DataBus, DataType
-from core.config import TrainingMode
+from config.config import TrainingMode
 
 @pytest.fixture
 def data_bus(test_config):

@@ -17,7 +17,7 @@ def test_websocket_setup():
     print("🧪 Testing WebSocket streaming setup...")
     
     try:
-        from trainer.trainer import PokemonTrainer, TrainingConfig, TrainingMode
+        from training.trainer import PokemonTrainer, TrainingConfig, TrainingMode
         
         # Create config with web enabled
         config = TrainingConfig(

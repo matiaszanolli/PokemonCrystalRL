@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 
 from llm_trainer import (
-    LLMPokemonTrainer,
+    LLMTrainer,
     LLMAgent,
     PokemonRewardCalculator
 )
@@ -54,7 +54,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Configure trainer with optimal settings
-    trainer = LLMPokemonTrainer(
+    trainer = LLMTrainer(
         rom_path=args.rom_path,
         max_actions=args.max_actions,
         save_state=args.save_state,

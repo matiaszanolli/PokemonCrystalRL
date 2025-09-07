@@ -104,7 +104,7 @@ class TestWebIntegration:
         """Get test port for each test"""
         with temp_server() as port:
             yield port
-    """Test web interface integration with LLMPokemonTrainer."""
+    """Test web interface integration with LLMTrainer."""
     
     def test_status_endpoint(self, web_monitor):
         """Test status API endpoint."""

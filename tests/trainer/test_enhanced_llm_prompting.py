@@ -17,9 +17,9 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import time
 import numpy as np
-from trainer.unified_trainer import UnifiedPokemonTrainer
-from trainer.trainer import TrainingConfig, LLMBackend
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from trainer.unified_trainer import UnifiedTrainer
+from training.trainer import TrainingConfig, LLMBackend
+from trainer.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.enhanced_prompting
@@ -46,7 +46,7 @@ class TestEnhancedLLMPrompting:
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
         mock_pyboy_class.return_value = mock_pyboy_instance
-        return UnifiedPokemonTrainer(mock_config)
+        return UnifiedTrainer(mock_config)
     
     def test_numeric_key_guidance_in_prompts(self, enhanced_llm_trainer):
         """Test that LLM system uses numeric key guidance"""
@@ -201,7 +201,7 @@ class TestEnhancedLLMPrompting:
             headless=True
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Mock LLM failure
         with patch('trainer.llm_manager.ollama') as mock_ollama:
@@ -374,7 +374,7 @@ class TestMultiModelLLMSupport:
             if backend == LLMBackend.NONE:
                 continue
                 
-            trainer = UnifiedPokemonTrainer(config)
+            trainer = UnifiedTrainer(config)
             
             if backend in model_expectations:
                 expected = model_expectations[backend]
@@ -395,7 +395,7 @@ class TestMultiModelLLMSupport:
             headless=True
         )
         
-        trainer = UnifiedPokemonTrainer(config)
+        trainer = UnifiedTrainer(config)
         
         # Mock LLM failure
         with patch('trainer.llm_manager.ollama') as mock_ollama:
@@ -452,7 +452,7 @@ class TestPromptPerformanceOptimizations:
             mock_ollama.generate.return_value = {'response': '5'}
             
             # Create trainer - this should now work with mocked ollama
-            trainer = UnifiedPokemonTrainer(config)
+            trainer = UnifiedTrainer(config)
             
             # Force initialize LLM manager if it's still None
             if trainer.llm_manager is None:

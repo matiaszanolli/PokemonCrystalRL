@@ -6,7 +6,7 @@ without the debug_mode parameter error.
 """
 
 import numpy as np
-from core.pyboy_env import PyBoyPokemonCrystalEnv
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
 
 def test_env_creation():
     """Test environment creation with debug_mode parameter"""
@@ -53,7 +53,7 @@ def test_env_compatibility():
     """Test environment compatibility with training system"""
     print("\n🧪 Testing environment compatibility with training system...")
     
-    from core.pyboy_env import PyBoyPokemonCrystalEnv
+    from environments.pyboy_env import PyBoyPokemonCrystalEnv
     from vision.vision_enhanced_training import VisionEnhancedTrainingSession
     
     # This should not raise any parameter errors

@@ -17,7 +17,7 @@ from collections import deque
 from gymnasium import spaces
 
 from environments.rewards import calculate_reward
-from core.pyboy_env import PyBoyPokemonCrystalEnv
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
 
 
 class MockPyBoyPokemonCrystalEnv(PyBoyPokemonCrystalEnv):

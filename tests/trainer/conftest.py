@@ -14,36 +14,34 @@ from core.choice_recognition import (
     ChoicePosition
 )
 from vision.vision_processor import DetectedText, VisualContext
-from trainer.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
-from trainer.unified_trainer import UnifiedPokemonTrainer
+from config.config import TrainingConfig, TrainingMode, LLMBackend
+from training.trainer import PokemonTrainer
+from training.unified_trainer import UnifiedTrainer
 
 @pytest.fixture
 def base_config():
     """Create a base training config for tests."""
     return TrainingConfig(
-        rom_path="test.gbc",
-        mode=TrainingMode.FAST_MONITORED,
-        llm_backend=LLMBackend.SMOLLM2,
-        headless=True,
-        debug_mode=True
+        mode=TrainingMode.FAST,
+        max_episodes=10,
+        max_actions=100,
+        target_fps=60
     )
 
 @pytest.fixture
 def mock_config():
     """Configuration for LLM prompting tests"""
     return TrainingConfig(
-        rom_path="test.gbc",
-        llm_backend=LLMBackend.SMOLLM2,
-        llm_interval=3,
-        debug_mode=True,
-        headless=True,
-        capture_screens=False
+        mode=TrainingMode.LLM,
+        max_episodes=5,
+        max_actions=50,
+        target_fps=30
     )
 
 @pytest.fixture
 def mock_pyboy_class():
     """Mock PyBoy class for testing."""
-    with patch('trainer.trainer.PyBoy') as mock_pyboy:
+    with patch('training.trainer.PyBoy') as mock_pyboy:
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
         mock_pyboy.return_value = mock_pyboy_instance
@@ -52,7 +50,7 @@ def mock_pyboy_class():
 @pytest.fixture
 def trainer_fast_monitored(base_config):
     """Create a trainer fixture with fast monitored mode."""
-    with patch('trainer.trainer.PyBoy') as mock_pyboy_class:
+    with patch('training.trainer.PyBoy') as mock_pyboy_class:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         trainer = PokemonTrainer(base_config)
@@ -61,12 +59,14 @@ def trainer_fast_monitored(base_config):
 @pytest.fixture
 def trainer_ultra_fast(base_config):
     """Create a trainer fixture with ultra fast mode."""
-    config = base_config
-    config.mode = TrainingMode.ULTRA_FAST
-    config.max_actions = 10
-    config.capture_screens = False
+    config = TrainingConfig(
+        mode=TrainingMode.FAST,
+        max_episodes=1,
+        max_actions=10,
+        target_fps=120
+    )
 
-    with patch('trainer.trainer.PyBoy') as mock_pyboy_class:
+    with patch('training.trainer.PyBoy') as mock_pyboy_class:
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         trainer = PokemonTrainer(config)
@@ -81,21 +81,19 @@ def mock_llm_manager(monkeypatch, request):
         for marker in request.node.iter_markers()
     ):
         # For LLM tests, ensure ollama is available
-        monkeypatch.setattr('trainer.llm_manager.OLLAMA_AVAILABLE', True)
+        monkeypatch.setattr('training.llm_manager.OLLAMA_AVAILABLE', True)
         return
     
-    # Apply mock for other tests
-    mock_agent = Mock()
-    mock_agent.return_value = Mock()
-    monkeypatch.setattr('trainer.llm_manager.LLMManager', mock_agent)
+    # Apply mock for other tests - simplified for compatibility
+    return
 
 
 @pytest.fixture
 def enhanced_llm_trainer(mock_config):
     """Create trainer with enhanced LLM capabilities for testing."""
-    with patch('trainer.trainer.PyBoy') as mock_pyboy_class, \
-         patch('trainer.llm_manager.ollama') as mock_ollama, \
-         patch('trainer.llm_manager.OLLAMA_AVAILABLE', True):
+    with patch('training.trainer.PyBoy') as mock_pyboy_class, \
+         patch('training.llm_manager.ollama') as mock_ollama, \
+         patch('training.llm_manager.OLLAMA_AVAILABLE', True):
         
         # Setup PyBoy mock
         mock_pyboy_instance = Mock()
@@ -108,21 +106,11 @@ def enhanced_llm_trainer(mock_config):
         mock_ollama.show.return_value = {'model': 'smollm2:1.7b'}
         mock_ollama.generate.return_value = {'response': '5'}
         
-        # Create trainer - this should now work with mocked ollama
-        trainer = UnifiedPokemonTrainer(mock_config)
-        
-        # Force initialize LLM manager if it's still None
-        if trainer.llm_manager is None:
-            from trainer.llm_manager import LLMManager
-            trainer.llm_manager = LLMManager(
-                model=mock_config.llm_backend.value,
-                interval=mock_config.llm_interval
-            )
-        
-        # Ensure game state detector exists
-        if not hasattr(trainer, 'game_state_detector') or trainer.game_state_detector is None:
-            from trainer.game_state_detection import GameStateDetector
-            trainer.game_state_detector = GameStateDetector()
+        # Create trainer - simplified for compatibility
+        from config.config import UnifiedConfig
+        unified_config = UnifiedConfig()
+        unified_config.training = mock_config
+        trainer = UnifiedTrainer(unified_config)
         
         return trainer
 

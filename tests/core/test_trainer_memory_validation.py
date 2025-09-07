@@ -2,7 +2,7 @@
 """
 test_trainer_memory_validation.py - Tests for trainer memory state validation
 
-Tests the memory validation fixes in the LLMPokemonTrainer.get_game_state method
+Tests the memory validation fixes in the LLMTrainer.get_game_state method
 including sanitization of corrupted memory values and proper badge calculation.
 """
 

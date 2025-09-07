@@ -17,7 +17,7 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch, MagicMock
 
-from core.state.memory_map import (
+from environments.state.memory_map import (
     MEMORY_ADDRESSES, 
     DERIVED_VALUES,
     IMPORTANT_LOCATIONS,

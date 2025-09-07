@@ -14,8 +14,8 @@ sys.path.insert(0, str(project_root))
 from core.decision_validator import (
     DecisionValidator, ValidationResult, ActionRisk, ValidationDecision
 )
-from core.state.variables import StateVariable
-from core.state.analyzer import (
+from environments.state.variables import StateVariable
+from environments.state.analyzer import (
     GameStateAnalysis, GamePhase, SituationCriticality, AnalysisStateVariable
 )
 

@@ -1,7 +1,7 @@
 """Test suite for game states."""
 
 import pytest
-from core.state.machine import PyBoyGameState
+from environments.state.machine import PyBoyGameState
 
 
 def test_state_creation():
