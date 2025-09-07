@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from typing import Dict, List, Tuple, Any
 
 from .models import DecisionRecord, DecisionPattern, PatternType, OutcomeType
-from ..state.analyzer import GameStateAnalysis, SituationCriticality
+from environments.state.analyzer import GameStateAnalysis, SituationCriticality
 
 logger = logging.getLogger(__name__)
 

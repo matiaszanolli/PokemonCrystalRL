@@ -12,12 +12,12 @@ from .base_agent import BaseAgent
 from .llm_agent import LLMAgent
 from .dqn_agent import DQNAgent
 from .hybrid_agent import HybridAgent
-from .hybrid_trainer import HybridTrainer
+# BasicHybridTrainer removed - was unused dead code
 
 __all__ = [
     'BaseAgent',
     'LLMAgent', 
     'DQNAgent',
     'HybridAgent',
-    'HybridTrainer'
+# 'BasicHybridTrainer'  # Removed - unused
 ]

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-LLM Pokemon Trainer Module
+LLM Trainer Module
 
 Advanced Pokemon Crystal trainer orchestrator with LLM integration, reward system,
 and comprehensive training coordination capabilities.
 
-This module provides the main LLMPokemonTrainer class which handles:
+This module provides the main LLMTrainer class which handles:
 - PyBoy emulation setup and management
 - Training loop coordination and orchestration  
 - LLM-based decision making integration
@@ -102,7 +102,7 @@ except ImportError:
 # Orphaned code removed - this was part of incomplete refactoring
 
 
-class LLMPokemonTrainer:
+class LLMTrainer:
     """Advanced Pokemon Crystal trainer with LLM integration and reward system"""
     
     def __init__(self, rom_path, max_actions=5000, save_state=None,

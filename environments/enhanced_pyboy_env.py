@@ -17,8 +17,8 @@ from collections import deque
 import logging
 
 from .state.memory_map import MEMORY_ADDRESSES
-from core.state.analyzer import GameStateAnalyzer, GamePhase
-from core.state.variables import STATE_VARIABLES
+from .state.analyzer import GameStateAnalyzer, GamePhase
+from .state.variables import STATE_VARIABLES
 from core.strategic_context_builder import StrategicContextBuilder
 
 

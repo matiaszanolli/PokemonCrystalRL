@@ -8,7 +8,8 @@ import pytest
 import numpy as np
 from typing import Dict, Optional
 from unittest.mock import MagicMock
-from config.constants import MEMORY_ADDRESSES, TRAINING_PARAMS
+from config.memory_addresses import MEMORY_ADDRESSES
+from config.constants import TRAINING_PARAMS
 
 class MockMemory:
     """Mock PyBoy memory for testing."""

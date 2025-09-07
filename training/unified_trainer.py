@@ -1,5 +1,8 @@
 """
-Unified Pokemon Trainer - Enhanced trainer implementation with integrated features
+Unified Trainer - Enhanced trainer implementation with integrated features
+
+⚠️  DEPRECATION NOTICE: This trainer class is deprecated and will be removed in a future version.
+    Use PokemonTrainer (base class) or LLMTrainer (main implementation) instead.
 
 This module provides an enhanced version of the Pokemon trainer with:
 - Improved PyBoy stability and crash recovery
@@ -17,11 +20,12 @@ import queue
 import numpy as np
 from typing import Optional, Dict
 from pathlib import Path
-from trainer.trainer import PokemonTrainer, TrainingConfig
+from .trainer import PokemonTrainer, TrainingConfig
 # TrainingWebServer functionality has been consolidated into core.web_monitor
 from monitoring.data_bus import DataType
 
-class UnifiedPokemonTrainer(PokemonTrainer):
+class UnifiedTrainer(PokemonTrainer):
+    """⚠️  DEPRECATED: Use PokemonTrainer or LLMTrainer instead."""
     def _setup_queues(self):
         """Initialize unified trainer specific queues."""
         super()._setup_queues()

@@ -12,7 +12,7 @@ from typing import Dict, Optional, List
 from datetime import datetime
 
 from .models import DecisionRecord, DecisionPattern, PatternType, OutcomeType
-from ..state.analyzer import GamePhase, SituationCriticality
+from environments.state.analyzer import GamePhase, SituationCriticality
 
 logger = logging.getLogger(__name__)
 

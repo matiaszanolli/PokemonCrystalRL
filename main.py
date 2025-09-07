@@ -22,7 +22,7 @@ from agents.hybrid_agent import HybridAgent
 from core.strategic_context_builder import StrategicContextBuilder
 
 from agents.llm_agent import LLMAgent
-from training.llm_pokemon_trainer import LLMPokemonTrainer
+from training.llm_pokemon_trainer import LLMTrainer
 from rewards.calculator import PokemonRewardCalculator
 
 from utils.memory_reader import build_observation
@@ -142,7 +142,7 @@ def initialize_training_systems(args: argparse.Namespace) -> Dict:
         )
     
     # Create trainer instance
-    trainer = LLMPokemonTrainer(
+    trainer = LLMTrainer(
         rom_path=args.rom_path,
         max_actions=args.max_actions,
         save_state=args.save_state,

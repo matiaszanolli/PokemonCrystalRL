@@ -11,16 +11,16 @@ This package contains all training orchestration components including:
 from .strategies import TrainingStrategy
 from .modes import TrainingMode
 from .trainer import PokemonTrainer, TrainingConfig
-from .unified_trainer import UnifiedPokemonTrainer
-from .llm_pokemon_trainer import LLMPokemonTrainer
-from .hybrid_llm_rl_trainer import HybridLLMRLTrainer
+from .unified_trainer import UnifiedTrainer
+from .llm_pokemon_trainer import LLMTrainer
+# AdvancedHybridTrainer removed - experimental/unused
 
 __all__ = [
     'TrainingStrategy',
     'TrainingMode', 
     'PokemonTrainer',
     'TrainingConfig',
-    'UnifiedPokemonTrainer',
-    'LLMPokemonTrainer',
-    'HybridLLMRLTrainer'
+    'UnifiedTrainer',
+    'LLMTrainer',
+# 'AdvancedHybridTrainer'  # Removed - experimental
 ]

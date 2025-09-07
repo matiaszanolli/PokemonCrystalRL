@@ -21,7 +21,7 @@ from trainer.llm_manager import LLMManager
 from core.state.analyzer import GameStateAnalysis
 
 
-class HybridLLMRLTrainer:
+class AdvancedHybridTrainer:
     """
     Main trainer class that orchestrates hybrid LLM-RL training with curriculum learning.
     """

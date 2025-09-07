@@ -10,14 +10,15 @@ This package contains all configuration management components including:
 
 from .config import TrainingConfig, MonitorConfig, VisionConfig, SystemConfig, UnifiedConfig
 from .memory_addresses import MEMORY_ADDRESSES
-from .constants import GAME_CONSTANTS
-from .addresses import AddressManager
+from .constants import (
+    LOCATIONS, POKEMON_SPECIES, STATUS_CONDITIONS,
+    BADGE_MASKS, DERIVED_VALUES, SCREEN_STATES, AVAILABLE_ACTIONS,
+    MOVEMENT_DIRECTIONS, SCREEN_DIMENSIONS, TRAINING_PARAMS, REWARD_VALUES
+)
 
 __all__ = [
-    'Config',
-    'GameConfig', 
-    'TrainingConfig',
-    'MEMORY_ADDRESSES',
-    'GAME_CONSTANTS',
-    'AddressManager'
+    'TrainingConfig', 'MonitorConfig', 'VisionConfig', 'SystemConfig', 'UnifiedConfig',
+    'MEMORY_ADDRESSES', 'LOCATIONS', 'POKEMON_SPECIES', 'STATUS_CONDITIONS',
+    'BADGE_MASKS', 'DERIVED_VALUES', 'SCREEN_STATES', 'AVAILABLE_ACTIONS',
+    'MOVEMENT_DIRECTIONS', 'SCREEN_DIMENSIONS', 'TRAINING_PARAMS', 'REWARD_VALUES'
 ]

@@ -80,7 +80,7 @@ class TrainingConfig:
     })
 
 
-class HybridTrainer:
+class BasicHybridTrainer:
     """Unified trainer combining LLM guidance with DQN learning."""
     
     def __init__(self, config: TrainingConfig):

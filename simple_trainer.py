@@ -15,7 +15,7 @@ import sys
 import os
 from datetime import datetime
 
-class SimplePokemonTrainer:
+class SimpleTrainer:
     def __init__(self, rom_path, max_actions=1000):
         self.rom_path = rom_path
         self.max_actions = max_actions

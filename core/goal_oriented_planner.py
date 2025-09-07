@@ -12,7 +12,7 @@ from enum import Enum
 import json
 from datetime import datetime, timedelta
 
-from .state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+from environments.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
 
 class GoalPriority(Enum):
     """Goal priority levels"""

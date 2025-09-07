@@ -10,7 +10,7 @@ import collections
 from typing import Dict, Any, Tuple, Optional
 from pyboy import PyBoy
 from .state.memory_map import MEMORY_ADDRESSES
-from utils.utils import calculate_reward
+from .rewards import calculate_reward
 from utils.preprocess_state import preprocess_state
 from monitoring.monitoring_client import MonitoringClient
 

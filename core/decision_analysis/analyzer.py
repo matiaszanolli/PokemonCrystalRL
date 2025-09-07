@@ -13,7 +13,7 @@ from pathlib import Path
 from .models import DecisionRecord, DecisionPattern, OutcomeType
 from .database import DecisionDatabase
 from .pattern_detector import PatternDetector
-from ..state.analyzer import GameStateAnalysis
+from environments.state.analyzer import GameStateAnalysis
 
 
 class DecisionHistoryAnalyzer:
@@ -228,7 +228,7 @@ class DecisionHistoryAnalyzer:
     def add_decision(self, decision_data: Dict[str, Any]):
         """Add decision (compatibility method for tests)"""
         # Convert test format to proper format
-        from ..state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+        from environments.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         # Mock a game state analysis for compatibility
         mock_state = type('MockState', (), {

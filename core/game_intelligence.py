@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 import logging
 
-from .state.analyzer import GamePhase, SituationCriticality
-from .state.memory_map import (
+from environments.state.analyzer import GamePhase, SituationCriticality
+from environments.state.memory_map import (
     IMPORTANT_LOCATIONS, 
     POKEMON_SPECIES, 
     BADGE_MASKS, 

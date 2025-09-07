@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from ..state.analyzer import GamePhase, SituationCriticality
+from environments.state.analyzer import GamePhase, SituationCriticality
 
 
 class OutcomeType(Enum):

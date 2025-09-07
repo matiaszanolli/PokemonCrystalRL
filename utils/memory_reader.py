@@ -6,8 +6,8 @@ Safe utilities for reading and validating Game Boy memory values.
 
 from typing import Dict, Optional, List, Tuple, Any
 import logging
+from config.memory_addresses import MEMORY_ADDRESSES
 from config.constants import (
-    MEMORY_ADDRESSES, 
     TRAINING_PARAMS,
     POKEMON_SPECIES,
     STATUS_CONDITIONS,
