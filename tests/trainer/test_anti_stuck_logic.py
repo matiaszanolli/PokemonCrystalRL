@@ -16,9 +16,9 @@ import time
 from unittest.mock import Mock, patch, MagicMock
 from collections import deque
 from training.trainer import TrainingConfig, TrainingMode, LLMBackend
-from trainer.unified_trainer import UnifiedTrainer
-from trainer.game_state_detection import get_unstuck_action
-from trainer.training_strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
+from training.unified_trainer import UnifiedTrainer
+from environments.game_state_detection import get_unstuck_action
+from training.strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
 
 
 @pytest.mark.anti_stuck

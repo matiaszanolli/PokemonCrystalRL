@@ -20,10 +20,10 @@ import tempfile
 from pathlib import Path
 
 from monitoring.data_bus import DataBus, DataType
-from trainer.web_server import WebServer as TrainingWebServer
+from training.web_server import WebServer as TrainingWebServer
 from .mock_llm_manager import MockLLMManager
 from training.trainer import TrainingConfig, TrainingMode, LLMBackend, PokemonTrainer
-from trainer.unified_trainer import UnifiedTrainer
+from training.unified_trainer import UnifiedTrainer
 from monitoring.error_handler import ErrorHandler
 
 

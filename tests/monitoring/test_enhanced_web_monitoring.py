@@ -383,7 +383,7 @@ from training.trainer import (
     TrainingConfig,
 )
 
-from trainer.unified_trainer import UnifiedTrainer
+from training.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.web_monitoring

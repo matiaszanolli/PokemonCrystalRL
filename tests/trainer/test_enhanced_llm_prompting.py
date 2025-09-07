@@ -17,9 +17,9 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import time
 import numpy as np
-from trainer.unified_trainer import UnifiedTrainer
+from training.unified_trainer import UnifiedTrainer
 from training.trainer import TrainingConfig, LLMBackend
-from trainer.unified_trainer import UnifiedTrainer
+from training.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.enhanced_prompting
@@ -456,7 +456,7 @@ class TestPromptPerformanceOptimizations:
             
             # Force initialize LLM manager if it's still None
             if trainer.llm_manager is None:
-                from trainer.llm_manager import LLMManager
+                from training.llm_manager import LLMManager
                 trainer.llm_manager = LLMManager(
                     model=config.llm_backend.value,
                     interval=config.llm_interval
@@ -464,7 +464,7 @@ class TestPromptPerformanceOptimizations:
             
             # Ensure game state detector exists
             if not hasattr(trainer, 'game_state_detector') or trainer.game_state_detector is None:
-                from trainer.game_state_detection import GameStateDetector
+                from environments.game_state_detection import GameStateDetector
                 trainer.game_state_detector = GameStateDetector()
             
             return trainer

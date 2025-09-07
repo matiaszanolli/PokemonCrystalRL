@@ -14,7 +14,7 @@ def test_multi_turn_llm_context():
     print("🧠 Testing Multi-Turn LLM Context...")
     
     try:
-        from trainer.llm_manager import LLMManager
+        from training.llm_manager import LLMManager
         
         # Test initialization with context tracking
         # Note: This won't actually work without Ollama, but tests the structure
@@ -30,7 +30,7 @@ def test_goal_oriented_planning():
     print("\n🎯 Testing Goal-Oriented Planning...")
     
     try:
-        from core.goal_oriented_planner import GoalOrientedPlanner, Goal, GoalPriority
+        from environments.goal_oriented_planner import GoalOrientedPlanner, Goal, GoalPriority
         
         planner = GoalOrientedPlanner()
         
@@ -86,7 +86,7 @@ def test_decision_validation():
     print("\n🛡️ Testing Decision Validation Layer...")
     
     try:
-        from core.decision_validator import DecisionValidator, ValidationResult, ActionRisk
+        from environments.decision_validator import DecisionValidator, ValidationResult, ActionRisk
         from environments.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         validator = DecisionValidator()
@@ -127,7 +127,7 @@ def test_strategic_integration():
     print("\n🔗 Testing Strategic Integration...")
     
     try:
-        from core.strategic_context_builder import StrategicContextBuilder
+        from environments.strategic_context_builder import StrategicContextBuilder
         from environments.state.analyzer import GameStateAnalyzer
         
         builder = StrategicContextBuilder()

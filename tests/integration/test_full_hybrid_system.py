@@ -14,8 +14,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from trainer.hybrid_llm_rl_trainer import HybridLLMRLTrainer
-from core.hybrid_agent import HybridAgent
+from agents.hybrid_agent import HybridAgent
 from core.adaptive_strategy_system import AdaptiveStrategySystem
 from core.decision_history_analyzer import DecisionHistoryAnalyzer
 from trainer.llm_manager import LLMManager

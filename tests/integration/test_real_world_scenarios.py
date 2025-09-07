@@ -34,7 +34,7 @@ from training.trainer import (
     TrainingMode,
     LLMBackend,
 )
-from trainer.unified_trainer import UnifiedTrainer
+from training.unified_trainer import UnifiedTrainer
 
 
 @pytest.mark.integration

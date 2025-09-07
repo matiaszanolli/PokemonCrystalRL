@@ -4,7 +4,7 @@ import dataclasses
 import threading
 import logging
 
-from trainer.web_server import ServerConfig
+from core.monitoring.web_server import ServerConfig
 from monitoring.data_bus import get_data_bus
 
 

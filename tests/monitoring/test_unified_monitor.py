@@ -12,7 +12,8 @@ import os
 import numpy as np
 import websockets
 
-from monitoring import UnifiedMonitor, MonitorConfig
+from config.config import MonitorConfig
+from monitoring import UnifiedMonitor
 from monitoring.error_handler import ErrorSeverity, RecoveryStrategy
 
 @pytest.fixture

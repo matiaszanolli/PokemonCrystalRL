@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from core.web_monitor import WebMonitor, ScreenCapture, WebMonitorHandler
+from environments.web_monitor import WebMonitor, ScreenCapture, WebMonitorHandler
 
 @pytest.fixture
 def temp_dir():
@@ -88,10 +88,10 @@ def web_monitor(mock_trainer, available_port):
         except Exception as e:
             print(f"Warning: Error during monitor cleanup: {e}")
 
-@pytest.mark.integration
-@pytest.mark.web
 from ..fixtures.socket_helpers import temp_server, SocketTestManager
 
+@pytest.mark.integration
+@pytest.mark.web
 class TestWebIntegration:
     @pytest.fixture(scope='class')
     def socket_manager(self):
