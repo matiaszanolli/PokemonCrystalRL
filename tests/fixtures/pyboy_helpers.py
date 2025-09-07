@@ -17,7 +17,9 @@ class MockMemory:
         self.memory = initial_state or {}
         
     def __getitem__(self, key):
-        return self.memory.get(key, 0)
+        if key not in self.memory:
+            raise KeyError(f"Memory address {key:X} not found")
+        return self.memory[key]
         
     def __setitem__(self, key, value):
         if not isinstance(value, int) or not 0 <= value <= 255:

@@ -39,7 +39,7 @@ def read_party_pokemon(memory, slot: int) -> Dict[str, Any]:
         }
 
     try:
-        base = MEMORY_ADDRESSES['party_count'] + slot * TRAINING_PARAMS['PARTY_SLOT_SIZE']
+        base = MEMORY_ADDRESSES['party_data_start'] + slot * TRAINING_PARAMS['PARTY_SLOT_SIZE']
         
         species = get_safe_memory(memory, base)
         if species not in POKEMON_SPECIES:
@@ -114,11 +114,11 @@ def read_location(memory) -> Tuple[int, int, int, int]:
         y = get_safe_memory(memory, MEMORY_ADDRESSES['player_y'])
         facing = get_safe_memory(memory, MEMORY_ADDRESSES['player_direction'])
         
-        # Validate coordinates are in valid range
-        if not 0 <= x <= 255:
+        # Validate coordinates (0xFF is invalid sentinel value)
+        if x == 0xFF or not 0 <= x <= 254:
             logger.warning(f"Invalid X coordinate {x}, resetting to 0")
             x = 0
-        if not 0 <= y <= 255:
+        if y == 0xFF or not 0 <= y <= 254:
             logger.warning(f"Invalid Y coordinate {y}, resetting to 0")
             y = 0
             

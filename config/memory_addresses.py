@@ -2,15 +2,16 @@
 
 # Party and Pokemon data - Based on party structure analysis
 PARTY_ADDRESSES = {
-    'party_count': 0xD163,      # Number of Pokemon in party
-    'player_species': 0xD163,   # Species of first Pokemon (party slot 0 + 0)
-    'player_held_item': 0xD164, # Held item of first Pokemon (party slot 0 + 1)
-    'player_hp': 0xD167,        # Current HP of first Pokemon (party slot 0 + 4, low byte)
-    'player_hp_high': 0xD168,   # Current HP of first Pokemon (party slot 0 + 4, high byte)
-    'player_max_hp': 0xD169,    # Max HP of first Pokemon (party slot 0 + 6, low byte)
-    'player_max_hp_high': 0xD16A, # Max HP of first Pokemon (party slot 0 + 6, high byte)
-    'player_level': 0xD16B,     # Level of first Pokemon (party slot 0 + 8)
-    'player_status': 0xD16C,    # Status condition of first Pokemon (party slot 0 + 9)
+    'party_count': 0xD164,      # Number of Pokemon in party
+    'party_data_start': 0xD16F, # Start of party Pokemon data
+    'player_species': 0xD16F,   # Species of first Pokemon (party slot 0)
+    'player_held_item': 0xD170, # Held item of first Pokemon (party slot 0 + 1)
+    'player_hp': 0xD173,        # Current HP of first Pokemon (party slot 0 + 4, low byte)
+    'player_hp_high': 0xD174,   # Current HP of first Pokemon (party slot 0 + 4, high byte)
+    'player_max_hp': 0xD175,    # Max HP of first Pokemon (party slot 0 + 6, low byte)
+    'player_max_hp_high': 0xD176, # Max HP of first Pokemon (party slot 0 + 6, high byte)
+    'player_level': 0xD177,     # Level of first Pokemon (party slot 0 + 8)
+    'player_status': 0xD178,    # Status condition of first Pokemon (party slot 0 + 9)
 }
 
 # Location and movement - VERIFIED ADDRESSES from coordinate testing

@@ -43,10 +43,13 @@ def parse_action_response(response: str) -> str:
                     if clean_word in synonyms:
                         return action
         
-        # Look for any action word or synonym in the response
+        # Look for any action word or synonym in the response (word boundaries)
+        import re
         for action, synonyms in action_mappings.items():
             for synonym in synonyms:
-                if synonym in response_lower:
+                # Use word boundaries to avoid substring matches
+                pattern = r'\b' + re.escape(synonym) + r'\b'
+                if re.search(pattern, response_lower):
                     return action
         
         # Fallback to 'a' if nothing found
@@ -68,15 +71,15 @@ def get_allowed_action(
         if is_action_allowed(action, game_state):
             return action
             
-        # Context-aware alternatives based on screen state
-        if game_state.get('in_battle', 0) == 1:
-            return 'a'  # Always attack in battle
+        # Context-aware alternatives based on screen state (screen state takes precedence)
+        if screen_state == SCREEN_STATES['MENU']:
+            return 'b'  # Exit menus when we can't use START
         elif screen_state == SCREEN_STATES['DIALOGUE']:
             return 'a'  # Progress dialogue
-        elif screen_state == SCREEN_STATES['MENU']:
-            return 'b'  # Exit menus when we can't use START
         elif screen_state == SCREEN_STATES['LOADING']:
             return 'a'  # Wait during loading
+        elif game_state.get('in_battle', 0) == 1:
+            return 'a'  # Attack in battle
         else:
             # In overworld - focus on exploration and interaction
             return get_exploration_fallback(recent_actions)
@@ -166,15 +169,38 @@ def get_exploration_pattern_action(recent_actions: Optional[List[str]] = None) -
         if not recent_actions:
             return exploration_actions[0]
             
-        # Find last action in pattern
-        last_action = recent_actions[-1]
-        try:
-            last_idx = exploration_actions.index(last_action)
-            next_idx = (last_idx + 1) % len(exploration_actions)
-            return exploration_actions[next_idx]
-        except ValueError:
-            # Last action not in pattern, start fresh
-            return exploration_actions[0]
+        # Try to find where recent actions fit in the pattern
+        pattern_len = len(exploration_actions)
+        
+        # Special case: if only one recent action, be more flexible with matching
+        if len(recent_actions) == 1:
+            action = recent_actions[0]
+            # Find all positions where this action occurs
+            positions = [i for i, act in enumerate(exploration_actions) if act == action]
+            if positions:
+                # For single action, return next action from first occurrence
+                next_idx = (positions[0] + 1) % pattern_len
+                return exploration_actions[next_idx]
+        
+        # For multiple recent actions, try to match the exact sequence
+        recent_len = min(len(recent_actions), pattern_len)
+        
+        # Find the best matching position in the pattern
+        for start_pos in range(pattern_len):
+            match = True
+            for i in range(recent_len):
+                pattern_idx = (start_pos - recent_len + 1 + i) % pattern_len
+                if exploration_actions[pattern_idx] != recent_actions[-recent_len + i]:
+                    match = False
+                    break
+            
+            if match:
+                # Found matching sequence, return next action
+                next_idx = (start_pos + 1) % pattern_len
+                return exploration_actions[next_idx]
+        
+        # No pattern match found, start fresh
+        return exploration_actions[0]
             
     except Exception as e:
         logger.error(f"Error getting exploration pattern: {str(e)}")
