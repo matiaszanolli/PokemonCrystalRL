@@ -71,10 +71,20 @@ class MonitorConfig:
     enable_web: bool = True
     host: str = '127.0.0.1'
     port: int = 8080
+    web_port: Optional[int] = None  # For backward compatibility
     update_interval: float = 0.1
     screenshot_fps: int = 10
     cache_size: int = 1000
     compression_level: int = 6
+    # Database settings
+    db_path: Optional[str] = None
+    data_dir: Optional[str] = None
+    static_dir: Optional[str] = None
+    # Additional monitoring settings
+    snapshot_interval: float = 1.0
+    max_events: int = 10000
+    max_snapshots: int = 100
+    debug: bool = False
 
 
 @dataclass

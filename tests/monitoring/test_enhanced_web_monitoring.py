@@ -150,7 +150,7 @@ class TestWebDataUpdates:
     def trainer_with_web(self, mock_web_server):
         """Create trainer with web server"""
         trainer = Mock()
-        trainer.web_server = mock_web_server
+        trainer.web_monitor = mock_web_server
         trainer.stats = {
             'recent_stats': {},
             'training_metrics': {},
@@ -257,10 +257,10 @@ class TestMonitoringIntegration:
     def integrated_trainer(self):
         """Create trainer with full monitoring setup"""
         trainer = Mock()
-        trainer.web_server = Mock()
-        trainer.web_server.trainer_stats = {}
-        trainer.web_server.screenshot_data = None
-        trainer.web_server.live_memory_data = {}
+        trainer.web_monitor = Mock()
+        trainer.web_monitor.trainer_stats = {}
+        trainer.web_monitor.screenshot_data = None
+        trainer.web_monitor.live_memory_data = {}
         
         trainer.performance_tracking = {
             'reward_window': deque(maxlen=100),
@@ -332,14 +332,14 @@ class TestMonitoringIntegration:
         trainer = integrated_trainer
         
         # Simulate web server errors
-        trainer.web_server.trainer_stats = None  # Force error
+        trainer.web_monitor.trainer_stats = None  # Force error
         
         # Should handle None stats gracefully
         try:
             reward_rate = len([r for r in trainer.performance_tracking['reward_window'] if r > 0]) / \
                           max(len(trainer.performance_tracking['reward_window']), 1)
             trainer.stats['recent_stats']['reward_rate'] = reward_rate
-            trainer.web_server.trainer_stats = trainer.stats
+            trainer.web_monitor.trainer_stats = trainer.stats
         except Exception as e:
             pytest.fail(f"Failed to handle None stats: {e}")
         
@@ -383,7 +383,7 @@ from training.trainer import (
     TrainingConfig,
 )
 
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 
 
 @pytest.mark.web_monitoring
@@ -412,9 +412,9 @@ class TestWebServerIntegration:
         )
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
-    @patch('trainer.web_server.WebServer')
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
+    @patch('core.web_monitor.monitor.WebMonitor')
     def trainer_with_web(self, mock_web_server_class, mock_pyboy_class, web_config):
         """Create trainer with web server enabled"""
         mock_pyboy_instance = Mock()
@@ -427,7 +427,7 @@ class TestWebServerIntegration:
         mock_web_server_instance.server = Mock()  # Mock the server attribute
         mock_web_server_class.return_value = mock_web_server_instance
         
-        trainer = UnifiedTrainer(web_config)
+        trainer = PokemonTrainer(web_config)
         trainer.mock_server = mock_web_server_instance.server
         
         return trainer
@@ -519,8 +519,8 @@ class TestOCRDisplaySystem:
     """Test OCR text display in web interface"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -537,7 +537,7 @@ class TestOCRDisplaySystem:
             headless=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_ocr_data_structure(self, trainer):
         """Test OCR data structure for web display"""
@@ -625,8 +625,8 @@ class TestRealTimePerformanceCharts:
     """Test real-time performance charting system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer_with_stats(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -643,7 +643,7 @@ class TestRealTimePerformanceCharts:
             web_port=random_port
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         
         # Initialize stats tracking
         trainer.stats.update({
@@ -757,8 +757,8 @@ class TestMemoryEfficientStreaming:
     """Test memory-efficient data streaming for web interface"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def streaming_trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -775,7 +775,7 @@ class TestMemoryEfficientStreaming:
             web_port=random_port
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_screenshot_compression_efficiency(self, streaming_trainer):
         """Test screenshot compression for efficient streaming"""
@@ -866,8 +866,8 @@ class TestMultiClientSupport:
     """Test multi-client support for web monitoring"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def multi_client_trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -884,7 +884,7 @@ class TestMultiClientSupport:
             headless=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_concurrent_client_data_access(self, multi_client_trainer):
         """Test concurrent client access to monitoring data"""
@@ -1013,8 +1013,8 @@ class TestWebMonitoringEndToEnd:
     """End-to-end web monitoring system tests"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def e2e_trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -1036,7 +1036,7 @@ class TestWebMonitoringEndToEnd:
             max_actions=50
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_complete_monitoring_workflow(self, e2e_trainer):
         """Test complete monitoring workflow from training to web display"""

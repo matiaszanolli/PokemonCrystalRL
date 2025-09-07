@@ -16,7 +16,7 @@ from core.choice_recognition import (
 from vision.vision_processor import DetectedText, VisualContext
 from config.config import TrainingConfig, TrainingMode, LLMBackend
 from training.trainer import PokemonTrainer
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 
 @pytest.fixture
 def base_config():
@@ -81,7 +81,7 @@ def mock_llm_manager(monkeypatch, request):
         for marker in request.node.iter_markers()
     ):
         # For LLM tests, ensure ollama is available
-        monkeypatch.setattr('training.llm_manager.OLLAMA_AVAILABLE', True)
+        monkeypatch.setattr('trainer.llm_manager.OLLAMA_AVAILABLE', True)
         return
     
     # Apply mock for other tests - simplified for compatibility
@@ -92,8 +92,8 @@ def mock_llm_manager(monkeypatch, request):
 def enhanced_llm_trainer(mock_config):
     """Create trainer with enhanced LLM capabilities for testing."""
     with patch('training.trainer.PyBoy') as mock_pyboy_class, \
-         patch('training.llm_manager.ollama') as mock_ollama, \
-         patch('training.llm_manager.OLLAMA_AVAILABLE', True):
+         patch('trainer.llm_manager.ollama') as mock_ollama, \
+         patch('trainer.llm_manager.OLLAMA_AVAILABLE', True):
         
         # Setup PyBoy mock
         mock_pyboy_instance = Mock()
@@ -107,10 +107,7 @@ def enhanced_llm_trainer(mock_config):
         mock_ollama.generate.return_value = {'response': '5'}
         
         # Create trainer - simplified for compatibility
-        from config.config import UnifiedConfig
-        unified_config = UnifiedConfig()
-        unified_config.training = mock_config
-        trainer = UnifiedTrainer(unified_config)
+        trainer = PokemonTrainer(mock_config)
         
         return trainer
 

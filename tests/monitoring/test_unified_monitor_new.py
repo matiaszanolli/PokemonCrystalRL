@@ -11,7 +11,8 @@ from unittest.mock import Mock, patch
 import tempfile
 
 from monitoring.unified_monitor import UnifiedMonitor
-from monitoring.web_monitor import TrainingState, MonitorConfig
+from monitoring.unified_monitor import TrainingState
+from config.config import MonitorConfig
 
 class TestUnifiedMonitor:
     """Test suite for UnifiedMonitor class."""

@@ -13,7 +13,7 @@ from core.web_monitor import WebMonitor
 # Mock PyBoy for tests
 @pytest.fixture
 def mock_pyboy():
-    with patch('trainer.trainer.PyBoy') as mock:
+    with patch('training.trainer.PyBoy') as mock:
         mock_instance = Mock()
         mock_instance.frame_count = 0
         mock_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3))

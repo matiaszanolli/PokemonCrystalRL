@@ -28,7 +28,7 @@ def mock_data_bus_init(monkeypatch, data_bus):
 @pytest.fixture
 def mock_pyboy():
     """Mock PyBoy for testing."""
-    with patch('trainer.trainer.PyBoy') as mock:
+    with patch('training.trainer.PyBoy') as mock:
         mock_instance = Mock()
         mock_instance.frame_count = 0
         mock_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3))

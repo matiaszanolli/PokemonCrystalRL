@@ -194,3 +194,11 @@ class ScreenCapture:
     def get_stats(self) -> Dict[str, Any]:
         """Get capture statistics"""
         return self.stats.copy()
+    
+    def start(self):
+        """Start screen capture - alias for start_capture()"""
+        return self.start_capture()
+    
+    def stop(self):
+        """Stop screen capture - alias for stop_capture()"""
+        return self.stop_capture()

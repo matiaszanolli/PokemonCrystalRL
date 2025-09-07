@@ -27,9 +27,9 @@ from unittest.mock import Mock, patch
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 
+from config.config import MonitorConfig
 from monitoring import (
     UnifiedMonitor,
-    MonitorConfig,
     DatabaseManager,
     ErrorHandler,
     ErrorSeverity,

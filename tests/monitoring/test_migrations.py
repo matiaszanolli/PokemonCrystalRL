@@ -16,9 +16,9 @@ import tempfile
 from datetime import datetime
 import shutil
 
+from config.config import MonitorConfig
 from monitoring import (
     UnifiedMonitor,
-    MonitorConfig,
     ErrorHandler,
 )
 from monitoring.error_handler import (

@@ -34,7 +34,7 @@ from training.trainer import (
     TrainingMode,
     LLMBackend,
 )
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 
 
 @pytest.mark.integration
@@ -56,8 +56,8 @@ class TestSmolLM2GameplayScenarios:
         )
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def gameplay_trainer(self, mock_pyboy_class, gameplay_config):
         """Create trainer for gameplay scenarios"""
         mock_pyboy_instance = Mock()
@@ -67,7 +67,7 @@ class TestSmolLM2GameplayScenarios:
         mock_pyboy_instance.tick = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
-        return UnifiedTrainer(gameplay_config)
+        return PokemonTrainer(gameplay_config)
     
     def test_new_game_introduction_sequence(self, gameplay_trainer):
         """Test new game introduction sequence handling"""
@@ -215,8 +215,8 @@ class TestStateTransitionScenarios:
     """Test gameplay across multiple state transitions"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def state_transition_trainer(self, mock_pyboy_class):
         """Create trainer for state transition testing"""
         mock_pyboy_instance = Mock()
@@ -232,7 +232,7 @@ class TestStateTransitionScenarios:
             capture_screens=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_overworld_to_battle_transition(self, state_transition_trainer):
         """Test transitions between overworld and battle states"""
@@ -348,8 +348,8 @@ class TestExtendedPlayScenarios:
     """Test extended gameplay performance and stability"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def extended_trainer(self, mock_pyboy_class):
         """Create trainer for extended play testing"""
         mock_pyboy_instance = Mock()
@@ -369,7 +369,7 @@ class TestExtendedPlayScenarios:
             max_actions=500
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_extended_play_stability(self, extended_trainer):
         """Test system stability during extended play sessions"""
@@ -536,8 +536,8 @@ class TestMonitoredPlayScenarios:
     """Test gameplay with active monitoring"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def monitored_trainer(self, mock_pyboy_class):
         """Create trainer with monitoring enabled"""
         mock_pyboy_instance = Mock()
@@ -561,7 +561,7 @@ class TestMonitoredPlayScenarios:
             headless=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     @patch('http.server.HTTPServer')
     def test_monitored_gameplay_with_stats(self, mock_http_server, monitored_trainer):

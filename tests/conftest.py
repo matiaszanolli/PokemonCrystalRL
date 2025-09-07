@@ -1,7 +1,7 @@
 """Configure pytest for the Pokemon Crystal RL test suite."""
 
 import pytest
-from config.config import TrainingMode, TrainingConfig
+from training.trainer import TrainingMode, TrainingConfig
 
 @pytest.fixture
 def test_config() -> TrainingConfig:
@@ -13,10 +13,10 @@ def test_config() -> TrainingConfig:
     - Sets a test ROM path
     """
     return TrainingConfig(
-        mode=TrainingMode.FAST,
+        mode=TrainingMode.FAST_MONITORED,
         max_episodes=10,  # Short tests
         max_actions=100,  # Short tests
-        target_fps=60  # Fast tests
+        test_mode=True  # For test isolation
     )
 
 

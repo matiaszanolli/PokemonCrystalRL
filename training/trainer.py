@@ -507,7 +507,7 @@ class PokemonTrainer:
             
             # Check if stuck and return unstuck action
             if self.game_state_detector.is_stuck():
-                from trainer.game_state_detection import get_unstuck_action
+                from environments.game_state_detection import get_unstuck_action
                 return get_unstuck_action(step, self.game_state_detector.stuck_counter)
         
         # Default action if not stuck

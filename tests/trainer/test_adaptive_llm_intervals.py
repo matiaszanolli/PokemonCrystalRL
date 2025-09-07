@@ -16,7 +16,7 @@ import os
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 from training.trainer import (
     TrainingConfig,
     LLMBackend
@@ -29,8 +29,8 @@ class TestAdaptiveLLMIntervals:
     """Test the adaptive LLM interval system comprehensively"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     @patch('trainer.llm_manager.LLMManager')
     def trainer_with_llm(self, mock_llm_manager_class, mock_pyboy_class):
         """Create trainer with LLM backend for interval testing"""
@@ -57,7 +57,7 @@ class TestAdaptiveLLMIntervals:
             capture_screens=False
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         return trainer
     
     def test_adaptive_interval_initialization(self, trainer_with_llm):
@@ -177,7 +177,7 @@ class TestAdaptiveLLMIntervals:
         for i in range(9):
             trainer._track_llm_performance(4.0)
         
-        # For UnifiedTrainer, the interval will already have increased
+        # For PokemonTrainer, the interval will already have increased
         # Check that it's within expected bounds
         assert trainer.adaptive_llm_interval >= original_interval
         assert trainer.adaptive_llm_interval <= 50  # Max allowed value

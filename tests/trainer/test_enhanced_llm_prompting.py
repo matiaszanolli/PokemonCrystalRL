@@ -17,9 +17,9 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import time
 import numpy as np
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 from training.trainer import TrainingConfig, LLMBackend
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 
 
 @pytest.mark.enhanced_prompting
@@ -40,13 +40,13 @@ class TestEnhancedLLMPrompting:
         )
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
+    @patch('training.trainer.PyBoy')
     def trainer(self, mock_pyboy_class, mock_config):
         """Create trainer with mocked PyBoy for LLM testing"""
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
         mock_pyboy_class.return_value = mock_pyboy_instance
-        return UnifiedTrainer(mock_config)
+        return PokemonTrainer(mock_config)
     
     def test_numeric_key_guidance_in_prompts(self, enhanced_llm_trainer):
         """Test that LLM system uses numeric key guidance"""
@@ -201,7 +201,7 @@ class TestEnhancedLLMPrompting:
             headless=True
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         
         # Mock LLM failure
         with patch('trainer.llm_manager.ollama') as mock_ollama:
@@ -357,8 +357,8 @@ class TestMultiModelLLMSupport:
             )
         }
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def test_model_specific_configurations(self, mock_pyboy_class, trainer_configs):
         """Test that different models get appropriate configurations"""
         mock_pyboy_instance = Mock()
@@ -374,7 +374,7 @@ class TestMultiModelLLMSupport:
             if backend == LLMBackend.NONE:
                 continue
                 
-            trainer = UnifiedTrainer(config)
+            trainer = PokemonTrainer(config)
             
             if backend in model_expectations:
                 expected = model_expectations[backend]
@@ -382,8 +382,8 @@ class TestMultiModelLLMSupport:
                 assert hasattr(trainer.llm_manager, 'model') or hasattr(trainer, 'llm_manager')
                 # Would test specific model configurations
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def test_llm_fallback_mechanism(self, mock_pyboy_class):
         """Test fallback to rule-based when LLM fails"""
         mock_pyboy_instance = Mock()
@@ -395,7 +395,7 @@ class TestMultiModelLLMSupport:
             headless=True
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         
         # Mock LLM failure
         with patch('trainer.llm_manager.ollama') as mock_ollama:
@@ -427,8 +427,8 @@ class TestPromptPerformanceOptimizations:
     """Test performance optimizations in prompting system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -452,11 +452,11 @@ class TestPromptPerformanceOptimizations:
             mock_ollama.generate.return_value = {'response': '5'}
             
             # Create trainer - this should now work with mocked ollama
-            trainer = UnifiedTrainer(config)
+            trainer = PokemonTrainer(config)
             
             # Force initialize LLM manager if it's still None
             if trainer.llm_manager is None:
-                from training.llm_manager import LLMManager
+                from trainer.llm_manager import LLMManager
                 trainer.llm_manager = LLMManager(
                     model=config.llm_backend.value,
                     interval=config.llm_interval

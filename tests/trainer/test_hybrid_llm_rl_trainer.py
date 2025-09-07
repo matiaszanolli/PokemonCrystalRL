@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 # from archive.dead_code.hybrid_llm_rl_trainer import HybridLLMRLTrainer, create_trainer_from_config
 
 
+@unittest.skip("HybridLLMRLTrainer has been archived - tests disabled")
 class TestHybridLLMRLTrainer(unittest.TestCase):
     
     def setUp(self):
@@ -280,6 +281,7 @@ class TestHybridLLMRLTrainer(unittest.TestCase):
         )
 
 
+@unittest.skip("HybridLLMRLTrainer has been archived - tests disabled")
 class TestTrainerConfiguration(unittest.TestCase):
     
     def setUp(self):

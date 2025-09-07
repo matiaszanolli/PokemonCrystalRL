@@ -15,7 +15,8 @@ def test_unified_monitor_mock_fix():
     """Test that the mock fix works for UnifiedMonitor initialization."""
     print("Testing UnifiedMonitor mock fix...")
     
-    from monitoring.web_monitor import MonitorConfig, TrainingState
+    from config.config import MonitorConfig
+    from monitoring.unified_monitor import TrainingState
     
     # Create a temporary directory
     tmp_path = tempfile.mkdtemp()

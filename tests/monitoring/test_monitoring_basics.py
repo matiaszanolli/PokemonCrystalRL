@@ -5,16 +5,15 @@ import tempfile
 import numpy as np
 from pathlib import Path
 from unittest.mock import Mock, patch
+from core.web_monitor.monitor import WebMonitor
+from config.config import MonitorConfig
+from monitoring.unified_monitor import TrainingState
 from monitoring import (
-    WebMonitor,
-    MonitorConfig,
     DatabaseManager,
     ErrorHandler,
-    ErrorSeverity,
-    RecoveryStrategy,
-    TrainingState,
     UnifiedMonitor
 )
+from monitoring.error_handler import RecoveryStrategy, ErrorSeverity
 
 @pytest.fixture
 def temp_dir():

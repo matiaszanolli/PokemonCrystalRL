@@ -15,7 +15,9 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from environments.web_monitor import WebMonitor, ScreenCapture, WebMonitorHandler
+from core.web_monitor.monitor import WebMonitor
+from core.monitoring.screen_capture import ScreenCapture
+from core.web_monitor import WebMonitorHandler
 
 @pytest.fixture
 def temp_dir():

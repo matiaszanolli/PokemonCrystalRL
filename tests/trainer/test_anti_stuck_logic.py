@@ -16,7 +16,7 @@ import time
 from unittest.mock import Mock, patch, MagicMock
 from collections import deque
 from training.trainer import TrainingConfig, TrainingMode, LLMBackend
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 from environments.game_state_detection import get_unstuck_action
 from training.strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
 
@@ -27,8 +27,8 @@ class TestScreenHashDetection:
     """Test screen hash-based stuck detection system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         """Create trainer for anti-stuck testing"""
         mock_pyboy_instance = Mock()
@@ -42,7 +42,7 @@ class TestScreenHashDetection:
             capture_screens=False
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_screen_hash_calculation_consistency(self, trainer):
         """Test that identical screens produce identical hashes"""
@@ -145,14 +145,14 @@ class TestIntelligentRecoveryActions:
     """Test intelligent recovery action patterns"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(rom_path="test.gbc", headless=True)
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_unstuck_action_variety(self, trainer):
         """Test that unstuck actions show good variety"""
@@ -255,8 +255,8 @@ class TestStateAwareAntiStuck:
     """Test state-aware anti-stuck logic"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
@@ -267,7 +267,7 @@ class TestStateAwareAntiStuck:
             debug_mode=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_dialogue_stuck_handling(self, trainer):
         """Test anti-stuck behavior in dialogue state"""
@@ -341,14 +341,14 @@ class TestAntiStuckPerformance:
     """Test performance characteristics of anti-stuck system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(rom_path="test.gbc", headless=True)
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_detection_overhead(self, trainer):
         """Test that stuck detection adds minimal overhead"""
@@ -430,8 +430,8 @@ class TestAntiStuckIntegration:
     """Test integration of anti-stuck logic with full system"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -446,7 +446,7 @@ class TestAntiStuckIntegration:
             debug_mode=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_stuck_detection_with_llm_integration(self, trainer):
         """Test anti-stuck works with LLM system"""

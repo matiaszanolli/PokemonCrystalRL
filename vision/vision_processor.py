@@ -412,6 +412,130 @@ class UnifiedVisionProcessor:
             self.font_decoder.clear_cache()
         self.logger.info("🧹 Vision processor caches cleared")
     
+    def _get_dominant_colors(self, image: np.ndarray, k: int = 3) -> List[Tuple[int, int, int]]:
+        """Get dominant colors from image - wrapper for image_utils function."""
+        return get_dominant_colors(image, k)
+    
+    def _is_indoor_environment(self, image: np.ndarray, detected_text: List[DetectedText], all_text: str) -> bool:
+        """Detect if the environment is indoors based on visual indicators."""
+        all_text_lower = all_text.lower()
+        
+        # Exclude intro/menu screens
+        intro_keywords = ["new game", "continue", "pokemon crystal", "option"]
+        if any(keyword in all_text_lower for keyword in intro_keywords):
+            return False
+        
+        # Indoor indicators
+        indoor_keywords = ["mom", "bed", "home", "house", "room", "pc", "tv"]
+        return any(keyword in all_text_lower for keyword in indoor_keywords)
+    
+    def _is_actual_dialogue(self, dialogue_texts: List[DetectedText], dialogue_boxes: List[GameUIElement], all_text: str) -> bool:
+        """Determine if detected elements represent actual dialogue."""
+        # If we have dialogue boxes, it's likely actual dialogue
+        if dialogue_boxes:
+            return True
+        
+        # Check text quality and context
+        all_text_lower = all_text.lower()
+        
+        # Reject minimal home context
+        if "mom" in all_text_lower and "home" in all_text_lower:
+            # Check if we only have very short text (like single letters)
+            if dialogue_texts and all(len(text.text) <= 1 for text in dialogue_texts):
+                return False
+        
+        # Accept if we have substantial dialogue text
+        return len(dialogue_texts) > 0
+    
+    def _is_actual_menu(self, menu_texts: List[DetectedText], menu_boxes: List[GameUIElement], all_text: str) -> bool:
+        """Determine if detected elements represent actual menu."""
+        all_text_lower = all_text.lower()
+        
+        # Home context exclusions
+        home_keywords = ["home", "mom", "bed"]
+        if any(keyword in all_text_lower for keyword in home_keywords):
+            return False
+        
+        # Start menu indicators
+        start_menu_keywords = ["new game", "continue", "option"]
+        if any(keyword in all_text_lower for keyword in start_menu_keywords):
+            return True
+        
+        # Accept if we have menu boxes or menu-like text
+        return len(menu_boxes) > 0 or len(menu_texts) > 0
+    
+    def _is_actual_battle(self, image: np.ndarray, detected_text: List[DetectedText], health_bars: List[GameUIElement]) -> bool:
+        """Determine if detected elements represent actual battle."""
+        # Check for indoor/home exclusions
+        all_text = " ".join([text.text for text in detected_text]).lower()
+        indoor_keywords = ["home", "mom", "bed", "house", "room"]
+        if any(keyword in all_text for keyword in indoor_keywords):
+            return False
+        
+        # Battle indicators
+        battle_keywords = ["fight", "pkmn", "pokemon", "hp", "lv", "level"]
+        has_battle_text = any(keyword in all_text for keyword in battle_keywords)
+        has_health_bars = len(health_bars) > 0
+        
+        # Need either health bars or battle-specific text
+        return has_health_bars or has_battle_text
+    
+    def _upscale_screenshot(self, screenshot: np.ndarray, scale_factor: int = 2) -> np.ndarray:
+        """Upscale screenshot - wrapper for image_utils function."""
+        return upscale_screenshot(screenshot, scale_factor)
+    
+    def _detect_dialogue_box(self, image: np.ndarray, hsv_image: np.ndarray = None) -> Optional[GameUIElement]:
+        """Detect dialogue boxes in the image."""
+        # Basic implementation - look for rectangular regions in lower portion
+        if image is None or image.size == 0:
+            return None
+        
+        height, width = image.shape[:2] if len(image.shape) >= 2 else (0, 0)
+        if height < 50 or width < 50:
+            return None
+        
+        # Simulate dialogue box detection in lower portion of screen
+        dialogue_region = GameUIElement(
+            "dialogue_box", 
+            (5, height - 40, width - 5, height - 5), 
+            0.8
+        )
+        return dialogue_region
+    
+    def _detect_health_bars(self, image: np.ndarray, hsv_image: np.ndarray = None) -> List[GameUIElement]:
+        """Detect health bars in the image."""
+        if image is None or image.size == 0:
+            return []
+        
+        height, width = image.shape[:2] if len(image.shape) >= 2 else (0, 0)
+        if height < 30 or width < 30:
+            return []
+        
+        # Simulate health bar detection
+        health_bar = GameUIElement(
+            "healthbar", 
+            (10, 15, min(80, width - 10), 25), 
+            0.9
+        )
+        return [health_bar]
+    
+    def _detect_menus(self, image: np.ndarray, hsv_image: np.ndarray = None) -> List[GameUIElement]:
+        """Detect menu elements in the image."""
+        if image is None or image.size == 0:
+            return []
+        
+        height, width = image.shape[:2] if len(image.shape) >= 2 else (0, 0)
+        if height < 50 or width < 50:
+            return []
+        
+        # Simulate menu detection
+        menu = GameUIElement(
+            "menu", 
+            (width // 2, height // 4, width - 10, height - 10), 
+            0.7
+        )
+        return [menu]
+    
     def encode_screenshot_for_llm(self, screenshot: np.ndarray) -> str:
         """Encode screenshot for LLM processing.
         

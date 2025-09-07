@@ -23,7 +23,7 @@ import os
 # Test the web dashboard functionality by creating a simple mock server
 # that simulates the unified trainer's HTTP endpoints
 
-class MockUnifiedTrainer:
+class MockPokemonTrainer:
     """Mock trainer for testing web dashboard functionality"""
     
     def __init__(self):
@@ -113,7 +113,7 @@ class TestWebDashboardHTTPPolling:
     @pytest.fixture
     def mock_trainer(self):
         """Create mock trainer for testing"""
-        return MockUnifiedTrainer()
+        return MockPokemonTrainer()
     
     def test_api_status_endpoint_structure(self, mock_trainer):
         """Test API status endpoint returns correct structure"""
@@ -360,7 +360,7 @@ class TestDashboardErrorHandling:
     
     def test_graceful_socket_io_fallback(self):
         """Test graceful Socket.IO fallback handling"""
-        mock_trainer = MockUnifiedTrainer()
+        mock_trainer = MockPokemonTrainer()
         
         # Simulate Socket.IO connection failure
         fallback_response = mock_trainer.handle_socket_io_fallback()
@@ -378,7 +378,7 @@ class TestDashboardErrorHandling:
     
     def test_api_error_resilience(self):
         """Test API error resilience"""
-        mock_trainer = MockUnifiedTrainer()
+        mock_trainer = MockPokemonTrainer()
         error_counts = {}
         
         def simulate_api_with_errors(endpoint, error_rate=0.3):
@@ -428,7 +428,7 @@ class TestDashboardErrorHandling:
     
     def test_screenshot_polling_frequency(self):
         """Test screenshot polling frequency adjustment"""
-        mock_trainer = MockUnifiedTrainer()
+        mock_trainer = MockPokemonTrainer()
         
         # Test different polling frequencies
         polling_intervals = [500, 1000, 2000, 5000]  # milliseconds
@@ -459,7 +459,7 @@ class TestDashboardErrorHandling:
     
     def test_data_mapping_completeness(self):
         """Test completeness of data mapping from API to dashboard"""
-        mock_trainer = MockUnifiedTrainer()
+        mock_trainer = MockPokemonTrainer()
         status_data = mock_trainer.get_api_status()
         system_data = mock_trainer.get_api_system()
         
@@ -493,7 +493,7 @@ class TestDashboardIntegration:
     
     def test_full_polling_cycle_simulation(self):
         """Test complete HTTP polling cycle simulation"""
-        mock_trainer = MockUnifiedTrainer()
+        mock_trainer = MockPokemonTrainer()
         
         # Simulate dashboard lifecycle
         lifecycle_events = []
@@ -553,7 +553,7 @@ class TestDashboardIntegration:
     
     def test_concurrent_polling_simulation(self):
         """Test concurrent polling requests simulation"""
-        mock_trainer = MockUnifiedTrainer()
+        mock_trainer = MockPokemonTrainer()
         
         # Simulate concurrent requests
         def worker_thread(thread_id, call_count):

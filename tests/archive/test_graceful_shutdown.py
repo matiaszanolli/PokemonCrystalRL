@@ -37,7 +37,7 @@ def test_graceful_shutdown():
     try:
         print("📝 Creating trainer...")
         # Mock PyBoy to avoid needing a real ROM file
-        with patch('trainer.trainer.PyBoy') as mock_pyboy:
+        with patch('training.trainer.PyBoy') as mock_pyboy:
             mock_pyboy_instance = Mock()
             mock_pyboy_instance.frame_count = 0
             mock_pyboy_instance.screen.ndarray = Mock()

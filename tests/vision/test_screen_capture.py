@@ -49,7 +49,7 @@ def create_fixed_trainer(pyboy_mock):
     return trainer
 
 
-@patch('trainer.trainer.PyBoy')
+@patch('training.trainer.PyBoy')
 def test_fixed_streaming(mock_pyboy_class):
     """Test the fixed streaming system"""
     print("🧪 Testing Fixed Socket Streaming")

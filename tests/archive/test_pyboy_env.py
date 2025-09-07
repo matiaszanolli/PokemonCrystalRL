@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch
 from environments.pyboy_env import PyBoyPokemonCrystalEnv
 from environments.state.machine import PyBoyGameState
 
+pytestmark = pytest.mark.skip("PyBoy environment has been archived - tests disabled")
+
 
 @pytest.fixture
 def mock_pyboy():

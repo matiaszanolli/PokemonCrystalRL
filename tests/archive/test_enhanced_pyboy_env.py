@@ -12,9 +12,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from core.enhanced_pyboy_env import EnhancedPyBoyPokemonCrystalEnv
+from environments.enhanced_pyboy_env import EnhancedPyBoyPokemonCrystalEnv
 
 
+@unittest.skip("Enhanced PyBoy environment has been archived - tests disabled")
 class TestEnhancedPyBoyEnvironment(unittest.TestCase):
     
     def setUp(self):
@@ -337,6 +338,7 @@ class TestEnhancedPyBoyEnvironment(unittest.TestCase):
         mock_pyboy_instance.stop.assert_called_once()
 
 
+@unittest.skip("Enhanced PyBoy environment has been archived - tests disabled")
 class TestEnvironmentIntegration(unittest.TestCase):
     """Integration tests for environment components."""
     

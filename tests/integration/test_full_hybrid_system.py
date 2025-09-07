@@ -19,6 +19,7 @@ from core.adaptive_strategy_system import AdaptiveStrategySystem
 from core.decision_history_analyzer import DecisionHistoryAnalyzer
 from trainer.llm_manager import LLMManager
 from core.strategic_context_builder import StrategicContextBuilder
+from training.trainer import PokemonTrainer
 
 
 class TestFullHybridSystem(unittest.TestCase):
@@ -96,15 +97,9 @@ class TestFullHybridSystem(unittest.TestCase):
         )
         
         # Initialize trainer
-        self.trainer = HybridLLMRLTrainer(
-            env=self.mock_env,
-            agent=self.agent,
-            strategy_system=self.strategy_system,
-            decision_analyzer=self.decision_analyzer,
-            llm_manager=self.llm_manager,
-            save_dir=self.temp_dir,
-            log_level="DEBUG"
-        )
+        from training.trainer import TrainingConfig
+        training_config = TrainingConfig()
+        self.trainer = PokemonTrainer(training_config)
     
     def tearDown(self):
         """Clean up test resources."""

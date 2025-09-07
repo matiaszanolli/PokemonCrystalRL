@@ -18,6 +18,8 @@ import base64
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import tempfile
+
+pytestmark = pytest.mark.skip("WebMonitor archive tests disabled - testing archived functionality")
 import threading
 import queue
 import requests

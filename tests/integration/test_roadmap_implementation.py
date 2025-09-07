@@ -14,7 +14,7 @@ def test_multi_turn_llm_context():
     print("🧠 Testing Multi-Turn LLM Context...")
     
     try:
-        from training.llm_manager import LLMManager
+        from trainer.llm_manager import LLMManager
         
         # Test initialization with context tracking
         # Note: This won't actually work without Ollama, but tests the structure

@@ -233,7 +233,7 @@ class DecisionHistoryAnalyzer:
         # Mock a game state analysis for compatibility
         mock_state = type('MockState', (), {
             'phase': GamePhase(decision_data.get('phase', 'early_game')),
-            'criticality': SituationCriticality(decision_data.get('criticality', 'normal')),
+            'criticality': SituationCriticality(decision_data.get('criticality', 'moderate')),
             'health_percentage': decision_data.get('health_percentage', 100.0),
             'progression_score': decision_data.get('progression_score', 0.0),
             'immediate_threats': decision_data.get('threats', []),
@@ -245,7 +245,7 @@ class DecisionHistoryAnalyzer:
             game_state=mock_state,
             action_taken=decision_data['action'],
             llm_reasoning=decision_data.get('reasoning'),
-            reward_received=decision_data['reward'],
+            reward_received=decision_data.get('reward', decision_data.get('total_episode_reward', 0.0)),
             led_to_progress=decision_data.get('led_to_progress', False),
             was_effective=decision_data.get('was_effective', True)
         )

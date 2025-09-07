@@ -32,7 +32,7 @@ from training.trainer import (
     TrainingMode,
     LLMBackend
 )
-from training.unified_trainer import UnifiedTrainer
+from training.trainer import PokemonTrainer
 
 
 @pytest.mark.benchmarking
@@ -41,8 +41,8 @@ class TestActionPerformanceBenchmarks:
     """Test action execution performance benchmarks"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer_fast_monitored(self, mock_pyboy_class):
         """Create trainer optimized for fast monitored performance"""
         mock_pyboy_instance = Mock()
@@ -63,11 +63,11 @@ class TestActionPerformanceBenchmarks:
             enable_web=False  # Disable web for pure performance testing
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer_ultra_fast(self, mock_pyboy_class):
         """Create trainer for ultra-fast performance testing"""
         mock_pyboy_instance = Mock()
@@ -86,7 +86,7 @@ class TestActionPerformanceBenchmarks:
             capture_screens=False
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_target_actions_per_second_benchmark(self, trainer_fast_monitored):
         """Test that system achieves ~2.3 actions/second in fast monitored mode"""
@@ -205,8 +205,8 @@ class TestLLMInferenceBenchmarks:
         }
     
     @pytest.mark.parametrize("backend", [LLMBackend.SMOLLM2, LLMBackend.LLAMA32_1B, LLMBackend.LLAMA32_3B])
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     @patch('trainer.llm_manager.ollama')
     def test_llm_inference_timing(self, mock_ollama, mock_pyboy_available, mock_pyboy_class, backend, performance_expectations):
         """Test LLM inference timing for each backend"""
@@ -224,7 +224,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         expectations = performance_expectations[backend]
         
         # Mock response with realistic delay
@@ -259,8 +259,8 @@ class TestLLMInferenceBenchmarks:
             
             print(f"✅ {backend.value} Performance: {avg_timing:.1f}ms avg, {max_timing:.1f}ms max")
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     @patch('trainer.llm_manager.ollama')
     def test_llm_fallback_performance(self, mock_ollama, mock_pyboy_available, mock_pyboy_class):
         """Test performance when LLM fails and falls back to rule-based"""
@@ -278,7 +278,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         
         # Mock LLM failure
         mock_ollama.generate.side_effect = Exception("LLM unavailable")
@@ -302,8 +302,8 @@ class TestLLMInferenceBenchmarks:
         
         print(f"✅ LLM Fallback Performance: {elapsed*1000:.2f}ms for {action_count} calls")
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     @patch('trainer.llm_manager.ollama')
     def test_adaptive_llm_interval_performance(self, mock_ollama, mock_pyboy_available, mock_pyboy_class):
         """Test adaptive LLM interval performance optimization"""
@@ -323,7 +323,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         
         # Mock slow LLM responses initially
         def slow_generate(*args, **kwargs):
@@ -368,8 +368,8 @@ class TestLLMInferenceBenchmarks:
         # But should not go below original
         assert trainer.adaptive_llm_interval >= original_interval
     
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def test_llm_performance_tracking_overhead(self, mock_pyboy_class):
         """Test that LLM performance tracking has minimal overhead"""
         mock_pyboy_instance = Mock()
@@ -381,7 +381,7 @@ class TestLLMInferenceBenchmarks:
             headless=True
         )
         
-        trainer = UnifiedTrainer(config)
+        trainer = PokemonTrainer(config)
         
         # Test performance tracking overhead
         start_time = time.perf_counter()
@@ -409,8 +409,8 @@ class TestMemoryPerformanceBenchmarks:
     """Test memory usage and performance characteristics"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def trainer(self, mock_pyboy_class):
         mock_pyboy_instance = Mock()
         mock_pyboy_instance.frame_count = 1000
@@ -425,7 +425,7 @@ class TestMemoryPerformanceBenchmarks:
             capture_screens=True
         )
         
-        return UnifiedTrainer(config)
+        return PokemonTrainer(config)
     
     def test_memory_usage_baseline(self, trainer):
         """Test baseline memory usage of trainer system"""
@@ -515,8 +515,8 @@ class TestRealWorldPerformanceBenchmarks:
     """Test performance in real-world usage scenarios"""
     
     @pytest.fixture
-    @patch('trainer.trainer.PyBoy')
-    @patch('trainer.trainer.PYBOY_AVAILABLE', True)
+    @patch('training.trainer.PyBoy')
+    @patch('training.trainer.PYBOY_AVAILABLE', True)
     def training_scenarios(self, mock_pyboy_class):
         """Create trainers for different real-world scenarios"""
         mock_pyboy_instance = Mock()
@@ -554,7 +554,7 @@ class TestRealWorldPerformanceBenchmarks:
             )
         }
         
-        return {name: UnifiedTrainer(config) for name, config in scenarios.items()}
+        return {name: PokemonTrainer(config) for name, config in scenarios.items()}
     
     def test_content_creation_performance(self, training_scenarios):
         """Test performance for content creation scenario"""

@@ -218,7 +218,7 @@ class UnifiedTrainer(PokemonTrainer):
                 state = self.game_state_detector.detect_game_state(screen)
                 if state == "stuck" or self.game_state_detector.is_stuck():
                     # Use unstuck actions to try to recover
-                    from trainer.game_state_detection import get_unstuck_action
+                    from environments.game_state_detection import get_unstuck_action
                     return get_unstuck_action(step, self.game_state_detector.stuck_counter)
                 
                 # Handle specific states
