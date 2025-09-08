@@ -7,9 +7,13 @@ for the Pokemon Crystal RL agent.
 
 # Import from new training package
 from training.trainer import TrainingMode, TrainingConfig, LLMBackend, PyBoy, PYBOY_AVAILABLE, PokemonTrainer
-from training.unified_trainer import UnifiedTrainer
-from training.llm_pokemon_trainer import LLMTrainer
-from training.strategies import TrainingStrategy, CurriculumStrategy
+from training.unified_pokemon_trainer import UnifiedPokemonTrainer
+# Backward compatibility alias
+UnifiedTrainer = UnifiedPokemonTrainer
+# from training.llm_pokemon_trainer import LLMTrainer  # Archived
+from training.unified_pokemon_trainer import create_llm_trainer
+LLMTrainer = create_llm_trainer  # Backward compatibility factory
+from training.config.training_strategies import TrainingStrategy, CurriculumStrategy
 
 # Import from environments package  
 from environments.game_state_detection import GameStateDetector
@@ -24,7 +28,8 @@ from core.choice_recognition import ChoiceRecognitionSystem, ChoiceType, ChoiceP
 __all__ = [
     'TrainingMode',
     'TrainingConfig',
-    'UnifiedTrainer',
+    'UnifiedPokemonTrainer',
+    'UnifiedTrainer',  # Backward compatibility alias
     'LLMTrainer',
     # 'LegacyLLMPokemonTrainer',  # Disabled due to missing dependencies
     'DialogueStateMachine',

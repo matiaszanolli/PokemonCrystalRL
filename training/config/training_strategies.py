@@ -82,12 +82,8 @@ def handle_title_screen(step: int) -> int:
     return 0  # No-op other times
 
 
-class TrainingMode(Enum):
-    """Available training modes"""
-    FAST = "fast"          # Fast training without LLM
-    LLM = "llm"           # LLM-powered training
-    CURRICULUM = "curriculum"  # Progressive difficulty
-    CUSTOM = "custom"     # Custom strategy
+# Import centralized TrainingMode
+from .training_modes import TrainingMode
 
 
 class TrainingStrategy(ABC):

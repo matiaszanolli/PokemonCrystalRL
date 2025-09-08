@@ -51,22 +51,8 @@ except ImportError:
     WebMonitor = None
 
 
-class TrainingMode(Enum):
-    """Training mode options."""
-    FAST_MONITORED = "fast_monitored"
-    ULTRA_FAST = "ultra_fast"
-    CURRICULUM = "curriculum"
-    LLM_HYBRID = "llm_hybrid"
-    RULE_BASED = "rule_based"
-
-
-class LLMBackend(Enum):
-    """LLM backend options."""
-    NONE = None
-    SMOLLM2 = "smollm2:1.7b"
-    LLAMA32_1B = "llama3.2:1b"
-    LLAMA32_3B = "llama3.2:3b"
-    QWEN25_3B = "qwen2.5:3b"
+# Import centralized enums
+from .config.training_modes import TrainingMode, LLMBackend
 
 
 @dataclass

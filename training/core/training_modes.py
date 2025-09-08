@@ -4,7 +4,7 @@ Training mode implementations for Pokemon Crystal RL.
 
 import logging
 from typing import Any, Dict, Optional
-from ..config import TrainingMode
+from ..config.training_modes import TrainingMode
 
 
 class TrainingModeManager:

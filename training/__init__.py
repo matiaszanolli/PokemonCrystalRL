@@ -8,11 +8,15 @@ This package contains all training orchestration components including:
 - Training loop controllers
 """
 
-from .strategies import TrainingStrategy
-from .modes import TrainingMode
+from .config.training_strategies import TrainingStrategy
+from .config.training_modes import TrainingMode
 from .trainer import PokemonTrainer, TrainingConfig, TrainingMode as TrainerTrainingMode, LLMBackend
-from .unified_trainer import UnifiedTrainer
-from .llm_pokemon_trainer import LLMTrainer
+from .unified_pokemon_trainer import UnifiedPokemonTrainer
+# Backward compatibility alias
+UnifiedTrainer = UnifiedPokemonTrainer
+# from .llm_pokemon_trainer import LLMTrainer  # Archived - use UnifiedPokemonTrainer instead
+from .unified_pokemon_trainer import create_llm_trainer
+LLMTrainer = create_llm_trainer  # Backward compatibility factory
 # AdvancedHybridTrainer removed - experimental/unused
 
 __all__ = [
@@ -22,7 +26,8 @@ __all__ = [
     'TrainingConfig',
     'TrainerTrainingMode',
     'LLMBackend',
-    'UnifiedTrainer',
+    'UnifiedPokemonTrainer',
+    'UnifiedTrainer',  # Backward compatibility alias
     'LLMTrainer',
 # 'AdvancedHybridTrainer'  # Removed - experimental
 ]

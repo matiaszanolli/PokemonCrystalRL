@@ -7,19 +7,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-class TrainingMode(Enum):
-    FAST_MONITORED = "fast_monitored"
-    ULTRA_FAST = "ultra_fast"
-    CURRICULUM = "curriculum"
-    CUSTOM = "custom"
-
-
-class LLMBackend(Enum):
-    NONE = None
-    SMOLLM2 = "smollm2:1.7b"
-    LLAMA32_1B = "llama3.2:1b"
-    LLAMA32_3B = "llama3.2:3b"
-    QWEN25_3B = "qwen2.5:3b"
+# Import centralized enums
+from .training_modes import TrainingMode, LLMBackend
 
 
 @dataclass

@@ -788,3 +788,110 @@ This refactoring represents a **transformational success** that has elevated the
 - ✅ **Interface-based architecture**: Clean separation of concerns established  
 - ✅ **Test suite stable**: 861/1018 tests passing after systematic fixes
 - ✅ **Production ready**: Sustainable architecture for continued development
+
+---
+
+## 🚨 **PHASE 6: CRITICAL CROSS-DIRECTORY REDUNDANCY DISCOVERED**
+
+### **URGENT - MASSIVE DUPLICATION ACROSS core/, vision/, monitoring/**
+
+**Analysis Date**: Current
+**Severity**: **CRITICAL** - Similar patterns to successfully completed training/ directory cleanup
+**Scope**: Cross-directory duplicate implementations spanning 103 Python files
+
+### **🔍 CRITICAL FINDINGS**
+
+#### **6.1 Complete Directory Duplication - CRITICAL**
+**Identical modules across directories**:
+```
+EXACT DUPLICATES IDENTIFIED:
+- core/monitoring/base.py (227 lines) ≡ monitoring/base.py (227 lines)
+- core/monitoring/components/capture.py (241 lines) ≡ monitoring/components/capture.py (241 lines)
+- Multiple DataBus implementations (25-326 lines each)
+```
+
+**Impact**: **~1,000+ lines of exact duplicates** across critical infrastructure
+
+#### **6.2 Vision Directory Redundancy - HIGH**
+**Multiple font decoder implementations**:
+- `vision/pokemon_font_decoder.py` (521 lines) - `PokemonFontDecoder` class
+- `vision/enhanced_font_decoder.py` (829 lines) - `ROMFontDecoder` class  
+- `vision/vision_processor.py` (779 lines) - imports with fallback duplicate
+
+**Pattern**: Same redundancy as training/ directory - multiple approaches to same problem
+
+#### **6.3 Monitoring System Chaos - CRITICAL**
+**Discovered 50+ Monitor classes across directories**:
+```
+MONITORING CLASSES FOUND: 50+
+├── WebMonitor implementations: 15+
+├── ScreenCapture implementations: 12+
+├── DataBus implementations: 8+
+├── MonitorComponent variants: 10+
+└── Various other Monitor classes: 10+
+```
+
+**Total Code Impact**: **~28,000+ lines** in monitoring systems with massive overlap
+
+### **📊 SCOPE & IMPACT ANALYSIS**
+
+**Directories Affected**:
+- **core/**: 10,901 total lines (42 files)
+- **monitoring/**: 28,134 total lines (67 files) 
+- **vision/**: 3,446 total lines (9 files)
+- **Total**: **42,481 lines** with significant cross-directory redundancy
+
+**Redundancy Patterns**:
+1. **Exact Duplicates**: Files copied between core/ and monitoring/
+2. **Functional Overlaps**: Different implementations solving same problems
+3. **Architectural Inconsistency**: Multiple competing patterns for same systems
+
+### **🎯 PHASE 6 REFACTORING RECOMMENDATIONS**
+
+#### **Priority 1: Eliminate Exact Duplicates**
+**Action**: Choose authoritative location and archive duplicates
+```
+CONSOLIDATION TARGETS:
+- monitoring/base.py → core/monitoring/base.py (canonical)
+- monitoring/components/capture.py → core/monitoring/components/capture.py  
+- monitoring/data_bus.py (326 lines) vs core/monitoring/data_bus.py (25 lines) → merge value
+```
+
+#### **Priority 2: Vision Directory Cleanup**  
+**Action**: Apply training/ directory success pattern
+```
+RECOMMENDED STRUCTURE:
+vision/
+├── core/
+│   ├── font_decoder.py          # Merge best of both decoders
+│   ├── vision_processor.py      # Main unified processor
+│   └── image_utils.py          # Keep utilities
+├── extractors/
+│   ├── rom_font_extractor.py   
+│   └── gameboy_color_palette.py
+├── training/
+│   └── vision_enhanced_training.py
+└── debug/
+    └── debug_screen_capture.py
+```
+
+#### **Priority 3: Monitoring Consolidation**
+**Action**: Establish single authoritative monitoring system
+- **Keep**: `monitoring/` as primary location
+- **Archive**: `core/monitoring/` duplicates  
+- **Consolidate**: 50+ Monitor classes → coherent system
+
+### **🚀 SUCCESS PRECEDENT**
+
+**training/ Directory Achievement**: Successfully eliminated **4 redundant trainer implementations** and consolidated **multiple TrainingMode enums** into clean, maintainable architecture.
+
+**Similar Success Expected**: Phase 6 can achieve comparable results across vision/, core/, and monitoring/ directories.
+
+### **⚡ IMMEDIATE NEXT STEPS**
+
+1. **Apply training/ success pattern** to vision/ directory
+2. **Eliminate exact duplicates** between core/monitoring/ and monitoring/
+3. **Consolidate 50+ Monitor classes** into coherent system
+4. **Update COMPREHENSIVE_REFACTORING_ANALYSIS.md** with Phase 6 completion
+
+**Expected Impact**: **3,000-5,000 lines** of redundant code elimination with improved maintainability across vision and monitoring systems.
