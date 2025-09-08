@@ -684,9 +684,9 @@ class UnifiedVisionProcessor:
             return self._simple_text_detection(region)
 
 
-# Import ROMFontDecoder from enhanced_font_decoder.py
+# Import ROMFontDecoder from reorganized font_decoder.py
 try:
-    from .enhanced_font_decoder import ROMFontDecoder
+    from .font_decoder import ROMFontDecoder
 except ImportError:
     # Fallback for testing - create a minimal ROMFontDecoder class
     class ROMFontDecoder:

@@ -14,9 +14,9 @@ import json
 import hashlib
 from collections import OrderedDict
 
-from .rom_font_extractor import PokemonCrystalFontExtractor
+from ..extractors.rom_font_extractor import PokemonCrystalFontExtractor
 try:
-    from .gameboy_color_palette import GameBoyColorPalette
+    from ..extractors.gameboy_color_palette import GameBoyColorPalette
     GBC_PALETTE_AVAILABLE = True
 except ImportError:
     GBC_PALETTE_AVAILABLE = False
