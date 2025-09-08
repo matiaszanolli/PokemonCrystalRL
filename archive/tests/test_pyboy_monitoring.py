@@ -6,7 +6,12 @@ Test PyBoy environment with monitoring integration
 import time
 import subprocess
 import sys
-from pyboy_env import PyBoyPokemonCrystalEnv
+import os
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
 
 def test_pyboy_monitoring():
     """Test PyBoy environment with monitoring"""

@@ -5,9 +5,10 @@ test_memory_fix.py - Quick test to verify money reading works correctly
 
 import os
 import sys
-sys.path.append('.')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
 
-from pyboy_env import PyBoyPokemonCrystalEnv
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
 
 def test_money_reading():
     """Test if money reading is working correctly"""

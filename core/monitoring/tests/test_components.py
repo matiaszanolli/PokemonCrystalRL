@@ -13,14 +13,20 @@ import numpy as np
 import pytest
 from unittest.mock import Mock, MagicMock
 
-from ..base import (
+import os
+import sys
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from core.monitoring.base import (
     MetricDefinition,
     ScreenCaptureConfig,
     ComponentError
 )
-from ..components.capture import ScreenCapture
-from ..components.metrics import MetricsCollector
-from ..components.web import WebServer
+from monitoring.components.capture import ScreenCapture
+from monitoring.components.metrics import MetricsCollector
+from monitoring.components.web import WebServer
 
 # Test Utilities
 

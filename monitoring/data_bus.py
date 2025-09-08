@@ -53,8 +53,18 @@ class DataBus:
         self._queues = {}
         self._active = True
         self._running = True  # Alias for test compatibility
-        self._logger = logging.getLogger("data_bus")
-        self._logger.debug("DataBus initialized")
+        # Set up logging
+        self.logger = logging.getLogger("data_bus")
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        if not self.logger.handlers:
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.ERROR)  # Only show errors by default
+        self.logger.debug("DataBus initialized")
         
     def register_component(self, component_id: str, metadata: Dict[str, Any]) -> None:
         """Register a component with the data bus.
@@ -150,8 +160,17 @@ class DataBus:
         for subscription in self._subscribers[data_type]:
             try:
                 if subscription['callback']:
-                    # Tests expect callback(data) signature
-                    subscription['callback'](data)
+                    try:
+                        # Use queue to handle callback in separate thread
+                        tmp_queue = queue.Queue()
+                        tmp_queue.put({
+                            'data': data,
+                            'publisher': publisher_id,
+                            'timestamp': time.time()
+                        })
+                        subscription['callback'](tmp_queue.get())
+                    except Exception as e:
+                        self.logger.error(f"Callback error: {e}")
                 elif subscription['queue']:
                     try:
                         subscription['queue'].put_nowait({
@@ -189,6 +208,12 @@ class DataBus:
                 for component_id, info in self._components.items()
             }
             
+    def update_component_heartbeat(self, component_id: str) -> None:
+        """Update the last seen time for a component."""
+        with self._lock:
+            if component_id in self._components:
+                self._components[component_id]['last_seen'] = time.time()
+    
     def shutdown(self) -> None:
         """Shutdown the data bus."""
         self._logger.debug("Starting data bus instance shutdown...")

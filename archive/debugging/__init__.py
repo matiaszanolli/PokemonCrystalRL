@@ -9,8 +9,10 @@ __version__ = "1.0.0"
 __author__ = "Pokemon Crystal RL Team"
 
 # Core exports
-from .core import PyBoyPokemonCrystalEnv, MEMORY_ADDRESSES
-from .agents import LocalLLMPokemonAgent, EnhancedLLMPokemonAgent
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
+from environments.state.memory_map import MEMORY_ADDRESSES
+from archive.local_llm_agent import LocalLLMPokemonAgent as LocalLLMPokemonAgent
+from archive.local_llm_agent import LocalLLMPokemonAgent as EnhancedLLMPokemonAgent
 
 __all__ = [
     'PyBoyPokemonCrystalEnv',

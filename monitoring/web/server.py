@@ -274,6 +274,9 @@ class MonitoringServer(MonitorComponent):
         @self.app.route(f"{prefix}/training/toggle", methods=['POST'])
         def api_toggle_training():
             """Toggle training state."""
+            if not self.data_bus:
+                return jsonify({'error': 'Data bus not initialized'}), 500
+            
             try:
                 # Publish toggle command to data bus
                 self.data_bus.publish('training.command', {'action': 'toggle'})
@@ -284,6 +287,9 @@ class MonitoringServer(MonitorComponent):
         @self.app.route(f"{prefix}/environment/reset", methods=['POST'])
         def api_reset_environment():
             """Reset the game environment."""
+            if not self.data_bus:
+                return jsonify({'error': 'Data bus not initialized'}), 500
+            
             try:
                 # Publish reset command to data bus
                 self.data_bus.publish('environment.command', {'action': 'reset'})
@@ -294,11 +300,17 @@ class MonitoringServer(MonitorComponent):
         @self.app.route(f"{prefix}/metrics")
         def api_metrics():
             """Get current metrics."""
-            metrics = self.metrics_service.get_metrics(
-                names=request.args.getlist("metrics"),
-                since=request.args.get("since", type=float)
-            )
-            return jsonify(metrics)
+            if not self.metrics_service:
+                return jsonify({'error': 'Metrics service not initialized'}), 500
+                
+            try:
+                metrics = self.metrics_service.get_metrics(
+                    names=request.args.getlist("metrics"),
+                    since=request.args.get("since", type=float)
+                )
+                return jsonify(metrics)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
             
         @self.app.route(f"{prefix}/training/stats")
         def api_training_stats():
@@ -333,13 +345,17 @@ class MonitoringServer(MonitorComponent):
     def _run_server(self) -> None:
         """Run the web server."""
         try:
+            # Run server with greater concurrency in testing
             self.socketio.run(
                 self.app,
                 host=self.config.host,
                 port=self.config.port,
                 debug=self.config.debug,
                 use_reloader=False,
-                allow_unsafe_werkzeug=True  # Allow Werkzeug server in test environment
+                allow_unsafe_werkzeug=True,  # Allow Werkzeug server in test environment
+                log_output=False,            # Silence logs in testing
+                max_size=5,                  # Allow up to 5 workers
+                num_threads=3                # Use 3 worker threads
             )
         except Exception as e:
             self.logger.error(f"Server error: {e}")

@@ -1,12 +1,17 @@
 """Tests for frame processing service."""
 
 import pytest
+import os
+import sys
 import numpy as np
 from unittest.mock import Mock, patch
 from flask_socketio import SocketIO
 
-from .frame import FrameService, FrameConfig
-from ..components.capture import ScreenCapture
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from monitoring.web.services.frame import FrameService, FrameConfig
+from monitoring.components.capture import ScreenCapture
 
 
 @pytest.fixture

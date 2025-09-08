@@ -13,7 +13,7 @@ from datetime import datetime
 import ollama
 import numpy as np
 
-from pyboy_env import PyBoyPokemonCrystalEnv
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
 
 
 class LocalLLMPokemonAgent:

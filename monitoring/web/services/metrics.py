@@ -129,6 +129,11 @@ class MetricsService:
             'network_bytes_sec': MetricHistory()
         })
     
+    @property
+    def metrics_collector(self) -> Optional[MetricsCollector]:
+        """Get metrics collector component."""
+        return self._collector
+    
     def set_metrics_collector(self, collector: MetricsCollector) -> None:
         """Set metrics collector component.
         
@@ -258,27 +263,29 @@ class MetricsService:
         """
         with self._lock:
             # Get all current metrics
-            metrics = self._metrics.copy()
+            metrics = {}
+            
+            # Add current values
+            if names:
+                metrics.update({k: self._metrics[k] for k in names if k in self._metrics})
+            else:
+                metrics.update(self._metrics)
             
             # Always include history data
             for name, history in self._history.items():
-                if names is None or name in names:
-                    metrics[f"{name}_history"] = [
-                        {
-                            'timestamp': ts,
-                            'value': val
-                        }
-                        for ts, val in zip(history.timestamps, history.values)
-                    ]
+                # Add base metric if not already present
+                if history.values and (not names or name in names):
+                    metrics[name] = history.values[-1]
+                    
+                    # Add history data
                     if since is not None:
+                        metrics[f"{name}_history"] = history.get_since(since)
+                    else:
                         metrics[f"{name}_history"] = [
-                            item for item in metrics[f"{name}_history"]
-                            if item['timestamp'] >= since
+                            {'timestamp': ts, 'value': val}
+                            for ts, val in zip(history.timestamps, history.values)
                         ]
             
-            # Filter by names if specified
-            if names:
-                return {k: v for k, v in metrics.items() if k in names}
             return metrics
     
     def get_chart_data(self) -> Dict[str, Any]:

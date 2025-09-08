@@ -5,8 +5,14 @@ This script tests different methods to capture screen data from PyBoy
 to determine the correct API for the current PyBoy version.
 """
 
+import os
+import sys
 import numpy as np
-from pyboy_env import PyBoyPokemonCrystalEnv
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from environments.pyboy_env import PyBoyPokemonCrystalEnv
 
 def test_pyboy_screen_methods():
     """Test PyBoy screen capture methods"""

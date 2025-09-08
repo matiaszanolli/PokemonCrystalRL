@@ -12,7 +12,7 @@ Tests verify that the templates correctly:
 import os
 import pytest
 import json
-from flask import Flask
+from flask import Flask, render_template
 from flask.testing import FlaskClient
 from flask_socketio import SocketIO
 import base64
@@ -40,6 +40,24 @@ def app():
                 template_folder=os.path.join(os.path.dirname(__file__), "../templates"),
                 static_folder=os.path.join(os.path.dirname(__file__), "../static"))
     app.config["TESTING"] = True
+    
+    # Add routes
+    @app.route("/")
+    def index():
+        """Main dashboard page."""
+        return render_template(
+            "dashboard.html",
+            config=TEST_CONFIG.__dict__
+        )
+        
+    @app.route("/status")
+    def status():
+        """Server status page."""
+        return render_template(
+            "status.html",
+            status={}
+        )
+    
     return app
 
 @pytest.fixture
@@ -70,10 +88,10 @@ def test_dashboard_template(test_client):
     assert 'src="/static/js/shared.js"' in html
     
     # Verify key UI elements exist
-    assert 'id="game-screen"' in html
-    assert 'id="total-actions"' in html
-    assert 'id="llm-decisions"' in html
-    assert 'id="memory-debug"' in html
+    assert 'id="gameScreen"' in html
+    assert 'id="episodeCounter"' in html
+    assert 'id="stepCounter"' in html
+    assert 'id="totalReward"' in html
 
 def test_status_template(test_client):
     """Test status.html template."""

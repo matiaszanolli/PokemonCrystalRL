@@ -50,13 +50,7 @@ class FrameService:
         
         # Component references
         self._screen_capture: Optional[ScreenCapture] = None
-        
-    @property
-    def screen_capture(self) -> Optional[ScreenCapture]:
-        """Get screen capture component."""
-        return self._screen_capture
-        
-        
+
         # Frame buffer
         self._frame_queue = Queue(maxsize=self.config.buffer_size)
         
@@ -74,6 +68,11 @@ class FrameService:
         
         # Logging
         self.logger = logging.getLogger(__name__)
+    
+    @property
+    def screen_capture(self) -> Optional[ScreenCapture]:
+        """Get screen capture component."""
+        return self._screen_capture
     
     def set_screen_capture(self, capture: ScreenCapture) -> None:
         """Set screen capture component.

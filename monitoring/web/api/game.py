@@ -51,10 +51,13 @@ class GameAPI:
         
         # Get memory state
         if hasattr(self.trainer, 'memory_reader') and self.trainer.memory_reader is not None:
-            memory_state = self.trainer.memory_reader.read_game_state()
-            # Add debug info
-            memory_state['debug_info'] = self.trainer.memory_reader.get_debug_info()
-            return memory_state
+            try:
+                memory_state = self.trainer.memory_reader.read_game_state()
+                # Add debug info
+                memory_state['debug_info'] = self.trainer.memory_reader.get_debug_info()
+                return memory_state
+            except Exception as e:
+                return self._make_error_response(f'Failed to read memory: {e}')
         
         return self._make_error_response('Memory reader initialization failed')
     

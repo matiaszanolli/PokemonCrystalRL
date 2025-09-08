@@ -1,12 +1,17 @@
 """Tests for metrics processing service."""
 
 import pytest
+import os
+import sys
 import time
 from unittest.mock import Mock
 from typing import Dict, Any
 
-from .metrics import MetricsService, MetricsConfig, MetricHistory
-from ..components.metrics import MetricsCollector
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from monitoring.web.services.metrics import MetricsService, MetricsConfig, MetricHistory
+from monitoring.components.metrics import MetricsCollector
 
 
 @pytest.fixture

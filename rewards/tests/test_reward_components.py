@@ -7,21 +7,26 @@ testing both individual components and their integration in the calculator.
 
 from typing import Dict
 
+import os
+import sys
 import pytest
 
-from ..component import RewardComponent
-from ..components.interaction import (
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from rewards.component import RewardComponent
+from rewards.components.interaction import (
     BattleRewardComponent,
     DialogueRewardComponent,
     MoneyRewardComponent,
     ProgressionRewardComponent
 )
-from ..components.movement import (
+from rewards.components.movement import (
     BlockedMovementComponent,
     ExplorationRewardComponent,
     MovementRewardComponent,
 )
-from ..components.progress import (
+from rewards.components.progress import (
     BadgeRewardComponent,
     HealthRewardComponent,
     LevelRewardComponent,

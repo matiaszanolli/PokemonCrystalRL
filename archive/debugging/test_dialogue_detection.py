@@ -14,11 +14,26 @@ from collections import Counter
 from typing import Dict, List, Tuple
 
 # Add paths for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
 
-from trainer.trainer import UnifiedPokemonTrainer
-from trainer.config import TrainingConfig, TrainingMode
-from trainer.game_state import GameStateDetector
+from training.unified_trainer import UnifiedTrainer
+from training.modes import TrainingMode
+from environments.game_state_detection import GameStateDetector
+
+# For backward compatibility
+UnifiedPokemonTrainer = UnifiedTrainer
+
+# Config for tests
+class TrainingConfig:
+    def __init__(self, mode, rom_path, max_actions, frames_per_action, headless=False, debug_mode=False, log_level="INFO"):
+        self.mode = mode
+        self.rom_path = rom_path
+        self.max_actions = max_actions
+        self.frames_per_action = frames_per_action
+        self.headless = headless
+        self.debug_mode = debug_mode
+        self.log_level = log_level
 
 def create_test_screenshots() -> Dict[str, np.ndarray]:
     """Create synthetic test screenshots for different game states"""

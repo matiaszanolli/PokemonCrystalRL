@@ -7,10 +7,15 @@ together correctly and the calculator properly implements the interface.
 
 from typing import Dict
 
+import os
+import sys
 import pytest
 
-from ..calculator import PokemonRewardCalculator
-from ..interface import RewardCalculatorInterface
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from rewards.calculator import PokemonRewardCalculator
+from rewards.interface import RewardCalculatorInterface
 
 @pytest.fixture
 def calculator():

@@ -9,8 +9,13 @@ import pytest
 from unittest.mock import Mock, call
 import threading
 import time
+import os
+import sys
 
-from ..data.bus import DataBus, DataValidator, DataBusError
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from core.monitoring.data.bus import DataBus, DataValidator, DataBusError
 
 # Fixtures
 
