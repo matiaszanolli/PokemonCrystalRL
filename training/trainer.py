@@ -328,6 +328,42 @@ class PokemonTrainer:
             'actions_per_second': 0,
         }
 
+    def train(self, total_episodes=None, max_steps_per_episode=None, save_interval=None, eval_interval=None, **kwargs):
+        """
+        Train method for integration tests and external APIs.
+        
+        Args:
+            total_episodes: Number of episodes to train (optional)
+            max_steps_per_episode: Max steps per episode (optional) 
+            save_interval: Interval for saving checkpoints (optional)
+            eval_interval: Interval for evaluation (optional)
+            **kwargs: Additional training parameters
+            
+        Returns:
+            Training summary dict
+        """
+        # Store original config values
+        original_mode = getattr(self.config, 'mode', None)
+        
+        # Update config based on parameters if provided
+        if total_episodes:
+            self.config.total_episodes = total_episodes
+        if max_steps_per_episode:
+            self.config.max_steps_per_episode = max_steps_per_episode
+        if save_interval:
+            self.config.save_interval = save_interval
+        if eval_interval:
+            self.config.eval_interval = eval_interval
+            
+        # Use existing training infrastructure
+        try:
+            self.start_training()
+            return self.get_current_stats()
+        finally:
+            # Restore original config if needed
+            if original_mode:
+                self.config.mode = original_mode
+
     def start_training(self):
         """Start the training process."""
         if not self._is_pyboy_alive():

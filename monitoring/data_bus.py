@@ -54,17 +54,17 @@ class DataBus:
         self._active = True
         self._running = True  # Alias for test compatibility
         # Set up logging
-        self.logger = logging.getLogger("data_bus")
+        self._logger = logging.getLogger("data_bus")
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
             '%(asctime)s [%(name)s] %(levelname)s: %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         handler.setFormatter(formatter)
-        if not self.logger.handlers:
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.ERROR)  # Only show errors by default
-        self.logger.debug("DataBus initialized")
+        if not self._logger.handlers:
+            self._logger.addHandler(handler)
+            self._logger.setLevel(logging.ERROR)  # Only show errors by default
+        self._logger.debug("DataBus initialized")
         
     def register_component(self, component_id: str, metadata: Dict[str, Any]) -> None:
         """Register a component with the data bus.

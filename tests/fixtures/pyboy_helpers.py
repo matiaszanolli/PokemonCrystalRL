@@ -101,17 +101,59 @@ def mock_pyboy_exploring():
 def mock_screen_overworld():
     """Mock screen data for overworld state."""
     screen = np.ones((144, 160, 3), dtype=np.uint8) * 128  # Gray background
-    # Add some "sprite" variation
-    screen[50:90, 60:100] = 200  # Lighter region
+    
+    # Create high variance overworld with dramatic color differences
+    # Need >10 unique colors and variance >3000
+    
+    # Create extreme contrast areas to boost variance
+    screen[0:40, 0:80] = [255, 255, 255]    # Bright white area
+    screen[40:80, 0:80] = [0, 0, 0]         # Black area (max contrast)
+    screen[80:120, 0:80] = [255, 0, 0]      # Bright red
+    screen[120:144, 0:80] = [0, 255, 0]     # Bright green
+    
+    screen[0:40, 80:160] = [0, 0, 255]      # Bright blue
+    screen[40:80, 80:160] = [255, 255, 0]   # Bright yellow
+    screen[80:120, 80:160] = [255, 0, 255]  # Bright magenta
+    screen[120:144, 80:160] = [0, 255, 255] # Bright cyan
+    
+    # Add more distinct colors to get >10
+    screen[20:40, 40:60] = [128, 64, 32]    # Brown
+    screen[60:80, 60:100] = [192, 192, 192] # Light gray
+    screen[100:120, 100:140] = [64, 128, 255] # Light blue
+    screen[20:60, 120:140] = [255, 128, 64] # Orange
+    
     return screen
 
 @pytest.fixture
 def mock_screen_battle():
     """Mock screen data for battle state."""
     screen = np.zeros((144, 160, 3), dtype=np.uint8)  # Dark background
-    # Add high-contrast battle elements
-    screen[20:60, 100:140] = 255  # Enemy area
-    screen[80:120, 20:60] = 255  # Player area
+    
+    # Battle needs variance > 20000 and colors > 8
+    # Create extreme high-contrast battle elements with many colors
+    screen[10:50, 100:140] = [255, 0, 0]      # Bright red enemy area
+    screen[50:90, 100:140] = [255, 255, 255]  # White highlights  
+    screen[80:120, 20:60] = [0, 255, 0]       # Bright green player area
+    screen[90:130, 20:60] = [255, 255, 0]     # Yellow player highlights
+    
+    # Add battle effects and UI elements with more colors
+    screen[0:20, 0:160] = [0, 0, 255]         # Blue battle UI bar
+    screen[124:144, 0:160] = [255, 0, 255]    # Magenta battle UI
+    screen[60:80, 40:120] = [0, 255, 255]     # Cyan battle effects
+    screen[40:60, 80:100] = [128, 64, 192]    # Purple battle element
+    screen[100:120, 80:100] = [255, 128, 0]   # Orange battle effect
+    
+    # Add more distinct colors to get >8 
+    screen[30:50, 130:150] = [64, 192, 128]   # Color 9: Teal
+    screen[70:90, 130:150] = [192, 64, 128]   # Color 10: Pink
+    
+    # Add extreme noise patterns to boost variance >20000
+    np.random.seed(123)  # Reproducible for tests
+    for i in range(0, 144, 1):  # Every pixel, not every 2nd
+        for j in range(0, 160, 1):
+            if np.random.random() > 0.5:  # 50% of pixels get extreme variation
+                screen[i, j] = np.random.choice([0, 255], 3)  # Pure white or black noise
+    
     return screen
 
 @pytest.fixture

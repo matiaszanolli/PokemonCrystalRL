@@ -14,18 +14,27 @@ from .base import MonitoringConfig
 
 # Re-export old names with new implementations
 DatabaseManager = None  # To be implemented in Phase 4.2
-UnifiedMonitor = None  # To be implemented in Phase 4.2
+try:
+    from .unified_monitor import UnifiedMonitor
+except ImportError:
+    UnifiedMonitor = None  # Fallback if not available
 GameStreamer = None  # Now part of ScreenCapture
 MonitoringClient = None  # Now part of MetricsCollector
 StatsCollector = None  # Now part of MetricsCollector
 TextLogger = None  # To be implemented in Phase 4.2
-TrainerMonitorBridge = None  # To be implemented in Phase 4.2
+try:
+    from .trainer_monitor_bridge import TrainerMonitorBridge
+except ImportError:
+    TrainerMonitorBridge = None  # Fallback if not available
 WebInterface = WebServer  # Now implemented as WebServer
-ErrorHandler = None  # To be implemented in Phase 4.2
-ErrorSeverity = None  # To be implemented in Phase 4.2
-ErrorCategory = None  # To be implemented in Phase 4.2
-RecoveryStrategy = None  # To be implemented in Phase 4.2
-ErrorEvent = None  # To be implemented in Phase 4.2
+try:
+    from .error_handler import ErrorHandler, ErrorSeverity, ErrorCategory, RecoveryStrategy, ErrorEvent
+except ImportError:
+    ErrorHandler = None
+    ErrorSeverity = None
+    ErrorCategory = None
+    RecoveryStrategy = None
+    ErrorEvent = None
 
 # Compatibility warning
 import warnings

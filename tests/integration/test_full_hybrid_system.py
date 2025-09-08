@@ -96,10 +96,21 @@ class TestFullHybridSystem(unittest.TestCase):
             action_space_size=8
         )
         
-        # Initialize trainer
+        # Initialize trainer with mocked PyBoy
         from training.trainer import TrainingConfig
         training_config = TrainingConfig()
-        self.trainer = PokemonTrainer(training_config)
+        
+        # Mock PyBoy setup to avoid initialization
+        with patch.object(PokemonTrainer, 'setup_pyboy'):
+            self.trainer = PokemonTrainer(training_config)
+        
+        # Add required pyboy attribute and mock PyBoy alive check
+        self.trainer.pyboy = Mock()
+        self.trainer.pyboy.screen = Mock()
+        self.trainer.pyboy.screen.ndarray = np.zeros((144, 160, 3), dtype=np.uint8)
+        
+        # Mock the _is_pyboy_alive method to always return True
+        self.trainer._is_pyboy_alive = Mock(return_value=True)
     
     def tearDown(self):
         """Clean up test resources."""
