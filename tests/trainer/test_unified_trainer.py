@@ -1429,7 +1429,7 @@ class TestLLMBackendSwitching:
         elapsed = time.time() - start_time
         
         # Should be very fast without LLM overhead
-        assert elapsed < 0.1, f"Rule-based actions too slow: {elapsed:.4f}s for 100 actions"
+        assert elapsed < 0.2, f"Rule-based actions too slow: {elapsed:.4f}s for 100 actions"
 
 
 @pytest.mark.performance

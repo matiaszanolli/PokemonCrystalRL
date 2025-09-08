@@ -214,7 +214,7 @@ def test_calculate_exploration_reward_new_map():
     )
     previous = create_game_state(
         player_map=26,  # New Bark Town
-        player_x=15,
+        player_x=8,  # Coordinate delta now = |5-8| + |5-5| = 3 ≤ 8
         player_y=5
     )
     
@@ -251,8 +251,9 @@ def test_calculate_blocked_movement_penalty():
     )
     assert penalty == -0.005
     
-    # Repeated blocked attempts
-    for _ in range(4):
+    # Repeated blocked attempts - need 20 attempts to reach max penalty of -0.1
+    # since base penalty is -0.005 and escalation is linear: -0.005 * 20 = -0.1
+    for _ in range(19):  # 19 more attempts (total 20)
         penalty = calculate_blocked_movement_penalty(
             current, previous,
             last_action='up',

@@ -792,7 +792,7 @@ class TestErrorHandling(unittest.TestCase):
         with patch('vision.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
-    @patch('vision.vision_processor.UnifiedVisionProcessor._upscale_screenshot')
+    @patch('vision.vision_processor.upscale_screenshot')
     def test_upscaling_error_handling(self, mock_upscale):
         """Test error handling in upscaling"""
         mock_upscale.side_effect = Exception("Mock upscaling error")

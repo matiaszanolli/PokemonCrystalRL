@@ -36,14 +36,15 @@ class TrainingAPI:
     
     # Action name mapping
     ACTION_NAMES = {
-        0: "RIGHT",
-        1: "LEFT",
-        2: "UP",
-        3: "DOWN",
-        4: "A",
-        5: "B",
-        6: "SELECT",
-        7: "START"
+        0: "NONE",       # No action/invalid
+        1: "UP",        # D-pad UP
+        2: "DOWN",      # D-pad DOWN
+        3: "LEFT",      # D-pad LEFT
+        4: "RIGHT",     # D-pad RIGHT
+        5: "A",         # A button
+        6: "B",         # B button
+        7: "START",     # START button
+        8: "SELECT"     # SELECT button
     }
     
     def __init__(self, trainer=None):

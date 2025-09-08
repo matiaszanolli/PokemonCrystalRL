@@ -161,16 +161,14 @@ class DataBus:
             try:
                 if subscription['callback']:
                     try:
-                        # Use queue to handle callback in separate thread
-                        tmp_queue = queue.Queue()
-                        tmp_queue.put({
-                            'data': data,
-                            'publisher': publisher_id,
-                            'timestamp': time.time()
-                        })
-                        subscription['callback'](tmp_queue.get())
+                        # Always pass data as first argument
+                        if 'data' in data:
+                            callback_data = data['data']
+                        else:
+                            callback_data = data
+                        subscription['callback'](callback_data)
                     except Exception as e:
-                        self.logger.error(f"Callback error: {e}")
+                        self._logger.error(f"Callback error: {e}")
                 elif subscription['queue']:
                     try:
                         subscription['queue'].put_nowait({

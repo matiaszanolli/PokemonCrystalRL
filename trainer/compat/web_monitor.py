@@ -40,17 +40,29 @@ class WebMonitorCompat:
         self.port = port
         self.host = host
         
+        # For testing, increment port until we find an available one
+        if getattr(trainer, 'config', None) and getattr(trainer.config, 'test_mode', False):
+            import socket
+            while port < 9000:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.bind((host, port))
+                        break
+                except OSError:
+                    port += 1
+            self.port = port
+        
         # Create base config
         self.config = MonitorConfig(
             host=host,
-            port=port,
+            port=self.port,
             static_dir=os.path.join(os.path.dirname(__file__), "static")
         )
         
         # Initialize server with services
         server_config = WebServerConfig(
             host=host,
-            port=port,
+            port=self.port,
             template_dir="templates",
             static_dir=self.config.static_dir
         )

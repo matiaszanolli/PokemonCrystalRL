@@ -86,7 +86,13 @@ class TestActionPerformanceBenchmarks:
             capture_screens=False
         )
         
-        return PokemonTrainer(config)
+        trainer = PokemonTrainer(config)
+        
+        # Add strategy manager mock for performance testing
+        trainer.strategy_manager = Mock()
+        trainer.strategy_manager.execute_action = Mock(return_value=None)
+        
+        return trainer
     
     def test_target_actions_per_second_benchmark(self, trainer_fast_monitored):
         """Test that system achieves ~2.3 actions/second in fast monitored mode"""
@@ -275,7 +281,10 @@ class TestLLMInferenceBenchmarks:
         config = TrainingConfig(
             rom_path="test.gbc",
             llm_backend=LLMBackend.SMOLLM2,
-            headless=True
+            headless=True,
+            test_mode=True,  # Enable test mode to avoid heavy initialization
+            enable_web=False,  # Force disable web monitoring
+            capture_screens=False  # Force disable screen capture
         )
         
         trainer = PokemonTrainer(config)

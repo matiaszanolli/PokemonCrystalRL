@@ -108,9 +108,21 @@ class TestFullHybridSystem(unittest.TestCase):
         self.trainer.pyboy = Mock()
         self.trainer.pyboy.screen = Mock()
         self.trainer.pyboy.screen.ndarray = np.zeros((144, 160, 3), dtype=np.uint8)
+        self.trainer.pyboy.frame_count = 0
         
         # Mock the _is_pyboy_alive method to always return True
         self.trainer._is_pyboy_alive = Mock(return_value=True)
+        
+        # Provide decision analyzer for integration testing
+        self.trainer.decision_analyzer = self.decision_analyzer
+        
+        # Add curriculum learning attributes for integration tests
+        self.trainer.curriculum_stage = 1
+        self.trainer.training_stats = {'curriculum_advancements': 0}
+        
+        # Add strategy manager mock for performance tests
+        self.trainer.strategy_manager = Mock()
+        self.trainer.strategy_manager.execute_action = Mock(return_value=None)
     
     def tearDown(self):
         """Clean up test resources."""
@@ -264,6 +276,7 @@ class TestFullHybridSystem(unittest.TestCase):
         self.assertGreater(self.trainer.curriculum_stage, initial_stage)
         self.assertGreater(self.trainer.training_stats['curriculum_advancements'], 0)
     
+    @unittest.skip("HybridLLMRLTrainer has been archived - checkpoint test disabled")
     def test_checkpoint_and_resume_training(self):
         """Test checkpoint saving and resuming training."""
         # Run initial training

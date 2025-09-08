@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 import logging
 import json
 from dataclasses import dataclass, asdict
+import gc
+import psutil
 from collections import defaultdict
 import time
 from enum import Enum
@@ -61,6 +63,88 @@ class RecoveryStrategy(Enum):
     RESET = "reset"  # Full system reset
     GRACEFUL_SHUTDOWN = "graceful_shutdown"  # Graceful shutdown
     FALLBACK = "fallback"  # Use fallback mechanism
+
+
+def error_boundary(
+                 max_retries: int = 3, category: ErrorCategory = ErrorCategory.UNKNOWN):
+    """Decorator that creates an error boundary around a function.
+    
+    Args:
+        component: Name of the component being protected
+        severity: Error severity level for failures
+        max_retries: Maximum number of retry attempts
+        category: Category of errors to expect
+    
+    Example:
+        @error_boundary("my_component", severity=ErrorSeverity.HIGH)
+        def my_function():
+            # Function code
+            pass
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            handler = ErrorHandler.get_instance()
+            retries = 0
+            
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    handler.handle_error(
+                        e,
+                        severity=severity,
+                        category=category,
+                        component=component
+                    )
+                    retries += 1
+                    if retries >= max_retries:
+                        raise
+                    time.sleep(0.1 * retries)  # Exponential backoff
+        return wrapper
+    return decorator
+
+
+class SafeOperation:
+    """Context manager for safe operation execution with error handling.
+    
+    Args:
+        component: Component name for error tracking
+        operation: Operation name for error context
+        severity: Error severity level
+        category: Error category
+    
+    Example:
+        with SafeOperation("my_component", "data_processing"):
+            # Protected code
+            process_data()
+    """
+    
+    def __init__(self, component: str, operation: str,
+                 severity: ErrorSeverity = ErrorSeverity.ERROR,
+                 category: ErrorCategory = ErrorCategory.UNKNOWN):
+        self.component = component
+        self.operation = operation
+        self.severity = severity
+        self.category = category
+        self.handler = ErrorHandler.get_instance()
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            # Handle the error but re-raise
+            self.handler.handle_error(
+                exc_value,
+                message=f"Error in {self.operation}",
+                severity=self.severity,
+                category=self.category,
+                component=self.component
+            )
+            return False  # Re-raise the exception
+        return True
+
 
 
 @dataclass
@@ -143,6 +227,17 @@ class ErrorHandler:
     """Centralized error handler for the system."""
 
     _instance = None
+    
+    @classmethod
+    def get_instance(cls) -> 'ErrorHandler':
+        """Get the singleton instance of ErrorHandler.
+        
+        Returns:
+            The singleton ErrorHandler instance
+        """
+        if cls._instance is None:
+            cls._instance = cls.initialize()
+        return cls._instance
 
     @classmethod
     def initialize(cls,
@@ -169,6 +264,10 @@ class ErrorHandler:
                  notification_batch_size: int = 10,
                  notification_interval: float = 5.0,
                  db_manager=None):
+        # Component tracking
+        self._components = {}
+        self._component_callbacks = {}
+        self._error_history = []
 
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -216,6 +315,9 @@ class ErrorHandler:
         # Register signal handlers
         self._setup_signal_handlers()
 
+        # Register error handler as a component
+        self.register_component('error_handler')
+        
         self.logger.info("🚨 Error handler initialized")
 
         # Start notification thread
@@ -244,6 +346,103 @@ class ErrorHandler:
         # Ensure all pending errors are saved
         self.save_errors(self.log_dir / "errors_shutdown.json")
         sys.exit(0)
+    
+    def register_component(self, component_name: str) -> None:
+        """Register a component for health tracking."""
+        if component_name not in self._components:
+            self._components[component_name] = {
+                'status': 'healthy',
+                'error_count': 0,
+                'last_error': None,
+                'registered_at': time.time()
+            }
+    
+    def get_component_health(self, component_name: str) -> Dict[str, Any]:
+        """Get health status of a registered component."""
+        if component_name not in self._components:
+            return {'status': 'unknown', 'error_count': 0}
+        return self._components[component_name]
+    
+    def add_recovery_callback(self, component_name: str, callback: Callable[[], None]) -> None:
+        """Register a recovery callback for a component."""
+        self.register_component(component_name)
+        self._component_callbacks[component_name] = callback
+    
+    def force_component_recovery(self, component_name: str) -> bool:
+        """Force recovery of a component using its registered callback."""
+        if component_name in self._component_callbacks:
+            try:
+                self._component_callbacks[component_name]()
+                self._components[component_name]['status'] = 'healthy'
+                return True
+            except Exception as e:
+                self.logger.error(f"Recovery failed for {component_name}: {e}")
+        return False
+    
+    def get_error_statistics(self) -> Dict[str, Any]:
+        """Get comprehensive error statistics."""
+        current_time = time.time()
+        one_hour_ago = current_time - 3600
+        
+        # Count recent errors
+        recent_errors = sum(1 for err in self._error_history 
+                          if err['timestamp'] > one_hour_ago)
+        
+        # Count by severity and component
+        errors_by_severity = defaultdict(int)
+        errors_by_component = defaultdict(int)
+        for err in self._error_history:
+            if 'severity' in err:
+                errors_by_severity[err['severity']] += 1
+            if 'component' in err:
+                errors_by_component[err['component']] += 1
+        
+        # Calculate component health rate
+        healthy_components = sum(1 for comp in self._components.values() 
+                               if comp['status'] == 'healthy')
+        total_components = len(self._components) or 1  # Avoid division by zero
+        health_rate = healthy_components / total_components
+        
+        memory_info = None
+        try:
+            memory_info = MemoryMonitor().get_memory_info()
+        except Exception as e:
+            self.logger.warning(f"Could not get memory info: {e}")
+        
+        return {
+            'total_errors': len(self._error_history),
+            'recent_errors_1h': recent_errors,
+            'errors_by_severity': dict(errors_by_severity),
+            'errors_by_component': dict(errors_by_component),
+            'component_health': {
+                'health_rate': health_rate,
+                'healthy_count': healthy_components,
+                'total_components': total_components
+            },
+            'memory_info': memory_info
+        }
+    
+    def shutdown(self) -> None:
+        """Clean shutdown of the error handler system."""
+        try:
+            # Stop all monitoring
+            self.stop_notification_thread()
+            
+            # Save final error state
+            self.save_errors(str(self.log_dir / "final_error_state.json"))
+            
+            # Reset components
+            self._components.clear()
+            self._component_callbacks.clear()
+            self._error_history.clear()
+            
+            # Clear singleton instance
+            type(self)._instance = None
+            
+            self.logger.info("Error handler shutdown complete")
+            
+        except Exception as e:
+            self.logger.error(f"Error during shutdown: {e}")
 
     def handle_error(self,
                   error: Exception,
@@ -404,13 +603,38 @@ class ErrorHandler:
             self.error_signatures[signature] = datetime.now()
             self.duplicate_counts[signature] = 1
 
-            # Add to recent errors
+            # Create error history entry
+            error_entry = {
+                'error_id': error_context.error_id,
+                'timestamp': error_context.timestamp,
+                'error_type': error_context.error_type,
+                'message': error_context.error_message,
+                'severity': error_context.severity.value,
+                'category': error_context.category.value,
+                'component': error_context.component,
+                'traceback': error_context.traceback
+            }
+
+            # Add to error history
+            self._error_history.append(error_entry)
+            if len(self._error_history) > self.max_stored_errors:
+                self._error_history.pop(0)
+
+            # Add to recent errors for backwards compatibility
             self.recent_errors.append(error_context)
             if len(self.recent_errors) > self.max_stored_errors:
                 self.recent_errors.pop(0)
 
             # Update error counts
             self.error_counts[error_context.category.value] += 1
+            
+            # Update component status if applicable
+            if error_context.component in self._components:
+                component = self._components[error_context.component]
+                component['error_count'] += 1
+                component['last_error'] = error_entry
+                if error_context.severity in (ErrorSeverity.CRITICAL, ErrorSeverity.HIGH):
+                    component['status'] = 'degraded'
 
     def _log_error(self, error_context: ErrorContext) -> None:
         """Log error details."""
@@ -655,6 +879,107 @@ class ErrorHandler:
                 additional_data=additional_data
             )
             raise  # Re-raise the exception after handling
+
+
+class MemoryMonitor:
+    """Memory monitoring system that tracks memory usage and handles memory-related issues.
+
+    Args:
+        threshold_mb: Memory usage threshold in megabytes
+        check_interval: Time interval between memory checks in seconds
+        on_threshold_exceeded: Optional callback when memory threshold is exceeded
+    """
+    
+    def __init__(self, 
+                 threshold_mb: float = 1024.0,
+                 check_interval: float = 60.0,
+                 on_threshold_exceeded: Optional[Callable[[], None]] = None):
+        self.threshold_mb = threshold_mb
+        self.check_interval = check_interval
+        self.on_threshold_exceeded = on_threshold_exceeded
+        self._monitoring_thread: Optional[threading.Thread] = None
+        self._is_monitoring = False
+        self._process = psutil.Process()
+        self._lock = threading.Lock()
+    
+    def get_memory_info(self) -> Dict[str, float]:
+        """Get current memory usage information.
+
+        Returns:
+            Dict containing memory usage stats in MB:
+            - rss_mb: Resident Set Size
+            - vms_mb: Virtual Memory Size
+            - shared_mb: Shared Memory Size
+            - data_mb: Data Segment Size
+        """
+        mem = self._process.memory_info()
+        return {
+            'rss_mb': mem.rss / (1024 * 1024),
+            'vms_mb': mem.vms / (1024 * 1024),
+            'shared_mb': getattr(mem, 'shared', 0) / (1024 * 1024),
+            'data_mb': getattr(mem, 'data', 0) / (1024 * 1024)
+        }
+    
+    def trigger_garbage_collection(self) -> Dict[str, int]:
+        """Force garbage collection and return collection statistics.
+
+        Returns:
+            Dict containing collection statistics:
+            - objects_collected: Total number of objects collected
+            - collections: Number of collection runs
+        """
+        collected = 0
+        for i in range(3):  # Run collection for all generations
+            collected += gc.collect(i)
+        
+        return {
+            'objects_collected': collected,
+            'collections': 3
+        }
+    
+    def check_memory_usage(self) -> bool:
+        """Check if memory usage exceeds threshold.
+
+        Returns:
+            True if memory usage is below threshold, False otherwise.
+        """
+        mem_info = self.get_memory_info()
+        if mem_info['rss_mb'] > self.threshold_mb:
+            if self.on_threshold_exceeded:
+                self.on_threshold_exceeded()
+            return False
+        return True
+    
+    def start_monitoring(self) -> None:
+        """Start memory monitoring in a background thread."""
+        with self._lock:
+            if self._is_monitoring:
+                return
+            
+            self._is_monitoring = True
+            self._monitoring_thread = threading.Thread(
+                target=self._monitoring_loop,
+                daemon=True
+            )
+            self._monitoring_thread.start()
+    
+    def stop_monitoring(self) -> None:
+        """Stop memory monitoring thread."""
+        with self._lock:
+            self._is_monitoring = False
+            if self._monitoring_thread:
+                self._monitoring_thread.join(timeout=5.0)
+                self._monitoring_thread = None
+    
+    def _monitoring_loop(self) -> None:
+        """Main monitoring loop that periodically checks memory usage."""
+        while self._is_monitoring:
+            try:
+                self.check_memory_usage()
+            except Exception as e:
+                # Log the error but keep monitoring
+                logging.error(f"Memory monitoring error: {e}")
+            time.sleep(self.check_interval)
 
     def _record_error_in_db(self, error_context: ErrorContext, recovery_strategy: RecoveryStrategy) -> None:
         """Record error in database if database manager is available."""

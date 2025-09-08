@@ -59,21 +59,25 @@ def _determine_screen_state(variance: float, unique_colors: int, brightness: flo
     """
     # CRITICAL: Very few colors (2-3) almost always means menu/battle/evolution
     # This prevents false positives where menus are classified as overworld
+    # Check for dialogue box first since it has a distinctive pattern
+    has_dialogue = detect_dialogue_box(screen_array)
+    if has_dialogue:
+        return SCREEN_STATES['DIALOGUE']
+        
     if unique_colors <= 3:
         # Very few colors - definitely not overworld
         if variance < 50:
             return SCREEN_STATES['LOADING']  # Solid colors or very simple screen
-        elif brightness > 200:
-            return SCREEN_STATES['DIALOGUE']  # High brightness with few colors = dialogue box
         else:
-            return SCREEN_STATES['MENU']  # Low brightness with few colors = menu/battle/evolution
+            return SCREEN_STATES['MENU']  # Few colors typically means menu
             
     # Very low variance = loading/transition screen
     if variance < 50:
         return SCREEN_STATES['LOADING']
         
-    # Very high variance with many colors = battle screen (lots of sprites/effects)
-    if variance > 20000 and unique_colors > 8:
+    # Check for battle indicators
+    is_battle, _ = detect_battle_sprites(screen_array)
+    if is_battle:
         return SCREEN_STATES['BATTLE']
         
     # Medium-high variance with many colors = overworld
@@ -106,23 +110,30 @@ def has_menu_indicators(screen_array: np.ndarray) -> bool:
     """
     Check for visual indicators of menu presence.
     
-    Looks for common menu elements like borders, arrows, etc.
+    Looks for common menu elements like borders, frames, etc.
     """
     try:
-        # Check for menu borders (vertical lines)
-        if np.any(np.all(screen_array[:, 0:2] == 255, axis=2)) and \
-           np.any(np.all(screen_array[:, -2:] == 255, axis=2)):
+        # Look for horizontal menu borders
+        horizontal_lines = np.all(screen_array > 200, axis=2)
+        top_border = np.any(horizontal_lines[10:30, :])  # Top menu area
+        bottom_border = np.any(horizontal_lines[-30:-10, :])  # Bottom menu area
+        
+        # Look for vertical menu borders or side indicators
+        vertical_lines = np.all(screen_array > 200, axis=2)
+        left_border = np.any(vertical_lines[:, 10:30])  # Left menu area
+        right_border = np.any(vertical_lines[:, -30:-10])  # Right menu area
+        
+        # Check for rectangular menu frame
+        has_frame = (top_border and bottom_border) or (left_border and right_border)
+        if has_frame:
             return True
             
-        # Check for menu arrows (> shape at edges)
-        arrow_pattern = np.array([
-            [255, 255, 0],
-            [255, 0, 255],
-            [255, 255, 0]
-        ])
-        for y in range(screen_array.shape[0] - 2):
-            if np.array_equal(screen_array[y:y+3, 0:3], arrow_pattern):
-                return True
+        # Check for menu selection highlighting
+        # Look for bright horizontal bars that could be selection indicators
+        line_heights = np.mean(horizontal_lines, axis=1)
+        has_highlight = np.any(line_heights > 0.7)  # At least one very bright line
+        if has_highlight:
+            return True
                 
         return False
         
@@ -140,10 +151,14 @@ def detect_dialogue_box(screen_array: np.ndarray) -> bool:
         # Focus on bottom third of screen where dialogue appears
         dialogue_area = screen_array[SCREEN_DIMENSIONS['HEIGHT']*2//3:, :, :]
         
-        # Check for large white rectangular area
-        white_pixels = np.all(dialogue_area > 240, axis=2)
-        if np.mean(white_pixels) > 0.6:  # Over 60% white in dialogue area
-            return True
+        # Check for large white or very bright rectangular area
+        bright_pixels = np.all(dialogue_area > 180, axis=2)
+        if np.mean(bright_pixels) > 0.4:  # Over 40% bright in dialogue area
+            # Verify box-like shape by checking edges
+            top_edge = bright_pixels[0:2, :]
+            bottom_edge = bright_pixels[-2:, :]
+            if np.mean(top_edge) > 0.7 and np.mean(bottom_edge) > 0.7:
+                return True
             
         return False
         
@@ -168,11 +183,15 @@ def detect_battle_sprites(screen_array: np.ndarray) -> Tuple[bool, float]:
         player_variance = float(np.var(player_area))
         enemy_variance = float(np.var(enemy_area))
         
+        # Look for battle UI elements (health bars, etc)
+        has_battle_ui = has_menu_indicators(screen_array)
+        
         # High variance in both areas suggests active battle
-        is_battle = player_variance > 5000 and enemy_variance > 5000
+        is_battle = (player_variance > 3000 and enemy_variance > 3000) or \
+                   (has_battle_ui and (player_variance > 2000 or enemy_variance > 2000))
         
         # Calculate battle intensity from 0-1
-        intensity = min((player_variance + enemy_variance) / 50000, 1.0)
+        intensity = min((player_variance + enemy_variance) / 30000, 1.0)
         
         return is_battle, intensity
         

@@ -180,18 +180,41 @@ class MonitoringServer(MonitorComponent):
             bool: True if stopped successfully
         """
         with self._lock:
+            if not self._running:
+                return True
+                
             self._running = False
             
+            try:
+                # First try to shutdown Socket.IO
+                self.socketio.stop()
+                
+                # Give a brief delay for cleanup
+                time.sleep(0.1)
+                
+                # Now shutdown the Flask server
+                if self.app:
+                    try:
+                        from werkzeug.serving import shutdown_server
+                        shutdown_server()
+                    except:
+                        pass
+            except:
+                pass
+            
+        # Join threads with timeout
         if self._update_thread and self._update_thread.is_alive():
-            self._update_thread.join(timeout=5.0)
+            self._update_thread.join(timeout=2.0)
             
         if self._server_thread and self._server_thread.is_alive():
-            self._server_thread.join(timeout=5.0)
+            self._server_thread.join(timeout=2.0)
             
-        return not (
+        is_shutdown = not (
             (self._update_thread and self._update_thread.is_alive()) or
             (self._server_thread and self._server_thread.is_alive())
         )
+        
+        return is_shutdown
             
     def get_status(self) -> Dict[str, Any]:
         """Get server status.
@@ -392,6 +415,20 @@ class MonitoringServer(MonitorComponent):
             status = self.get_status()
             with self.app.app_context():
                 self.socketio.emit("status", status)
+            
+            # Send error events if available
+            if hasattr(self.metrics_service, 'get_pending_errors'):
+                errors = self.metrics_service.get_pending_errors()
+                if errors:
+                    with self.app.app_context():
+                        self.socketio.emit("errors", errors)
+            
+            # Send frame data if available
+            if hasattr(self.frame_service, 'get_latest_frame'):
+                frame = self.frame_service.get_latest_frame()
+                if frame:
+                    with self.app.app_context():
+                        self.socketio.emit("frame", frame)
                 
         except Exception as e:
             self.logger.error(f"Update error: {e}")
