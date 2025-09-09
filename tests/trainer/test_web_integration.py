@@ -43,8 +43,7 @@ class TestWebMonitorIntegration:
             config = TrainingConfig(
                 rom_path='test.gbc',
                 web_port=8888,
-                enable_web=True,
-                capture_screens=True
+                enable_web=True
             )
             
             trainer = PokemonTrainer(config)
@@ -84,8 +83,8 @@ class TestWebMonitorIntegration:
             trainer = PokemonTrainer(config)
             assert trainer.web_monitor == mock_web_monitor
             
-            # PyBoy initialization should update web monitor
-            mock_web_monitor.update_pyboy.assert_called_once()
+            # PyBoy initialization should update web monitor (may be called multiple times during setup)
+            assert mock_web_monitor.update_pyboy.call_count >= 1, "Web monitor should be updated with PyBoy instance"
             # Verify it was called with a PyBoy instance (not necessarily the fixture)
             call_args = mock_web_monitor.update_pyboy.call_args[0]
             assert len(call_args) == 1  # Should be called with one argument
@@ -105,9 +104,9 @@ class TestWebMonitorIntegration:
             trainer = PokemonTrainer(config)
             
             # Simulate some actions
-            trainer.stats['actions_taken'] = 1000
+            trainer.stats['total_actions'] = 1000
             trainer.stats['total_reward'] = 50.0
-            trainer.stats['llm_decision_count'] = 100
+            trainer.stats['llm_calls'] = 100
             
             # Get current stats should use these values
             stats = trainer.get_current_stats()

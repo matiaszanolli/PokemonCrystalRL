@@ -87,8 +87,19 @@ class GameStateDetector:
             
             # Position-based features for discrimination
             h, w = sampled.shape
-            tl = int(np.mean(sampled[: h//2, : w//2])) if h > 1 and w > 1 else mean_val
-            br = int(np.mean(sampled[h//2 :, w//2 :])) if h > 1 and w > 1 else mean_val
+            if h > 1 and w > 1:
+                # Ensure we don't create empty slices
+                h_mid = max(1, h//2)
+                w_mid = max(1, w//2)
+                
+                tl_slice = sampled[:h_mid, :w_mid]
+                br_slice = sampled[h_mid:, w_mid:]
+                
+                tl = int(np.mean(tl_slice)) if tl_slice.size > 0 else mean_val
+                br = int(np.mean(br_slice)) if br_slice.size > 0 else mean_val
+            else:
+                tl = mean_val
+                br = mean_val
             
             # Return tuple-hash (fast and pythonic)
             return hash((mean_val, std_val, tl, br))

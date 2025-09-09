@@ -32,7 +32,7 @@ def analyze_screen_state(screen_array: np.ndarray) -> Dict[str, float]:
         brightness = float(np.mean(screen_array.astype(np.float32)))
         
         # Determine screen state based on metrics
-        state = _determine_screen_state(variance, unique_colors, brightness)
+        state = _determine_screen_state(variance, unique_colors, brightness, screen_array)
         
         return {
             'state': state,
@@ -50,7 +50,7 @@ def analyze_screen_state(screen_array: np.ndarray) -> Dict[str, float]:
             'brightness': 0
         }
 
-def _determine_screen_state(variance: float, unique_colors: int, brightness: float) -> str:
+def _determine_screen_state(variance: float, unique_colors: int, brightness: float, screen_array: np.ndarray) -> str:
     """
     Determine screen state based on analyzed metrics.
     
