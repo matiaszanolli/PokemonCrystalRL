@@ -15,11 +15,16 @@ Reorganized structure:
 from .core import ROMFontDecoder, UnifiedVisionProcessor
 from .extractors import PokemonCrystalFontExtractor, GameBoyColorPalette
 from .training import VisionEnhancedTrainingSession
+from .shared_types import DetectedText, GameUIElement, VisualContext, PyBoyGameState
 
 __all__ = [
     'ROMFontDecoder',
     'UnifiedVisionProcessor', 
     'PokemonCrystalFontExtractor',
     'GameBoyColorPalette',
-    'VisionEnhancedTrainingSession'
+    'VisionEnhancedTrainingSession',
+    'DetectedText',
+    'GameUIElement',
+    'VisualContext',
+    'PyBoyGameState'
 ]

@@ -11,7 +11,7 @@ import shutil
 from unittest.mock import Mock, patch, MagicMock
 import cv2
 
-from vision.enhanced_font_decoder import ROMFontDecoder
+from vision.core.font_decoder import ROMFontDecoder
 
 
 class TestROMFontDecoder(unittest.TestCase):
@@ -19,7 +19,7 @@ class TestROMFontDecoder(unittest.TestCase):
         """Set up test fixtures"""
         self.temp_dir = tempfile.mkdtemp()
         # Create a mock decoder without loading actual ROM
-        with patch('vision.enhanced_font_decoder.PokemonCrystalFontExtractor'):
+        with patch('vision.core.font_decoder.PokemonCrystalFontExtractor'):
             self.decoder = ROMFontDecoder()
     
     def tearDown(self):
@@ -29,7 +29,7 @@ class TestROMFontDecoder(unittest.TestCase):
     
     def test_initialization(self):
         """Test initialization without any paths"""
-        with patch('vision.enhanced_font_decoder.PokemonCrystalFontExtractor'):
+        with patch('vision.core.font_decoder.PokemonCrystalFontExtractor'):
             decoder = ROMFontDecoder()
         
         self.assertIsInstance(decoder.font_templates, dict)
@@ -45,7 +45,7 @@ class TestROMFontDecoder(unittest.TestCase):
         mock_templates = {'A': np.ones((8, 8), dtype=np.uint8) * 255}
         np.savez_compressed(template_path, **mock_templates)
         
-        with patch('vision.enhanced_font_decoder.PokemonCrystalFontExtractor') as mock_extractor:
+        with patch('vision.core.font_decoder.PokemonCrystalFontExtractor') as mock_extractor:
             mock_instance = MagicMock()
             mock_instance.load_font_templates.return_value = mock_templates
             mock_extractor.return_value = mock_instance
@@ -94,7 +94,7 @@ class TestROMFontDecoder(unittest.TestCase):
     
     def test_gbc_palette_integration(self):
         """Test Game Boy Color palette integration"""
-        with patch('vision.enhanced_font_decoder.GBC_PALETTE_AVAILABLE', True):
+        with patch('vision.core.font_decoder.GBC_PALETTE_AVAILABLE', True):
             # Mock GBC palette with complete response
             mock_palette = MagicMock()
             mock_palette.analyze_text_region_colors.return_value = {

@@ -19,11 +19,13 @@ logging.basicConfig(
     ]
 )
 
-from llm_trainer import (
-    LLMTrainer,
-    LLMAgent,
-    PokemonRewardCalculator
-)
+from training.core.pokemon_trainer import PokemonTrainer
+from training.unified_pokemon_trainer import UnifiedPokemonTrainer, create_llm_trainer
+from training.config import TrainingConfig, TrainingMode, LLMBackend
+from trainer.llm.agent import LLMAgent
+from core.reward_calculator import AccurateGameState as PokemonRewardCalculator
+
+LLMTrainer = create_llm_trainer  # Use factory function
 
 def main():
     """Run training test with monitoring."""

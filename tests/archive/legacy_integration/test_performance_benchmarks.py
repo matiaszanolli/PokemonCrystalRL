@@ -59,7 +59,6 @@ class TestActionPerformanceBenchmarks:
             llm_interval=3,
             max_actions=1000,
             headless=True,
-            capture_screens=True,
             enable_web=False  # Disable web for pure performance testing
         )
         
@@ -82,8 +81,7 @@ class TestActionPerformanceBenchmarks:
             mode=TrainingMode.ULTRA_FAST,
             llm_backend=LLMBackend.NONE,
             max_actions=1000,
-            headless=True,
-            capture_screens=False
+            headless=True
         )
         
         trainer = PokemonTrainer(config)
@@ -430,8 +428,7 @@ class TestMemoryPerformanceBenchmarks:
             rom_path="test.gbc",
             mode=TrainingMode.FAST_MONITORED,
             max_actions=5000,
-            headless=True,
-            capture_screens=True
+            headless=True
         )
         
         return PokemonTrainer(config)
@@ -542,7 +539,6 @@ class TestRealWorldPerformanceBenchmarks:
                 llm_backend=LLMBackend.SMOLLM2,
                 llm_interval=3,
                 enable_web=True,
-                capture_screens=True,
                 headless=False
             ),
             "research_training": TrainingConfig(
@@ -551,14 +547,12 @@ class TestRealWorldPerformanceBenchmarks:
                 llm_backend=LLMBackend.LLAMA32_3B,
                 llm_interval=5,
                 enable_web=True,
-                capture_screens=True,
                 debug_mode=True
             ),
             "speed_testing": TrainingConfig(
                 rom_path="test.gbc",
                 mode=TrainingMode.ULTRA_FAST,
                 llm_backend=LLMBackend.NONE,
-                capture_screens=False,
                 headless=True
             )
         }

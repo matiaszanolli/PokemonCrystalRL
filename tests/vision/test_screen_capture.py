@@ -30,8 +30,6 @@ def create_fixed_trainer(pyboy_mock):
     config = TrainingConfig(
         mode=TrainingMode.FAST_MONITORED,
         rom_path="../roms/pokemon_crystal.gbc",
-        capture_screens=True,  # This is key!
-        capture_fps=2,
         headless=True,
         enable_web=False,  # Don't need web for this test
         debug_mode=True
@@ -41,15 +39,15 @@ def create_fixed_trainer(pyboy_mock):
     trainer = PokemonTrainer(config)
     
     # IMPORTANT: Start the screen capture thread manually
-    if config.capture_screens:
-        trainer._start_screen_capture()
-        print("📸 Screen capture started manually")
-        time.sleep(1)  # Give it time to start capturing
+    # Note: Screen capture is now handled automatically by the trainer
+    trainer._start_screen_capture()
+    print("📸 Screen capture started manually")
+    time.sleep(1)  # Give it time to start capturing
     
     return trainer
 
 
-@patch('training.trainer.PyBoy')
+@patch('pyboy.PyBoy')
 def test_fixed_streaming(mock_pyboy_class):
     """Test the fixed streaming system"""
     print("🧪 Testing Fixed Socket Streaming")

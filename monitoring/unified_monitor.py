@@ -27,6 +27,23 @@ def create_unified_monitor(training_session=None, host='127.0.0.1', port=5000, c
             port=port,
             debug=False
         )
+    elif isinstance(config, MonitoringConfig):
+        # Convert MonitorConfig to WebServerConfig
+        config = WebServerConfig(
+            host=config.host,
+            port=config.port,
+            debug=config.debug,
+            enable_api=True,
+            enable_websocket=True,
+            enable_metrics=True,
+            template_dir="templates",
+            static_dir=config.static_dir,
+            api_prefix="/api/v1",
+            frame_buffer_size=1,
+            frame_quality=85,
+            update_interval=config.update_interval,
+            metrics_interval=1.0
+        )
     
     return MonitoringServer(config)
 

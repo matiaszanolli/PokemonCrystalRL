@@ -54,7 +54,7 @@ def test_env_compatibility():
     print("\n🧪 Testing environment compatibility with training system...")
     
     from environments.pyboy_env import PyBoyPokemonCrystalEnv
-    from vision.vision_enhanced_training import VisionEnhancedTrainingSession
+    from vision.training.vision_enhanced_training import VisionEnhancedTrainingSession
     
     # This should not raise any parameter errors
     session = VisionEnhancedTrainingSession(

@@ -22,7 +22,7 @@ def get_free_port():
         port = s.getsockname()[1]
     return port
 
-from core.monitoring.bridge import TrainerWebBridge
+from monitoring.bridge import TrainerWebBridge
 from training.trainer import PokemonTrainer, TrainingConfig, TrainingMode, LLMBackend
 
 
@@ -38,7 +38,6 @@ def mock_config(test_port):
         rom_path="test.gbc",
         enable_web=True,
         web_port=test_port,  # Use random port for testing
-        capture_screens=True,
         headless=True,
         debug_mode=True
     )

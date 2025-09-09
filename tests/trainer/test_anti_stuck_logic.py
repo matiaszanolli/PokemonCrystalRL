@@ -18,7 +18,10 @@ from collections import deque
 from training.trainer import TrainingConfig, TrainingMode, LLMBackend
 from training.trainer import PokemonTrainer
 from environments.game_state_detection import get_unstuck_action
-from training.strategies import handle_dialogue, handle_menu, handle_battle, handle_overworld, handle_title_screen
+from core.adaptive_strategy_system import AdaptiveStrategySystem
+
+# Use adaptive strategy system handlers for different states
+adaptive_system = AdaptiveStrategySystem()
 
 
 @pytest.mark.anti_stuck
@@ -181,11 +184,10 @@ class TestIntelligentRecoveryActions:
         for stuck_level in stuck_levels:
             trainer.game_state_detector.stuck_counter = stuck_level
             
-            actions = [get_unstuck_action(i, stuck_level) for i in range(20)]
+            actions = [adaptive_system._stuck_policy({}, []) for i in range(20)]
             
             # Higher stuck levels should use more diverse strategies
             unique_actions = len(set(actions))
-            
             if stuck_level >= 10:
                 # Very stuck - should be highly diverse
                 assert unique_actions >= 5, f"Stuck level {stuck_level} should use diverse actions"
@@ -274,7 +276,7 @@ class TestStateAwareAntiStuck:
         trainer.game_state_detector.stuck_counter = 3
         
         # Mock dialogue state detection - just test the unstuck function
-        actions = [handle_dialogue(i) for i in range(10)]
+        actions = [adaptive_system._dialogue_policy({}, []) for i in range(10)]
         
         # Should primarily use A button (5) in dialogue
         a_button_actions = [a for a in actions if a == 5]
@@ -292,7 +294,7 @@ class TestStateAwareAntiStuck:
         actions = []
         for i in range(20):
             # Use unstuck action since we're stuck in overworld
-            action = get_unstuck_action(i, 5)
+            action = adaptive_system._stuck_policy({}, [])
             actions.append(action)
         
         # Should use movement actions (1, 2, 3, 4)
@@ -308,7 +310,7 @@ class TestStateAwareAntiStuck:
         trainer.game_state_detector.stuck_counter = 2
         
         # Mock menu state
-        actions = [get_unstuck_action(i, 2) for i in range(15)]
+        actions = [adaptive_system._menu_policy({}, []) for i in range(15)]
         
         # Should include navigation actions
         navigation_actions = {1, 2, 3, 4}  # Directional
@@ -324,7 +326,7 @@ class TestStateAwareAntiStuck:
         """Test anti-stuck behavior in battle state"""
         trainer.game_state_detector.stuck_counter = 4
         
-        actions = [get_unstuck_action(i, 4) for i in range(12)]
+        actions = [adaptive_system._battle_policy({}, []) for i in range(12)]
         
         # Battle should primarily use A button and directional
         expected_actions = {1, 2, 3, 4, 5}  # Movement + A
@@ -416,7 +418,7 @@ class TestAntiStuckPerformance:
             
             # Test stuck detection performance
             for i in range(100):
-                get_unstuck_action(i, 5)
+                adaptive_system._stuck_policy({}, [])
             
             elapsed = time.time() - start_time
             
@@ -512,7 +514,7 @@ class TestAntiStuckIntegration:
         actions_by_state = {}
         
         for state in states:
-            state_actions = [get_unstuck_action(i, 2) for i in range(10)]
+            state_actions = [adaptive_system._overworld_policy({}, []) for i in range(10)]
             actions_by_state[state] = state_actions
         
         # Each state should produce actions

@@ -1,6 +1,42 @@
-# 📚 Pokemon Crystal RL Documentation
+# Pokemon Crystal RL - Documentation Index
 
-Welcome to the Pokemon Crystal RL documentation! This documentation will help you understand, use, and contribute to the project.
+## 📁 Documentation Structure
+
+### Core Documentation
+- **[README.md](../README.md)** - Main project overview
+- **[SETUP.md](../SETUP.md)** - Installation and setup guide
+- **[CHANGELOG.md](../CHANGELOG.md)** - Version history and changes
+
+### Architecture & Design
+- **[architecture/](architecture/)** - System architecture documentation
+- **[refactoring/](refactoring/)** - Complete refactoring analysis and history
+- **[monitoring/](monitoring/)** - Monitoring system documentation
+
+### User Guides  
+- **[guides/](guides/)** - User guides and tutorials
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Testing procedures and guidelines
+- **[API_REFERENCE.md](API_REFERENCE.md)** - API documentation
+
+### Development
+- **[fixes/](fixes/)** - Bug fixes and improvements documentation
+- **[HYBRID_TRAINING_GUIDE.md](HYBRID_TRAINING_GUIDE.md)** - Advanced training techniques
+
+## 🏆 Major Documentation Sections
+
+### Refactoring Documentation
+The **[refactoring/](refactoring/)** directory contains comprehensive documentation of the project's transformation:
+
+- **COMPREHENSIVE_REFACTORING_ANALYSIS.md** - Complete 6-phase refactoring analysis
+- **CORE_RESTRUCTURING_PLAN.md** - Core system restructuring plans
+- **CONSOLIDATED_WEB_UI.md** - Web UI consolidation documentation
+- **SMART_TRAINER_MERGE.md** - Trainer system merge documentation
+
+## 🚀 Getting Started
+
+1. Start with **[../README.md](../README.md)** for project overview
+2. Follow **[../SETUP.md](../SETUP.md)** for installation  
+3. Read **[guides/TRAINING_OVERVIEW.md](guides/TRAINING_OVERVIEW.md)** for usage
+4. Refer to **[refactoring/COMPREHENSIVE_REFACTORING_ANALYSIS.md](refactoring/COMPREHENSIVE_REFACTORING_ANALYSIS.md)** for architecture
 
 ## 📖 Contents
 

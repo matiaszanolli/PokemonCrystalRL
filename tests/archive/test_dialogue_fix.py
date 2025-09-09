@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.dialogue_state_machine import DialogueStateMachine
-from vision.vision_processor import VisualContext, DetectedText
+from vision.core.vision_processor import VisualContext, DetectedText
 
 def test_dialogue_state_machine():
     """Test the dialogue state machine with the database fix"""

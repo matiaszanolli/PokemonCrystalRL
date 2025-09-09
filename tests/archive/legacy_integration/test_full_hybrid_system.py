@@ -100,9 +100,13 @@ class TestFullHybridSystem(unittest.TestCase):
         from training.trainer import TrainingConfig
         training_config = TrainingConfig()
         
-        # Mock PyBoy setup to avoid initialization
-        with patch.object(PokemonTrainer, 'setup_pyboy'):
-            self.trainer = PokemonTrainer(training_config)
+        # Mock PyBoy manager for controlled environment
+        self.trainer = PokemonTrainer(training_config)
+        # Set mock PyBoy instance
+        mock_pyboy = Mock()
+        mock_pyboy.frame_count = 0
+        mock_pyboy.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        self.trainer.pyboy_manager.set_mock_instance(mock_pyboy)
         
         # Add required pyboy attribute and mock PyBoy alive check
         self.trainer.pyboy = Mock()

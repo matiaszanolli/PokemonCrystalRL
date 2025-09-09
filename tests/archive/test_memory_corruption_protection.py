@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
 from environments.state.memory_map import DERIVED_VALUES, get_badges_earned, BADGE_MASKS
-from llm_trainer import PokemonRewardCalculator
+from core.reward_calculator import AccurateGameState as PokemonRewardCalculator
 
 pytestmark = pytest.mark.skip("Memory corruption protection tests disabled - testing archived functionality")
 

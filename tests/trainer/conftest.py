@@ -13,7 +13,7 @@ from core.choice_recognition import (
     ChoiceType,
     ChoicePosition
 )
-from vision.vision_processor import DetectedText, VisualContext
+from vision.core.vision_processor import DetectedText, VisualContext
 from config.config import TrainingConfig, TrainingMode, LLMBackend
 from training.trainer import PokemonTrainer
 from training.trainer import PokemonTrainer

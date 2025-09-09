@@ -51,7 +51,6 @@ class TestSmolLM2GameplayScenarios:
             llm_backend=LLMBackend.SMOLLM2,
             llm_interval=3,
             headless=True,
-            capture_screens=True,
             max_actions=100
         )
     
@@ -219,20 +218,26 @@ class TestStateTransitionScenarios:
     @patch('training.trainer.PYBOY_AVAILABLE', True)
     def state_transition_trainer(self, mock_pyboy_class):
         """Create trainer for state transition testing"""
-        mock_pyboy_instance = Mock()
+        # Create a test-friendly mock PyBoy instance
+        mock_pyboy_instance = Mock(spec=['send_input', 'tick', 'frame_count', 'screen'])
+        screen_mock = Mock()
+        screen_mock.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
         mock_pyboy_instance.frame_count = 1000
-        mock_pyboy_instance.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        mock_pyboy_instance.screen = screen_mock
         mock_pyboy_class.return_value = mock_pyboy_instance
         
         config = TrainingConfig(
             rom_path="test.gbc",
             mode=TrainingMode.FAST_MONITORED,
             llm_backend=LLMBackend.SMOLLM2,
-            headless=True,
-            capture_screens=True
+            headless=True
         )
         
         trainer = PokemonTrainer(config)
+        mock_pyboy = Mock()
+        mock_pyboy.frame_count = 0
+        mock_pyboy.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        trainer.pyboy_manager.set_mock_instance(mock_pyboy)
         
         # Add missing methods for integration testing
         trainer._handle_overworld = Mock(return_value=0)  # Return default action
@@ -369,11 +374,18 @@ class TestExtendedPlayScenarios:
             rom_path="test.gbc",
             mode=TrainingMode.FAST_MONITORED,
             llm_backend=LLMBackend.SMOLLM2,
-            llm_interval=5,
+            llm_interval=3,
             headless=True,
-            capture_screens=True,
-            max_actions=500
+            max_actions=100
         )
+        
+        trainer = PokemonTrainer(config)
+        mock_pyboy = Mock()
+        mock_pyboy.frame_count = 0
+        mock_pyboy.screen.ndarray = np.random.randint(0, 255, (144, 160, 3), dtype=np.uint8)
+        trainer.pyboy_manager.set_mock_instance(mock_pyboy)
+        
+        return trainer
         
         return PokemonTrainer(config)
     
@@ -563,7 +575,6 @@ class TestMonitoredPlayScenarios:
             llm_backend=LLMBackend.SMOLLM2,
             enable_web=True,
             web_port=port,
-            capture_screens=True,
             headless=True
         )
         

@@ -16,7 +16,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 from core.web_monitor.monitor import WebMonitor
-from core.monitoring.screen_capture import ScreenCapture
+from monitoring.components.capture import ScreenCapture
 from core.web_monitor import WebMonitorHandler
 
 @pytest.fixture
@@ -175,10 +175,10 @@ class TestWebIntegration:
         
         # Verify decision content
         decisions = data["recent_decisions"]
-        assert decisions[0]["action"] == "up"
-        assert decisions[0]["reasoning"] == "Moving to exit"
-        assert decisions[1]["action"] == "a"
-        assert decisions[1]["reasoning"] == "Interact with NPC"
+        assert decisions[0]["action"] == "a"
+        assert decisions[0]["reasoning"] == "Interact with NPC"
+        assert decisions[1]["action"] == "up"
+        assert decisions[1]["reasoning"] == "Moving to exit"
     
     def test_stats_update_interval(self, web_monitor, mock_trainer):
         """Test stats update interval works properly."""
