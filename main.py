@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from pyboy import PyBoy
-from core.web_monitor import WebMonitor
+# WebMonitor handled internally by UnifiedPokemonTrainer
 from core.game_intelligence import GameIntelligence
 from core.experience_memory import ExperienceMemory
 from agents.dqn_agent import DQNAgent
@@ -22,7 +22,7 @@ from agents.hybrid_agent import HybridAgent
 from core.strategic_context_builder import StrategicContextBuilder
 
 from agents.llm_agent import LLMAgent
-from training.llm_pokemon_trainer import LLMTrainer
+from training.unified_pokemon_trainer import create_llm_trainer as LLMTrainer
 from rewards.calculator import PokemonRewardCalculator
 
 from utils.memory_reader import build_observation
@@ -102,14 +102,7 @@ def initialize_training_systems(args: argparse.Namespace) -> Dict:
     experience_memory = ExperienceMemory()
     context_builder = StrategicContextBuilder()
     
-    # Initialize web monitor if enabled
-    web_monitor = None
-    if args.enable_web:
-        web_monitor = WebMonitor(
-            host=args.web_host,
-            port=args.web_port,
-            show_plots=not args.quiet
-        )
+    # Web monitor is handled internally by the trainer
     
     # Initialize DQN components if enabled
     dqn_agent = None
@@ -171,7 +164,7 @@ def initialize_training_systems(args: argparse.Namespace) -> Dict:
         'game_intelligence': game_intelligence,
         'experience_memory': experience_memory,
         'context_builder': context_builder,
-        'web_monitor': web_monitor,
+        'web_monitor': None,  # Handled internally by trainer
         'dqn_agent': dqn_agent,
         'hybrid_agent': hybrid_agent
     }
@@ -191,7 +184,7 @@ def graceful_shutdown(systems: Dict, signum: Optional[int] = None, frame: Option
     # Stop trainer
     if systems.get('trainer'):
         try:
-            systems['trainer'].shutdown()
+            systems['trainer'].stop_training()
             logger.info("Trainer stopped")
         except Exception as e:
             logger.error(f"Error stopping trainer: {e}")
@@ -217,14 +210,15 @@ def main():
     signal.signal(signal.SIGTERM, lambda s, f: graceful_shutdown(systems, s, f))
     
     try:
-        # Start web monitor if enabled
-        if systems['web_monitor']:
-            systems['web_monitor'].start()
-            logger.info(f"Web monitor started at http://{args.web_host}:{args.web_port}")
-        
+        # Web monitor is started internally by the trainer
         # Run training
-        systems['trainer'].run()
-        
+        systems['trainer'].start_training()
+
+        # Wait for training to complete
+        trainer = systems['trainer']
+        if hasattr(trainer, 'training_thread') and trainer.training_thread:
+            trainer.training_thread.join()
+
     except Exception as e:
         logger.error(f"Training error: {e}")
         raise

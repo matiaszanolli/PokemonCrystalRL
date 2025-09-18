@@ -167,13 +167,22 @@ class LLMDecisionEngine:
         llm_context = self._prepare_llm_context(game_state, context)
         
         # Get action from LLM
-        action = self.llm_agent.get_action(
-            screenshot=screen_data,
-            game_state=llm_context.get('current_state', 'unknown'),
-            step=llm_context.get('step', 0),
-            stuck_counter=llm_context.get('stuck_counter', 0)
+        # Convert parameters to match LLMAgent.get_decision() signature
+        screen_analysis = {'type': llm_context.get('current_state', 'unknown')}
+        recent_actions = []  # TODO: Pass actual recent actions from training loop
+
+        action_str, reasoning = self.llm_agent.get_decision(
+            game_state,
+            screen_analysis,
+            recent_actions
         )
-        
+
+        # Convert action string to integer (1-8)
+        try:
+            action = int(action_str) if action_str.isdigit() else 1
+        except (ValueError, AttributeError):
+            action = 1  # Default action
+
         return action
     
     def _prepare_llm_context(self, 

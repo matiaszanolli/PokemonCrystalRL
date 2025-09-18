@@ -728,13 +728,30 @@ def create_pokemon_trainer(config) -> UnifiedPokemonTrainer:
 
 def create_llm_trainer(**kwargs) -> UnifiedPokemonTrainer:
     """Factory function for creating trainer with old LLMTrainer interface."""
+    # Default to SMOLLM2 if LLM model is specified, otherwise NONE
+    llm_backend = LLMBackend.NONE
+    llm_model = kwargs.get('llm_model')
+    if llm_model == 'smollm2:1.7b':
+        llm_backend = LLMBackend.SMOLLM2
+    elif llm_model == 'llama3.2:1b':
+        llm_backend = LLMBackend.LLAMA32_1B
+    elif llm_model == 'llama3.2:3b':
+        llm_backend = LLMBackend.LLAMA32_3B
+    elif llm_model:
+        # Default to SMOLLM2 for unknown models
+        llm_backend = LLMBackend.SMOLLM2
+
     config = UnifiedTrainerConfig(
         rom_path=kwargs.get('rom_path', ''),
         max_actions=kwargs.get('max_actions', 5000),
         save_state_path=kwargs.get('save_state'),
         enable_web=kwargs.get('enable_web', True),
         web_port=kwargs.get('web_port', 8080),
-        web_host=kwargs.get('web_host', 'localhost')
+        web_host=kwargs.get('web_host', 'localhost'),
+        llm_backend=llm_backend,
+        llm_interval=kwargs.get('llm_interval', 20),
+        llm_temperature=kwargs.get('llm_temperature', 0.7),
+        llm_base_url=kwargs.get('llm_base_url', 'http://localhost:11434')
     )
     
     return UnifiedPokemonTrainer(config)
