@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokemon Crystal RL - Unified Training Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 Pokemon Crystal RL Training Dashboard</h1>
+        <div class="subtitle">
+            Advanced reinforcement learning with local LLM decision making and real-time monitoring
+            <span id="connection-status" class="status-indicator connected">🟢 Connected</span>
+        </div>
+    </div>
+
+    <div class="grid-container">
+        <!-- Training Statistics Panel -->
+        <div class="panel">
+            <h2>📊 Training Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-label">TOTAL ACTIONS</div>
+                    <div class="stat-value" id="total-actions">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">ACTIONS/SECOND</div>
+                    <div class="stat-value" id="actions-per-second">0.0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">LLM DECISIONS</div>
+                    <div class="stat-value" id="llm-decisions">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">TOTAL REWARD</div>
+                    <div class="stat-value" id="total-reward">0.0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Game Screen Panel -->
+        <div class="panel game-screen-panel">
+            <h2>🎯 Live Game Screen</h2>
+            <div class="game-screen">
+                <img id="game-screen" alt="Game screen" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==">
+                <div id="screen-status" class="screen-status">Waiting for game data...</div>
+            </div>
+        </div>
+
+        <!-- Game State Panel -->
+        <div class="panel">
+            <h2>🎲 Game State</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-label">MAP</div>
+                    <div class="stat-value" id="current-map">-</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">POSITION</div>
+                    <div class="stat-value" id="player-position">0,0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">MONEY</div>
+                    <div class="stat-value" id="player-money">¥0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">BADGES</div>
+                    <div class="stat-value" id="player-badges">0/16</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent LLM Decisions Panel -->
+        <div class="panel">
+            <h2>🤖 Recent LLM Decisions</h2>
+            <div id="llm-decisions-container" class="decisions-container">
+                <div class="no-data">No LLM decisions yet...</div>
+            </div>
+        </div>
+
+        <!-- Live Memory Debug Panel -->
+        <div class="panel memory-debug-panel">
+            <h2>🔍 Live Memory Debug</h2>
+            <div id="memory-debug-container" class="debug-container">
+                <div class="no-data">Loading memory data...</div>
+            </div>
+        </div>
+
+        <!-- System Status Panel -->
+        <div class="panel">
+            <h2>⚙️ System Status</h2>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Training Active:</span>
+                    <span id="training-active" class="status-value">Unknown</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">WebSocket Connections:</span>
+                    <span id="websocket-connections" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Last Update:</span>
+                    <span id="last-update" class="status-value">Never</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">API Status:</span>
+                    <span id="api-status" class="status-value">Checking...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Display -->
+    <div id="error-banner" class="error-banner hidden">
+        <div class="error-content">
+            <span id="error-message">Connection error</span>
+            <button id="dismiss-error" class="error-dismiss">×</button>
+        </div>
+    </div>
+
+    <!-- Performance Monitor (optional debug info) -->
+    <div id="performance-monitor" class="performance-monitor">
+        <div class="perf-item">
+            <span>Updates/sec:</span>
+            <span id="update-rate">0</span>
+        </div>
+        <div class="perf-item">
+            <span>Latency:</span>
+            <span id="latency">0ms</span>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

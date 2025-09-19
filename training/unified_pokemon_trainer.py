@@ -46,6 +46,14 @@ except ImportError:
     GameStateDetector = None
 
 try:
+    from web_dashboard import create_web_server
+    UNIFIED_WEB_AVAILABLE = True
+except ImportError:
+    create_web_server = None
+    UNIFIED_WEB_AVAILABLE = False
+
+# Legacy web monitor for backward compatibility (deprecated)
+try:
     from core.web_monitor import WebMonitor
 except ImportError:
     WebMonitor = None
@@ -96,6 +104,19 @@ class UnifiedTrainerConfig:
 
 class UnifiedPokemonTrainer:
     """Unified Pokemon trainer using component-based architecture."""
+
+    # Action name mapping for web dashboard
+    ACTION_NAMES = {
+        0: "NONE",       # No action/invalid
+        1: "UP",        # D-pad UP
+        2: "DOWN",      # D-pad DOWN
+        3: "LEFT",      # D-pad LEFT
+        4: "RIGHT",     # D-pad RIGHT
+        5: "A",         # A button
+        6: "B",         # B button
+        7: "START",     # START button
+        8: "SELECT"     # SELECT button
+    }
     
     def __init__(self, config: Union[UnifiedTrainerConfig, Dict[str, Any]]):
         # Handle both config objects and dictionaries for backward compatibility
@@ -112,6 +133,10 @@ class UnifiedPokemonTrainer:
         self.running = False
         self.training_thread = None
         self._shutdown_event = threading.Event()
+
+        # Web monitoring compatibility
+        from collections import deque
+        self.llm_decisions = deque(maxlen=20)  # Store recent LLM decisions for web dashboard
         
         # Initialize components
         self._initialize_components()
@@ -315,17 +340,36 @@ class UnifiedPokemonTrainer:
             except Exception as e:
                 self.logger.warning(f"Data bus integration failed: {e}")
         
-        # Web monitor integration
-        self.web_monitor = None
-        if self.config.enable_web and WebMonitor and not self.config.test_mode:
+        # Web dashboard integration (unified system)
+        self.web_server = None
+        if self.config.enable_web and not self.config.test_mode:
             try:
-                self.web_monitor = WebMonitor(
-                    trainer=self,
-                    port=self.config.web_port,
-                    host=self.config.web_host
-                )
+                if UNIFIED_WEB_AVAILABLE and create_web_server:
+                    # Use new unified web dashboard
+                    self.web_server = create_web_server(
+                        trainer=self,
+                        host=self.config.web_host,
+                        http_port=self.config.web_port,
+                        ws_port=self.config.web_port + 1
+                    )
+                    self.logger.info("🌐 Unified web dashboard initialized")
+                elif WebMonitor:
+                    # Fallback to legacy web monitor (deprecated)
+                    import warnings
+                    warnings.warn("Using deprecated web monitor. Please update to unified web dashboard.", DeprecationWarning)
+                    self.web_monitor = WebMonitor(
+                        trainer=self,
+                        port=self.config.web_port,
+                        host=self.config.web_host
+                    )
+                    self.logger.warning("⚠️  Using deprecated web monitor - please update to unified dashboard")
+                else:
+                    self.logger.error("No web dashboard system available")
             except Exception as e:
-                self.logger.warning(f"Web monitor setup failed: {e}")
+                self.logger.warning(f"Web dashboard setup failed: {e}")
+
+        # Legacy web monitor (for backward compatibility)
+        self.web_monitor = None
         
         # Game state detector
         self.game_state_detector = None
@@ -357,11 +401,20 @@ class UnifiedPokemonTrainer:
                 except Exception as e:
                     self.logger.warning(f"Web monitor update failed: {e}")
             
-            # Start web monitor
-            if self.web_monitor and hasattr(self.web_monitor, 'start'):
+            # Start web dashboard (unified system)
+            if self.web_server:
+                try:
+                    self.web_server.start()
+                    self.logger.info(f"🌐 Unified web dashboard: http://{self.config.web_host}:{self.config.web_port}")
+                    self.logger.info(f"📡 WebSocket streaming: ws://{self.config.web_host}:{self.config.web_port + 1}")
+                except Exception as e:
+                    self.logger.warning(f"Web dashboard start failed: {e}")
+
+            # Start legacy web monitor (deprecated)
+            elif self.web_monitor and hasattr(self.web_monitor, 'start'):
                 try:
                     if self.web_monitor.start():
-                        self.logger.info(f"🌐 Web monitor: http://{self.config.web_host}:{self.config.web_port}")
+                        self.logger.info(f"⚠️  Legacy web monitor: http://{self.config.web_host}:{self.config.web_port}")
                 except Exception as e:
                     self.logger.warning(f"Web monitor start failed: {e}")
             
@@ -578,6 +631,23 @@ class UnifiedPokemonTrainer:
                     confidence=decision_meta.get('confidence', 0.0),
                     success=decision_meta.get('success', True)
                 )
+
+                # Store decision for web dashboard compatibility
+                import time
+                decision_record = {
+                    'action': action,
+                    'action_name': self._get_action_name(action),
+                    'reasoning': decision_meta.get('reasoning', 'LLM decision'),
+                    'confidence': decision_meta.get('confidence', 0.0),
+                    'response_time_ms': decision_meta.get('response_time', 0.0) * 1000,
+                    'timestamp': time.time(),
+                    'game_state': {
+                        'map': game_state.get('player_map', 0),
+                        'position': (game_state.get('player_x', 0), game_state.get('player_y', 0)),
+                        'badges': game_state.get('badges', 0)
+                    }
+                }
+                self.llm_decisions.append(decision_record)
             
             # Record progress if significant
             badges = game_state.get('badges', 0)
@@ -636,10 +706,19 @@ class UnifiedPokemonTrainer:
         if self.screen_capture:
             self.screen_capture.stop_capture()
         
-        # Stop web monitor
+        # Stop web dashboard (unified system)
+        if self.web_server:
+            try:
+                self.web_server.stop()
+                self.logger.info("🌐 Web dashboard stopped")
+            except Exception as e:
+                self.logger.error(f"Web dashboard shutdown error: {e}")
+
+        # Stop legacy web monitor (deprecated)
         if self.web_monitor and hasattr(self.web_monitor, 'stop'):
             try:
                 self.web_monitor.stop()
+                self.logger.info("⚠️  Legacy web monitor stopped")
             except Exception as e:
                 self.logger.error(f"Web monitor shutdown error: {e}")
         
@@ -718,6 +797,10 @@ class UnifiedPokemonTrainer:
         # Real training
         self.start_training()
         return self.get_current_stats()
+
+    def _get_action_name(self, action) -> str:
+        """Convert action number to readable name for web dashboard."""
+        return self.ACTION_NAMES.get(action, f"ACTION_{action}")
 
 
 # Factory functions for backward compatibility

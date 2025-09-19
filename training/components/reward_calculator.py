@@ -192,10 +192,10 @@ class RewardCalculator:
         # Track location visits for stuck detection
         self.location_visit_count[current_location] += 1
         
-        # Small penalty for revisiting same location too often (capped to prevent runaway penalties)
-        if self.location_visit_count[current_location] > 10:
-            # Cap the penalty to a maximum of -0.5 to prevent massive negative rewards
-            visit_penalty = min(0.01 * (self.location_visit_count[current_location] - 10), 0.5)
+        # Small penalty for revisiting same location too often (much more conservative)
+        if self.location_visit_count[current_location] > 30:
+            # Very small penalty, capped at -0.1 maximum
+            visit_penalty = min(0.002 * (self.location_visit_count[current_location] - 30), 0.1)
             reward -= visit_penalty
         
         return reward
@@ -264,25 +264,24 @@ class RewardCalculator:
     def _calculate_penalties(self, current_state: Dict[str, Any], action: int) -> float:
         """Calculate penalties for undesirable behaviors."""
         penalty = 0.0
-        
-        # Time penalty (encourage efficiency)
-        current_time = time.time()
-        if current_time - self.last_reward_time > 1.0:  # No reward for 1 second
-            penalty += self.config.time_penalty
-        
+
+        # Time penalty (encourage efficiency) - REMOVED to prevent massive accumulation
+        # The original logic was flawed as it would continuously apply penalties
+        # while last_reward_time only updated on positive rewards
+
         # Stuck penalty (same location for too long)
         player_map = current_state.get('player_map', 0)
         player_x = current_state.get('player_x', 0)
         player_y = current_state.get('player_y', 0)
         current_location = (player_map, player_x, player_y)
-        
+
         if self.location_visit_count[current_location] > 20:
             penalty += self.config.stuck_penalty
-        
+
         # Invalid action penalty (if action doesn't make sense in context)
         if not self._is_action_valid(current_state, action):
             penalty += self.config.invalid_action_penalty
-        
+
         return penalty
     
     def _is_action_valid(self, current_state: Dict[str, Any], action: int) -> bool:
@@ -296,7 +295,7 @@ class RewardCalculator:
         
         return True
     
-    def _update_tracking(self, 
+    def _update_tracking(self,
                         current_state: Dict[str, Any],
                         reward: float,
                         reward_breakdown: Dict[str, float]) -> None:
@@ -304,7 +303,7 @@ class RewardCalculator:
         # Update totals
         self.total_reward += reward
         self.episode_reward += reward
-        
+
         # Update history
         self.reward_history.append({
             'reward': reward,
@@ -312,13 +311,12 @@ class RewardCalculator:
             'timestamp': time.time(),
             'state': current_state.copy()
         })
-        
+
         # Update previous state
         self.previous_state = current_state.copy()
-        
-        # Update timing
-        if reward > 0:
-            self.last_reward_time = time.time()
+
+        # Update timing - always update, not just on positive rewards
+        self.last_reward_time = time.time()
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get reward calculation statistics.

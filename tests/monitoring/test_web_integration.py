@@ -1,4 +1,8 @@
-"""Integration tests for web functionality of unified monitoring system."""
+"""Integration tests for web functionality of unified monitoring system.
+
+⚠️  DEPRECATED: These tests use the legacy monitoring system.
+Use tests/web_dashboard/ for unified dashboard tests.
+"""
 
 import pytest
 import json
@@ -15,9 +19,8 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from core.web_monitor.monitor import WebMonitor
-from monitoring.components.capture import ScreenCapture
-from core.web_monitor import WebMonitorHandler
+# Skip all tests in this module since it's for legacy system
+pytestmark = pytest.mark.skip(reason="Legacy monitoring system removed - use web_dashboard tests instead")
 
 @pytest.fixture
 def temp_dir():

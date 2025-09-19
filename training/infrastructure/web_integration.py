@@ -31,22 +31,17 @@ class WebIntegrationManager:
             return False
             
         try:
-            from core.web_monitor import WebMonitor
-            self.web_monitor = WebMonitor(
+            from web_dashboard import create_web_server
+            self.web_monitor = create_web_server(
                 trainer=self.trainer,
-                port=self.config.web_port,
-                host=self.config.web_host
+                host=self.config.web_host,
+                http_port=self.config.web_port,
+                ws_port=self.config.web_port + 1
             )
             
             if self.web_monitor.start():
-                self.logger.info(f"Web monitor started at {self.web_monitor.get_url()}")
-                # If PyBoy is already initialized, update the web monitor
-                try:
-                    pyboy_manager = getattr(self.trainer, 'pyboy_manager', None)
-                    if pyboy_manager and pyboy_manager.is_initialized():
-                        self.web_monitor.update_pyboy(pyboy_manager.get_pyboy())
-                except Exception:
-                    pass
+                url = f"http://{self.config.web_host}:{self.config.web_port}"
+                self.logger.info(f"Web monitor started at {url}")
                 return True
             else:
                 self.logger.error("Failed to start web monitor")
@@ -87,7 +82,9 @@ class WebIntegrationManager:
         """Update PyBoy reference in web monitor."""
         if self.web_monitor is not None:
             try:
-                self.web_monitor.update_pyboy(pyboy)
+                # Unified web dashboard doesn't require explicit PyBoy updates
+                # It gets PyBoy instance from the trainer automatically
+                pass
             except Exception as e:
                 self.logger.warning(f"Failed to update PyBoy reference in web monitor: {e}")
     

@@ -1,4 +1,8 @@
-"""Test web server integration."""
+"""Test web server integration.
+
+⚠️  DEPRECATED: These tests use the legacy web monitoring system.
+Use tests/web_dashboard/ for unified dashboard tests.
+"""
 
 import time
 import queue
@@ -7,8 +11,8 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, patch
 
-from training.trainer import TrainingConfig, PokemonTrainer
-from core.web_monitor import WebMonitor
+# Skip all tests in this module since it's for legacy system
+pytestmark = pytest.mark.skip(reason="Legacy monitoring system removed - use web_dashboard tests instead")
 
 # Mock PyBoy for tests
 @pytest.fixture
