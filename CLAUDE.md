@@ -32,8 +32,11 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 
 ### Running Training
 ```bash
-# Main entry point (unified trainer)
-python3 main.py roms/pokemon_crystal.gbc --max-actions 2000
+# Main entry point (unified trainer) - ALWAYS use save state for accurate stats
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 2000
+
+# With LLM integration (recommended)
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 500 --llm-model smollm2:1.7b --llm-interval 10 --enable-web
 
 # Hybrid training example
 python3 examples/run_hybrid_training.py
@@ -41,6 +44,15 @@ python3 examples/run_hybrid_training.py
 # Quick start monitoring
 ./quick_start.sh
 ```
+
+### ⚠️ **CRITICAL: Always Use Save States**
+**Without save state**: Memory addresses read garbage data, causing inflated rewards (1000s of points), false badge detection, and incorrect game state analysis.
+
+**With save state**: Proper game state loaded, realistic rewards (~20-100 points), accurate badge counting, and correct memory reading.
+
+**Save state initialization**: The save state may load the game in a dialogue/menu state. The system automatically sends B button inputs after loading to advance past these states and ensure the game is playable.
+
+**Reward system stability**: The reward calculator includes a capped penalty for location revisits to prevent runaway negative rewards. Extended training sessions should show stable ~-0.5 reward per action when the agent is stuck, not escalating penalties.
 
 ### Testing
 ```bash

@@ -44,8 +44,15 @@ class GameAPI:
         
         # Initialize memory reader if needed
         if not hasattr(self.trainer, 'memory_reader') or self.trainer.memory_reader is None:
-            if hasattr(self.trainer, 'pyboy') and self.trainer.pyboy is not None:
-                self.trainer.memory_reader = PokemonCrystalMemoryReader(self.trainer.pyboy)
+            # Try unified trainer structure first
+            pyboy_instance = None
+            if hasattr(self.trainer, 'emulation_manager') and self.trainer.emulation_manager:
+                pyboy_instance = self.trainer.emulation_manager.get_instance()
+            elif hasattr(self.trainer, 'pyboy') and self.trainer.pyboy is not None:
+                pyboy_instance = self.trainer.pyboy
+
+            if pyboy_instance is not None:
+                self.trainer.memory_reader = PokemonCrystalMemoryReader(pyboy_instance)
             else:
                 return self._make_error_response('PyBoy instance not available')
         

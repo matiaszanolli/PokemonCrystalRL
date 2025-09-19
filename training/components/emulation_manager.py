@@ -81,7 +81,16 @@ class EmulationManager:
                     with open(self.config.save_state_path, 'rb') as f:
                         self.pyboy.load_state(f)
                     self.logger.info(f"Loaded save state: {self.config.save_state_path}")
-                
+
+                    # Send B button to advance past any dialogue/menu after save state load
+                    self.logger.debug("Sending B button to advance past dialogue/menu")
+                    for _ in range(3):
+                        self.pyboy.send_input(5)  # B button
+                        self.pyboy.tick()
+                    for _ in range(3):
+                        self.pyboy.send_input(0)  # Release button
+                        self.pyboy.tick()
+
                 self.logger.info("PyBoy initialization successful")
                 return True
                 

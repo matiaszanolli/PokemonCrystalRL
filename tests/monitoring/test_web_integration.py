@@ -32,10 +32,10 @@ def mock_trainer():
     trainer._start_time = time.time()
     trainer.start_time = property(lambda self: self._start_time)
     trainer.stats = {
-        'actions_taken': 1000,
+        'total_actions': 1000,
         'training_time': 3600,
         'actions_per_second': 2.5,
-        'llm_decision_count': 100,
+        'llm_calls': 100,
         'total_reward': 50.0,
         'player_level': 5,
         'badges_total': 1
@@ -125,12 +125,12 @@ class TestWebIntegration:
         assert response.status_code == 200
         
         data = response.json()
-        assert data["total_actions"] == mock_trainer.stats["actions_taken"]
-        assert data["llm_calls"] == mock_trainer.stats["llm_decision_count"]
+        assert data["total_actions"] == mock_trainer.stats["total_actions"]
+        assert data["llm_calls"] == mock_trainer.stats["llm_calls"]
         assert data["total_reward"] == mock_trainer.stats["total_reward"]
-        
+
         # Update stats
-        mock_trainer.stats["actions_taken"] = 2000
+        mock_trainer.stats["total_actions"] = 2000
         mock_trainer.stats["total_reward"] = 100.0
         
         response = requests.get(f"http://localhost:{web_monitor.port}/api/stats")
@@ -187,8 +187,8 @@ class TestWebIntegration:
         initial_stats = response.json()
         
         # Update trainer stats
-        mock_trainer.stats["actions_taken"] = 3000
-        mock_trainer.stats["llm_decision_count"] = 200
+        mock_trainer.stats["total_actions"] = 3000
+        mock_trainer.stats["llm_calls"] = 200
         mock_trainer.stats["total_reward"] = 150.0
         
         # Stats should update within 1 second

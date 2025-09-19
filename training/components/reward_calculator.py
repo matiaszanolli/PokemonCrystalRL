@@ -192,9 +192,11 @@ class RewardCalculator:
         # Track location visits for stuck detection
         self.location_visit_count[current_location] += 1
         
-        # Small penalty for revisiting same location too often
+        # Small penalty for revisiting same location too often (capped to prevent runaway penalties)
         if self.location_visit_count[current_location] > 10:
-            reward -= 0.01 * (self.location_visit_count[current_location] - 10)
+            # Cap the penalty to a maximum of -0.5 to prevent massive negative rewards
+            visit_penalty = min(0.01 * (self.location_visit_count[current_location] - 10), 0.5)
+            reward -= visit_penalty
         
         return reward
     
