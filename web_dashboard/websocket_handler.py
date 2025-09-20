@@ -106,8 +106,16 @@ class WebSocketHandler:
     async def _send_stats_update(self, websocket):
         """Send stats update to client."""
         try:
-            if self.trainer and hasattr(self.trainer, 'statistics_tracker'):
-                stats = self.trainer.statistics_tracker.get_current_stats()
+            # Try both possible attribute names for compatibility
+            tracker = None
+            if self.trainer:
+                if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
+                    tracker = self.trainer.stats_tracker
+                elif hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
+                    tracker = self.trainer.statistics_tracker
+
+            if tracker:
+                stats = tracker.get_current_stats()
                 message = {
                     'type': 'stats_update',
                     'data': stats,
@@ -142,8 +150,8 @@ class WebSocketHandler:
                 pyboy_instance = self.trainer.pyboy
 
             if pyboy_instance:
-                # Get screen buffer
-                screen_array = pyboy_instance.botsupport_manager().screen().screen_ndarray()
+                # Get screen buffer using the correct PyBoy method
+                screen_array = pyboy_instance.screen.ndarray
 
                 # Convert to PIL Image
                 if screen_array.shape[-1] == 4:  # RGBA
@@ -219,8 +227,16 @@ class WebSocketHandler:
         async def stats_update_task():
             while self.running:
                 try:
-                    if self.trainer and hasattr(self.trainer, 'statistics_tracker') and self.connected_clients:
-                        stats = self.trainer.statistics_tracker.get_current_stats()
+                    # Try both possible attribute names for compatibility
+                    tracker = None
+                    if self.trainer:
+                        if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
+                            tracker = self.trainer.stats_tracker
+                        elif hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
+                            tracker = self.trainer.statistics_tracker
+
+                    if tracker and self.connected_clients:
+                        stats = tracker.get_current_stats()
                         await self.broadcast_update('stats_update', stats)
                     await asyncio.sleep(stats_interval)
                 except Exception as e:

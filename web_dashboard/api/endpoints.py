@@ -167,8 +167,14 @@ class UnifiedApiEndpoints:
 
         try:
             # Get game state from statistics tracker
-            if hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
-                stats = self.trainer.statistics_tracker.get_current_stats()
+            tracker = None
+            if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
+                tracker = self.trainer.stats_tracker
+            elif hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
+                tracker = self.trainer.statistics_tracker
+
+            if tracker:
+                stats = tracker.get_current_stats()
                 return GameStateModel(
                     current_map=stats.get('current_map', 0),
                     player_position={
@@ -191,8 +197,15 @@ class UnifiedApiEndpoints:
             return TrainingStatsModel()
 
         try:
-            if hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
-                stats = self.trainer.statistics_tracker.get_current_stats()
+            # Try both possible attribute names for compatibility
+            tracker = None
+            if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
+                tracker = self.trainer.stats_tracker
+            elif hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
+                tracker = self.trainer.statistics_tracker
+
+            if tracker:
+                stats = tracker.get_current_stats()
                 return TrainingStatsModel(
                     total_actions=stats.get('total_actions', 0),
                     actions_per_second=stats.get('actions_per_second', 0.0),
