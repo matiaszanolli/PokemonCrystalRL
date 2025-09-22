@@ -1,30 +1,81 @@
 """
 Pokemon Crystal RL Monitoring System
 
-This package provides comprehensive monitoring tools:
-- Web interface for real-time training visualization
-- Performance metrics collection and analysis
-- Training data management and streaming
+This package provides a comprehensive monitoring system with both new and legacy APIs:
+
+New Architecture (Recommended):
+- Component-based monitoring system
+- Clear interfaces and protocols
+- Efficient resource usage
+- Type safety and validation
+
+Legacy Support (Deprecated):
+- Original monitoring tools
+- Web interface compatibility
+- Training data management
 - System resource monitoring
 """
 
-from .data_bus import DataBus, DataType, get_data_bus
-from .database import DatabaseManager
-from .unified_monitor import UnifiedMonitor
-from .game_streamer import GameStreamComponent as GameStreamer
-from .monitoring_client import MonitoringClient
-from .stats_collector import StatsCollector
-from .text_logger import TextLogger
-from .trainer_monitor_bridge import TrainerMonitorBridge
-from .web_interface import WebInterface
-from .web_monitor import WebMonitor, MonitorConfig, TrainingState
-# Note: WebServer, TrainingWebServer, TrainingHandler consolidated into core.web_monitor
-from .error_handler import ErrorHandler, ErrorSeverity, ErrorCategory, RecoveryStrategy, ErrorEvent
+# New architecture imports
+from .base import (
+    MonitorComponent,
+    DataPublisher,
+    DataSubscriber,
+    MetricDefinition,
+    ScreenCaptureConfig,
+    MonitoringConfig,
+    BaseMonitor,
+    DataBusProtocol,
+    MonitoringError,
+    ComponentError,
+    DataBusError
+)
+
+from .components.capture import ScreenCapture
+from .components.metrics import MetricsCollector
+from .components.web import WebServer
+
+from .data.bus import DataBus, get_data_bus, DataValidator
+
+# Legacy support (via compatibility layer)
+from .compat import (
+    DatabaseManager,
+    UnifiedMonitor,
+    GameStreamer,
+    MonitoringClient,
+    StatsCollector,
+    TextLogger,
+    TrainerMonitorBridge,
+    WebInterface,
+    ErrorHandler,
+    ErrorSeverity,
+    ErrorCategory,
+    RecoveryStrategy,
+    ErrorEvent
+)
 
 __all__ = [
+    # New architecture
+    'MonitorComponent',
+    'DataPublisher',
+    'DataSubscriber',
+    'DataBusProtocol',
+    'BaseMonitor',
+    'MetricDefinition',
+    'ScreenCaptureConfig',
+    'MonitoringConfig',
+    'ScreenCapture',
+    'MetricsCollector',
+    'WebServer',
     'DataBus',
-    'DataType',
     'get_data_bus',
+    'DataValidator',
+    'DataType',
+    'MonitoringError',
+    'ComponentError',
+    'DataBusError',
+    
+    # Legacy support
     'DatabaseManager',
     'UnifiedMonitor',
     'GameStreamer',
@@ -33,8 +84,6 @@ __all__ = [
     'TextLogger',
     'TrainerMonitorBridge',
     'WebInterface',
-    'WebMonitor',
-    'MonitorConfig',
     'ErrorHandler',
     'ErrorSeverity',
     'ErrorCategory',

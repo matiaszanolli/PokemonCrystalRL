@@ -53,7 +53,17 @@ class DataBus:
         self._queues = {}
         self._active = True
         self._running = True  # Alias for test compatibility
+        # Set up logging
         self._logger = logging.getLogger("data_bus")
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        if not self._logger.handlers:
+            self._logger.addHandler(handler)
+            self._logger.setLevel(logging.ERROR)  # Only show errors by default
         self._logger.debug("DataBus initialized")
         
     def register_component(self, component_id: str, metadata: Dict[str, Any]) -> None:
@@ -150,8 +160,15 @@ class DataBus:
         for subscription in self._subscribers[data_type]:
             try:
                 if subscription['callback']:
-                    # Tests expect callback(data) signature
-                    subscription['callback'](data)
+                    try:
+                        # Always pass data as first argument
+                        if 'data' in data:
+                            callback_data = data['data']
+                        else:
+                            callback_data = data
+                        subscription['callback'](callback_data)
+                    except Exception as e:
+                        self._logger.error(f"Callback error: {e}")
                 elif subscription['queue']:
                     try:
                         subscription['queue'].put_nowait({
@@ -189,6 +206,12 @@ class DataBus:
                 for component_id, info in self._components.items()
             }
             
+    def update_component_heartbeat(self, component_id: str) -> None:
+        """Update the last seen time for a component."""
+        with self._lock:
+            if component_id in self._components:
+                self._components[component_id]['last_seen'] = time.time()
+    
     def shutdown(self) -> None:
         """Shutdown the data bus."""
         self._logger.debug("Starting data bus instance shutdown...")

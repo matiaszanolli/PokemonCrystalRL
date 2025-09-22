@@ -30,7 +30,7 @@ def test_goal_oriented_planning():
     print("\n🎯 Testing Goal-Oriented Planning...")
     
     try:
-        from core.goal_oriented_planner import GoalOrientedPlanner, Goal, GoalPriority
+        from environments.goal_oriented_planner import GoalOrientedPlanner, Goal, GoalPriority
         
         planner = GoalOrientedPlanner()
         
@@ -56,7 +56,7 @@ def test_state_variable_dictionary():
     print("\n📊 Testing State Variable Dictionary...")
     
     try:
-        from core.state.variables import STATE_VARIABLES, ImpactCategory
+        from environments.state.variables import STATE_VARIABLES, ImpactCategory
         
         # Test basic functionality
         summary = STATE_VARIABLES.get_variable_summary()
@@ -86,8 +86,8 @@ def test_decision_validation():
     print("\n🛡️ Testing Decision Validation Layer...")
     
     try:
-        from core.decision_validator import DecisionValidator, ValidationResult, ActionRisk
-        from core.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+        from environments.decision_validator import DecisionValidator, ValidationResult, ActionRisk
+        from environments.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
         
         validator = DecisionValidator()
         
@@ -127,8 +127,8 @@ def test_strategic_integration():
     print("\n🔗 Testing Strategic Integration...")
     
     try:
-        from core.strategic_context_builder import StrategicContextBuilder
-        from core.state.analyzer import GameStateAnalyzer
+        from environments.strategic_context_builder import StrategicContextBuilder
+        from environments.state.analyzer import GameStateAnalyzer
         
         builder = StrategicContextBuilder()
         

@@ -1,8 +1,7 @@
-"""Common test configuration and fixtures."""
+"""Configure pytest for the Pokemon Crystal RL test suite."""
 
 import pytest
-from core.config import TrainingMode
-from trainer.trainer import TrainingConfig
+from training.trainer import TrainingMode, TrainingConfig
 
 @pytest.fixture
 def test_config() -> TrainingConfig:
@@ -10,23 +9,15 @@ def test_config() -> TrainingConfig:
     
     This config:
     - Disables web server
-    - Disables screen capture
-    - Uses SYNCHRONIZED mode for data bus tests
+    - Uses FAST mode for data bus tests
     - Sets a test ROM path
     """
     return TrainingConfig(
-        rom_path='test.gbc',
-        mode=TrainingMode.SYNCHRONIZED,
-        enable_web=False,  # Disable web server in tests
-        capture_screens=False,  # Disable screen capture in tests
-        headless=True,  # Always run headless in tests
-        save_stats=False,  # Don't save stats in tests
-        test_mode=True  # Enable test mode
+        mode=TrainingMode.FAST_MONITORED,
+        max_episodes=10,  # Short tests
+        max_actions=100,  # Short tests
+        test_mode=True  # For test isolation
     )
-
-"""Configure pytest for the Pokemon Crystal RL test suite."""
-
-import pytest
 
 
 def pytest_configure(config):

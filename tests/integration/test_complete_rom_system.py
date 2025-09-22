@@ -15,10 +15,10 @@ import time
 from typing import Dict, List
 
 # Import all our components
-from vision.rom_font_extractor import PokemonCrystalFontExtractor, test_font_extractor
-from vision.enhanced_font_decoder import ROMFontDecoder, test_rom_font_decoder
-from vision.gameboy_color_palette import GameBoyColorPalette, test_gameboy_color_palette
-from vision.vision_processor import UnifiedVisionProcessor as PokemonVisionProcessor, test_vision_processor
+from vision.extractors.rom_font_extractor import PokemonCrystalFontExtractor, test_font_extractor
+from vision.core.font_decoder import ROMFontDecoder, test_rom_font_decoder
+from vision.extractors.gameboy_color_palette import GameBoyColorPalette, test_gameboy_color_palette
+from vision.core.vision_processor import UnifiedVisionProcessor as PokemonVisionProcessor, test_vision_processor
 
 
 def create_test_pokemon_screen() -> np.ndarray:

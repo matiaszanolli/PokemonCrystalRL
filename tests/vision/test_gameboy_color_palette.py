@@ -38,7 +38,7 @@ def timeout(seconds=10):
         return wrapper
     return decorator
 
-from vision.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
+from vision.extractors.gameboy_color_palette import GameBoyColorPalette, GBCPalette, test_gameboy_color_palette
 
 
 class TestGBCPalette(unittest.TestCase):

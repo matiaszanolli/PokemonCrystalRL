@@ -14,8 +14,9 @@ sys.path.insert(0, str(project_root))
 from core.decision_validator import (
     DecisionValidator, ValidationResult, ActionRisk, ValidationDecision
 )
-from core.state.analyzer import (
-    GameStateAnalysis, GamePhase, SituationCriticality, StateVariable
+from environments.state.variables import StateVariable
+from environments.state.analyzer import (
+    GameStateAnalysis, GamePhase, SituationCriticality, AnalysisStateVariable
 )
 
 
@@ -193,7 +194,7 @@ class TestDecisionValidator:
         # Add in_battle state variable if very low health
         state_vars = {}
         if health <= 0.05:
-            state_vars['in_battle'] = StateVariable(
+            state_vars['in_battle'] = AnalysisStateVariable(
                 name='in_battle',
                 type='boolean',
                 current_value=0,  # Not in battle
@@ -221,7 +222,7 @@ class TestDecisionValidator:
 
     def _create_battle_analysis(self):
         """Create battle situation analysis for testing"""
-        battle_state = StateVariable(
+        battle_state = AnalysisStateVariable(
             name='in_battle',
             type='boolean',
             current_value=1,  # In battle

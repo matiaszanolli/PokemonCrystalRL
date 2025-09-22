@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 
-from .game_state_analyzer import GameStateAnalysis, GamePhase, SituationCriticality
-from .state_variable_dictionary import STATE_VARIABLES, ImpactCategory
+from environments.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
+from environments.state.variables import STATE_VARIABLES, ImpactCategory
 
 class ValidationResult(Enum):
     """Result of action validation"""

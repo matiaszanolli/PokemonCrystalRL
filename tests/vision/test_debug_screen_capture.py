@@ -7,7 +7,7 @@ from PIL import Image
 import io
 import base64
 
-from vision.debug_screen_capture import (
+from vision.debug.debug_screen_capture import (
     _test_pyboy_screen_methods, main, PYBOY_AVAILABLE
 )
 
@@ -18,7 +18,7 @@ class TestDebugScreenCapture(unittest.TestCase):
         """Set up test fixtures"""
         self.rom_path = "test_rom.gbc"
         
-    @patch('vision.debug_screen_capture.PyBoy')
+    @patch('vision.debug.debug_screen_capture.PyBoy')
     def test_pyboy_screen_methods_basic(self, mock_pyboy):
         """Test basic functionality of pyboy screen methods"""
         _test_pyboy_screen_methods(self.rom_path)
@@ -32,7 +32,7 @@ class TestPyBoyAvailability(unittest.TestCase):
         """Test that PYBOY_AVAILABLE is a boolean"""
         self.assertIsInstance(PYBOY_AVAILABLE, bool)
     
-    @patch('vision.debug_screen_capture.PyBoy')
+    @patch('vision.debug.debug_screen_capture.PyBoy')
     def test_pyboy_import_success(self, mock_pyboy):
         """Test successful PyBoy import"""
         self.assertIsNotNone(mock_pyboy)
@@ -68,12 +68,12 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         
     def test_pyboy_not_available(self):
         """Test behavior when PyBoy is not available"""
-        with patch('vision.debug_screen_capture.PYBOY_AVAILABLE', False):
+        with patch('vision.debug.debug_screen_capture.PYBOY_AVAILABLE', False):
             result = _test_pyboy_screen_methods(self.rom_path)
             self.assertIsNone(result)
     
-    @patch('vision.debug_screen_capture.PyBoy')
-    @patch('vision.debug_screen_capture.PYBOY_AVAILABLE', True)
+    @patch('vision.debug.debug_screen_capture.PyBoy')
+    @patch('vision.debug.debug_screen_capture.PYBOY_AVAILABLE', True)
     def test_pyboy_initialization(self, mock_pyboy_class):
         """Test PyBoy initialization"""
         mock_pyboy_class.return_value = self.mock_pyboy
@@ -87,8 +87,8 @@ class TestPyBoyScreenMethods(unittest.TestCase):
         self.assertGreaterEqual(self.mock_pyboy.tick.call_count, 10)
         self.mock_pyboy.stop.assert_called_once()
 
-    @patch('vision.debug_screen_capture.PyBoy')
-    @patch('vision.debug_screen_capture.PYBOY_AVAILABLE', True)
+    @patch('vision.debug.debug_screen_capture.PyBoy')
+    @patch('vision.debug.debug_screen_capture.PYBOY_AVAILABLE', True)
     def test_screen_capture_success(self, mock_pyboy_class):
         """Test successful screen capture"""
         mock_pyboy_class.return_value = self.mock_pyboy

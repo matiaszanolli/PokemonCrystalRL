@@ -12,7 +12,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from trainer.hybrid_llm_rl_trainer import create_trainer_from_config
+# HybridLLMRLTrainer archived - example disabled
+# from archive.dead_code.hybrid_llm_rl_trainer import create_trainer_from_config
 
 
 def create_example_config():

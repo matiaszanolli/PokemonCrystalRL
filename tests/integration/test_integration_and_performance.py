@@ -30,9 +30,9 @@ sys.path.insert(0, parent_dir)
 # Import with fallbacks for missing dependencies
 try:
     from vision.vision_processor import DetectedText, VisualContext
-    from core.semantic_context_system import SemanticContextSystem, GameContext
-    from core.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
-    from trainer.choice_recognition_system import ChoiceRecognitionSystem, ChoiceContext, ChoiceType
+    from environments.semantic_context_system import SemanticContextSystem, GameContext
+    from environments.dialogue_state_machine import DialogueStateMachine, DialogueState, NPCType
+    from training.choice_recognition_system import ChoiceRecognitionSystem, ChoiceContext, ChoiceType
 except ImportError:
     # Skip these tests if dependencies aren't available
     pytest.skip("Missing dependencies for integration and performance tests", allow_module_level=True)

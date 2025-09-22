@@ -204,7 +204,7 @@ python3 llm_trainer.py roms/pokemon_crystal.gbc \
 - **Unified Web Monitoring**: Built-in dashboard eliminates separate server setup
 - **Enhanced LLM Intelligence**: Advanced parsing, stuck detection, strategic context
 - **Simplified Usage**: One command for complete training with all features
-- **Reduced Complexity**: Eliminated `fix_web_ui.py` and `smart_llm_trainer.py` redundancy
+- **Reduced Complexity**: Eliminated redundant training implementations
 
 ### **✅ Fixed Reward System**
 - **Bug Fix**: Eliminated incorrect health penalties in early game
@@ -430,7 +430,7 @@ This project is for **educational and research purposes**. You must own a legal 
 - **🎯 Smart Stuck Detection**: Automatic pattern breaking and recovery
 - **📊 Strategic Context Display**: Live threats, opportunities, and phase information
 - **📈 Comprehensive Logging**: Enhanced decision logs with strategic analysis
-- **🗑️ Code Cleanup**: Removed redundant `fix_web_ui.py` and `smart_llm_trainer.py`
+- **🗑️ Code Cleanup**: Removed redundant training implementations
 - **✅ Unified Testing**: Single command for complete training experience
 
 ### **v1.x - Previous Features**

@@ -24,7 +24,7 @@ from shared_types import (
 )
 
 # Import the main vision processor from the vision module
-from vision.vision_processor import UnifiedVisionProcessor
+from vision.core.vision_processor import UnifiedVisionProcessor
 
 # Re-export the main classes for backwards compatibility
 __all__ = ['DetectedText', 'VisualContext', 'UnifiedVisionProcessor']

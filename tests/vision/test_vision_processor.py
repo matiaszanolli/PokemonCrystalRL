@@ -12,7 +12,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from vision.vision_processor import UnifiedVisionProcessor, test_vision_processor
+from vision.core.vision_processor import UnifiedVisionProcessor, test_vision_processor
 from shared_types import VisualContext, DetectedText, GameUIElement
 
 
@@ -70,13 +70,13 @@ class TestUnifiedVisionProcessorInitialization(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         # Mock the font decoder to avoid import issues
-        with patch('vision.vision_processor.ROMFontDecoder'):
+        with patch('vision.core.vision_processor.ROMFontDecoder'):
             self.processor = UnifiedVisionProcessor()
         
     def test_initialization_without_font_decoder(self):
         """Test initialization without font decoder"""
         # Mock that font decoder raises an exception during initialization
-        with patch('vision.vision_processor.ROMFontDecoder') as mock_font:
+        with patch('vision.core.vision_processor.ROMFontDecoder') as mock_font:
             mock_font.side_effect = Exception("mock initialization error")
             processor = UnifiedVisionProcessor()
             self.assertIsNone(processor.font_decoder)
@@ -89,7 +89,7 @@ class TestUnifiedVisionProcessorInitialization(unittest.TestCase):
         mock_decoder_instance = Mock()
         mock_decoder_class.return_value = mock_decoder_instance
         
-        with patch('vision.vision_processor.ROMFontDecoder', mock_decoder_class):
+        with patch('vision.core.vision_processor.ROMFontDecoder', mock_decoder_class):
             processor = UnifiedVisionProcessor()
             self.assertEqual(processor.font_decoder, mock_decoder_instance)
             
@@ -112,7 +112,7 @@ class TestScreenshotProcessing(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
         
     def test_process_empty_screenshot(self):
@@ -166,7 +166,7 @@ class TestScreenshotUpscaling(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
         
     def test_upscale_valid_screenshot(self):
@@ -203,7 +203,7 @@ class TestTextDetection(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
         # Create test image with different regions
@@ -266,7 +266,7 @@ class TestUIElementDetection(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_detect_ui_elements_empty_image(self):
@@ -351,7 +351,7 @@ class TestScreenClassification(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_classify_screen_type_intro(self):
@@ -426,7 +426,7 @@ class TestScreenContextDetection(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_is_indoor_environment_strong_indicators(self):
@@ -525,7 +525,7 @@ class TestColorAnalysis(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_get_dominant_colors_valid_image(self):
@@ -576,7 +576,7 @@ class TestGamePhaseDetermination(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_determine_game_phase_intro(self):
@@ -622,7 +622,7 @@ class TestVisualSummaryGeneration(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_generate_visual_summary_complete(self):
@@ -678,7 +678,7 @@ class TestScreenshotEncoding(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_encode_screenshot_for_llm(self):
@@ -699,7 +699,7 @@ class TestROMFontDecoding(unittest.TestCase):
         mock_decoder = Mock()
         mock_decoder.decode_text_region.return_value = "DECODED TEXT"
         
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
         
         self.processor.font_decoder = mock_decoder
@@ -748,7 +748,7 @@ class TestLegacyMethods(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_guess_dense_text_content(self):
@@ -789,10 +789,10 @@ class TestErrorHandling(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
-    @patch('vision.vision_processor.UnifiedVisionProcessor._upscale_screenshot')
+    @patch('vision.core.vision_processor.upscale_screenshot')
     def test_upscaling_error_handling(self, mock_upscale):
         """Test error handling in upscaling"""
         mock_upscale.side_effect = Exception("Mock upscaling error")
@@ -839,7 +839,7 @@ class TestIntegrationScenarios(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        with patch('vision.vision_processor.ROMFontDecoder', None):
+        with patch('vision.core.vision_processor.ROMFontDecoder', None):
             self.processor = UnifiedVisionProcessor()
             
     def test_complete_battle_scenario(self):

@@ -11,32 +11,52 @@ logger = logging.getLogger(__name__)
 
 class PokemonCrystalMemoryReader:
     """Read Pokemon Crystal game state from PyBoy memory"""
-    
-    MEMORY_ADDRESSES = {
-        'PARTY_COUNT': 0xDCDE,
-        'PLAYER_MAP': 0xDCE6,
-        'PLAYER_X': 0xDCE7,
-        'PLAYER_Y': 0xDCE8, 
-        'MONEY': [0xD844, 0xD845, 0xD846],  # 3-byte BCD
-        'BADGES': 0xD857,
-        'IN_BATTLE': 0xD062,
-        'PLAYER_LEVEL': 0xDD2F,
-        'HP_CURRENT': [0xDD2E, 0xDD2F],  # 2-byte
-        'HP_MAX': [0xDD30, 0xDD31],      # 2-byte
-        'WRAM_BANK': 0xFF70,  # Current WRAM bank
-        'STEP_COUNTER': [0xD4B0, 0xD4B1],  # 2-byte step counter
-        'FACING_DIRECTION': 0xDCE9,
-        'MAP_GROUP': 0xDCE5,
-        'TIME_HOURS': 0xD4B2,
-        'TIME_MINUTES': 0xD4B3,
-        'PLAYER_NAME': list(range(0xD47D, 0xD487)),  # Player name (10 bytes)
-    }
-    
+
     def __init__(self, pyboy):
         self.pyboy = pyboy
         self.last_read_time = 0
         self.cached_state = {}
         self.cache_duration = 0.1  # Cache for 100ms to avoid excessive reads
+
+        # Use verified addresses from config
+        try:
+            from config.memory_addresses import MEMORY_ADDRESSES
+            self.MEMORY_ADDRESSES = {
+                'PARTY_COUNT': MEMORY_ADDRESSES.get('party_count', 0xD164),
+                'PLAYER_MAP': MEMORY_ADDRESSES.get('player_map', 0xDCBA),
+                'PLAYER_X': MEMORY_ADDRESSES.get('player_x', 0xDCB8),
+                'PLAYER_Y': MEMORY_ADDRESSES.get('player_y', 0xDCB9),
+                'MONEY': [MEMORY_ADDRESSES.get('money_low', 0xD347),
+                         MEMORY_ADDRESSES.get('money_mid', 0xD348),
+                         MEMORY_ADDRESSES.get('money_high', 0xD349)],
+                'BADGES': MEMORY_ADDRESSES.get('badges', 0xD359),
+                'IN_BATTLE': MEMORY_ADDRESSES.get('in_battle', 0xD057),
+                'PLAYER_LEVEL': MEMORY_ADDRESSES.get('player_level', 0xD177),
+                'HP_CURRENT': [MEMORY_ADDRESSES.get('player_hp', 0xD173),
+                              MEMORY_ADDRESSES.get('player_hp_high', 0xD174)],
+                'HP_MAX': [MEMORY_ADDRESSES.get('player_max_hp', 0xD175),
+                          MEMORY_ADDRESSES.get('player_max_hp_high', 0xD176)],
+                'FACING_DIRECTION': MEMORY_ADDRESSES.get('player_direction', 0xDCBB),
+                'STEP_COUNTER': MEMORY_ADDRESSES.get('step_counter', 0xD164),
+                'TIME_HOURS': MEMORY_ADDRESSES.get('game_time_hours', 0xD3E1),
+            }
+        except ImportError:
+            # Fallback to original addresses if config not available
+            self.MEMORY_ADDRESSES = {
+                'PARTY_COUNT': 0xD164,
+                'PLAYER_MAP': 0xDCBA,
+                'PLAYER_X': 0xDCB8,
+                'PLAYER_Y': 0xDCB9,
+                'MONEY': [0xD347, 0xD348, 0xD349],  # 3-byte little-endian
+                'BADGES': 0xD359,
+                'IN_BATTLE': 0xD057,
+                'PLAYER_LEVEL': 0xD177,
+                'HP_CURRENT': [0xD173, 0xD174],  # 2-byte little-endian
+                'HP_MAX': [0xD175, 0xD176],      # 2-byte little-endian
+                'FACING_DIRECTION': 0xDCBB,
+                'STEP_COUNTER': 0xD164,
+                'TIME_HOURS': 0xD3E1,
+            }
         
     def read_game_state(self):
         """Read complete game state from memory"""
@@ -56,9 +76,7 @@ class PokemonCrystalMemoryReader:
                 try:
                     if isinstance(addr, list):
                         if name == 'MONEY':
-                            state[name] = self._read_bcd_money(addr)
-                        elif name == 'PLAYER_NAME':
-                            state[name] = self._read_player_name(addr)
+                            state[name] = self._read_multi_byte(addr)  # Use little-endian for money
                         else:
                             state[name] = self._read_multi_byte(addr)
                     else:
