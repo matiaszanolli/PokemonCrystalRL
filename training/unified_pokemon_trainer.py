@@ -473,29 +473,29 @@ class UnifiedPokemonTrainer:
         """Get current game state from emulation."""
         if self.config.test_mode or not self.emulation_manager:
             return {'test_mode': True, 'timestamp': time.time()}
-        
+
         try:
             pyboy = self.emulation_manager.get_instance()
             if not pyboy:
                 return {}
-            
-            # Try to get memory state
+
+            # Use the proper build_observation function which handles all memory reading correctly
             try:
-                from config.memory_addresses import MEMORY_ADDRESSES
-                memory = pyboy.memory
-                
-                return {
-                    'party_count': memory[MEMORY_ADDRESSES.get('party_count', 0)],
-                    'player_map': memory[MEMORY_ADDRESSES.get('player_map', 0)],
-                    'player_x': memory[MEMORY_ADDRESSES.get('player_x', 0)],
-                    'player_y': memory[MEMORY_ADDRESSES.get('player_y', 0)],
-                    'badges': bin(memory[MEMORY_ADDRESSES.get('badges', 0)]).count('1'),
-                    'in_battle': memory[MEMORY_ADDRESSES.get('in_battle', 0)],
-                    'frame_count': pyboy.frame_count
-                }
+                from utils.memory_reader import build_observation
+
+                # Get complete game state observation
+                game_state = build_observation(pyboy.memory)
+
+                # Add frame count for timing
+                game_state['frame_count'] = pyboy.frame_count
+
+                return game_state
+
             except ImportError:
+                # Fallback if build_observation is not available
+                self.logger.warning("build_observation not available, using fallback")
                 return {'frame_count': pyboy.frame_count, 'timestamp': time.time()}
-                
+
         except Exception as e:
             self.logger.debug(f"Failed to get game state: {e}")
             return {}
@@ -649,11 +649,19 @@ class UnifiedPokemonTrainer:
                 }
                 self.llm_decisions.append(decision_record)
             
-            # Record progress if significant
-            badges = game_state.get('badges', 0)
+            # Record progress - always track position, money, badges, and level
+            badges = game_state.get('badges_count', game_state.get('badges', 0))
             level = game_state.get('player_level', 0)
-            if badges > 0 or level > 0:
-                self.stats_tracker.record_progress(badges=badges, level=level)
+            money = game_state.get('money', 0)
+            party_count = game_state.get('party_count', 0)
+
+            # Always record progress to keep tracking updated
+            self.stats_tracker.record_progress(
+                badges=badges,
+                level=level,
+                money=money,
+                party_count=party_count
+            )
                 
         except Exception as e:
             self.logger.debug(f"Failed to record training step: {e}")

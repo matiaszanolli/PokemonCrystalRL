@@ -111,10 +111,12 @@ ollama pull smollm2:1.7b
 - Memory mapping system in `core/memory_map.py` provides derived calculations
 
 ### Web Monitoring
-- Integrated web dashboard at http://localhost:8080
-- Real-time screen capture and LLM decision tracking
+- Integrated web dashboard at http://localhost:8080 (or custom port with --web-port)
+- **Real-time live game screen streaming** at 12fps capture, 30fps frontend display
+- LLM decision tracking with reasoning and confidence scores
 - Performance metrics and reward breakdown
-- Located in `core/web_monitor/`
+- Located in `web_dashboard/` with unified server architecture
+- **Fixed Issues**: Action execution pipeline, screen streaming, training status detection
 
 ### State Detection
 - Multi-metric screen analysis (overworld, battle, dialogue, menu)
@@ -192,3 +194,58 @@ Currently on `project-wide-refactoring` branch with ongoing improvements. Main b
 - Memory corruption protection and validation systems are in place
 - Web monitoring is integrated directly into training systems
 - Hybrid training combines multiple AI approaches
+
+## Web Dashboard Troubleshooting
+
+### Recent Critical Fixes (September 2024)
+
+**✅ LLM Action Execution Bug (CRITICAL)**
+- **Issue**: LLM decisions not executing - game character stuck at (0,0) despite LLM making decisions
+- **Root Cause**: Action string to integer conversion bug in `training/components/llm_decision_engine.py:192-206`
+- **Fix**: Added proper action mapping dictionary for "up"→1, "down"→2, etc.
+- **Files Modified**: `/training/components/llm_decision_engine.py`
+
+**✅ Live Game Screen Streaming**
+- **Issue**: Game screen not displaying in web dashboard
+- **Root Cause**: Screen capture only triggered by WebSocket connections, HTTP API serving stale/empty data
+- **Fix**: Added `update_screen_for_http()` method called on every `/api/screen` request
+- **Files Modified**: `/web_dashboard/websocket_handler.py`, `/web_dashboard/server.py`
+- **Performance**: 12fps capture, 30fps frontend polling for smooth streaming
+
+**✅ Training Status Detection**
+- **Issue**: "Training Active" showing "No" during active training
+- **Root Cause**: Inadequate training status detection logic
+- **Fix**: Enhanced detection to infer from statistics tracker activity
+- **Files Modified**: `/web_dashboard/api/endpoints.py:333-341`
+
+**✅ Memory Debug Panel**
+- **Issue**: "Memory reading failed" when PyBoy instance accessible
+- **Root Cause**: Missing fallback to statistics tracker data
+- **Fix**: Added comprehensive fallback chain for memory debug data
+- **Files Modified**: `/web_dashboard/api/endpoints.py:241-300`
+
+**✅ Additional Improvements**
+- Favicon.ico handler to prevent broken pipe errors
+- Enhanced CORS support and error handling
+- Framerate optimization from 10fps to 12fps
+- Updated web dashboard file structure documentation
+
+### Common Issues and Solutions
+
+**Issue**: Game screen shows placeholder image
+- **Check**: PyBoy emulator initialization in logs
+- **Check**: Screen capture manager status
+- **Solution**: Restart training with `--enable-web` flag
+
+**Issue**: LLM decisions not affecting game
+- **Check**: Action execution logs in training output
+- **Check**: LLM decision engine initialization
+- **Solution**: Verify Ollama service running and model available
+
+**Issue**: "Training Active" shows incorrect status
+- **Check**: Statistics tracker activity in `/api/dashboard` response
+- **Solution**: Status is inferred from action count activity
+
+**Issue**: Memory debug shows empty data
+- **Check**: PyBoy instance accessibility and save state loading
+- **Solution**: Ensure save state file exists and loads properly
