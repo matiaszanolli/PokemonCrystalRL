@@ -68,12 +68,26 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
             elif path == '/health':
                 self._serve_health()
 
+            # Favicon - return empty response to prevent errors
+            elif path == '/favicon.ico':
+                self.send_response(204)  # No Content
+                self.end_headers()
+
             else:
                 self.send_error(404, "Endpoint not found")
 
+        except BrokenPipeError:
+            # Client disconnected, don't log as error
+            logger.debug("Client disconnected (broken pipe)")
+            return
         except Exception as e:
             logger.error(f"GET request error: {e}")
-            self.send_error(500, f"Internal server error: {str(e)}")
+            try:
+                self.send_error(500, f"Internal server error: {str(e)}")
+            except BrokenPipeError:
+                # Client disconnected while sending error response
+                logger.debug("Client disconnected while sending error response")
+                return
 
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
@@ -118,15 +132,21 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
     def _serve_screen(self):
         """Serve current game screen capture."""
         try:
-            if self.websocket_handler and hasattr(self.websocket_handler, 'get_latest_screen'):
-                screen_data = self.websocket_handler.get_latest_screen()
-                if screen_data:
-                    self.send_response(200)
-                    self.send_header('Content-type', 'image/png')
-                    self._set_cors_headers()
-                    self.end_headers()
-                    self.wfile.write(screen_data)
-                    return
+            if self.websocket_handler:
+                # Update screen data first
+                if hasattr(self.websocket_handler, 'update_screen_for_http'):
+                    self.websocket_handler.update_screen_for_http()
+
+                # Get the latest screen data
+                if hasattr(self.websocket_handler, 'get_latest_screen'):
+                    screen_data = self.websocket_handler.get_latest_screen()
+                    if screen_data:
+                        self.send_response(200)
+                        self.send_header('Content-type', 'image/png')
+                        self._set_cors_headers()
+                        self.end_headers()
+                        self.wfile.write(screen_data)
+                        return
 
             # Fallback: return placeholder image
             self._serve_placeholder_image()

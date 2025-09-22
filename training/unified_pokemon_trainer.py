@@ -89,7 +89,7 @@ class UnifiedTrainerConfig:
     
     # Screen capture
     capture_screens: bool = True
-    capture_fps: int = 10
+    capture_fps: int = 12
     screen_resize: tuple = (320, 288)
     
     # Training settings

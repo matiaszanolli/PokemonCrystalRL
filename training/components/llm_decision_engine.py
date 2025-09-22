@@ -177,9 +177,30 @@ class LLMDecisionEngine:
             recent_actions
         )
 
-        # Convert action string to integer (1-8)
+        # Convert action string to PyBoy action code (1-8)
+        action_map = {
+            'up': 1,
+            'down': 2,
+            'left': 3,
+            'right': 4,
+            'a': 5,
+            'b': 6,
+            'start': 7,
+            'select': 8
+        }
+
         try:
-            action = int(action_str) if action_str.isdigit() else 1
+            # Try direct mapping first
+            action = action_map.get(action_str.lower(), None)
+            if action is None:
+                # If it's a numeric string, convert it
+                if action_str.isdigit():
+                    action = int(action_str)
+                    # Validate range
+                    if not (1 <= action <= 8):
+                        action = 1
+                else:
+                    action = 1  # Default to UP if unknown
         except (ValueError, AttributeError):
             action = 1  # Default action
 

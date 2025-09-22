@@ -175,16 +175,33 @@ class UnifiedApiEndpoints:
 
             if tracker:
                 stats = tracker.get_current_stats()
+                # Extract position properly
+                pos = stats.get('player_position', {})
+                if isinstance(pos, dict):
+                    position = {"x": pos.get('x', 0), "y": pos.get('y', 0)}
+                else:
+                    position = {"x": 0, "y": 0}
+
+                # Try to get map name/ID - check different possible keys
+                current_map = (
+                    stats.get('current_map') or
+                    stats.get('map_id') or
+                    stats.get('map') or
+                    stats.get('location') or
+                    0
+                )
+
                 return GameStateModel(
-                    current_map=stats.get('current_map', 0),
-                    player_position={
-                        "x": stats.get('player_position', {}).get('x', 0),
-                        "y": stats.get('player_position', {}).get('y', 0)
-                    },
+                    current_map=current_map,
+                    player_position=position,
                     money=stats.get('money', 0),
                     badges_earned=stats.get('badges', 0),
                     party_count=stats.get('party_count', 0),
-                    player_level=stats.get('level', 0)
+                    player_level=stats.get('level', 0),
+                    hp_current=stats.get('hp_current', 0),
+                    hp_max=stats.get('hp_max', 0),
+                    in_battle=stats.get('in_battle', False),
+                    facing_direction=stats.get('facing_direction', 0)
                 )
         except Exception as e:
             self.logger.warning(f"Could not get game state from statistics: {e}")
@@ -227,16 +244,36 @@ class UnifiedApiEndpoints:
             return MemoryDebugModel()
 
         try:
-            # Try to get PyBoy instance
+            # Try to get PyBoy instance - check multiple possible attribute paths
             pyboy_instance = None
+            memory_reader = None
+
+            # Check different trainer implementations
             if hasattr(self.trainer, 'emulation_manager') and self.trainer.emulation_manager:
-                pyboy_instance = self.trainer.emulation_manager.get_instance()
+                if hasattr(self.trainer.emulation_manager, 'get_instance'):
+                    pyboy_instance = self.trainer.emulation_manager.get_instance()
+                elif hasattr(self.trainer.emulation_manager, 'pyboy'):
+                    pyboy_instance = self.trainer.emulation_manager.pyboy
             elif hasattr(self.trainer, 'pyboy') and self.trainer.pyboy:
                 pyboy_instance = self.trainer.pyboy
 
-            if pyboy_instance and hasattr(self.trainer, 'memory_reader') and self.trainer.memory_reader:
-                memory_state = self.trainer.memory_reader.read_game_state()
-                debug_info = self.trainer.memory_reader.get_debug_info()
+            # Check for memory reader
+            if hasattr(self.trainer, 'memory_reader') and self.trainer.memory_reader:
+                memory_reader = self.trainer.memory_reader
+            elif hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
+                # Try to get memory state from stats tracker
+                stats = self.trainer.stats_tracker.get_current_stats()
+                if stats and len(stats) > 0:
+                    return MemoryDebugModel(
+                        memory_addresses=stats,
+                        memory_read_success=True,
+                        pyboy_available=bool(pyboy_instance),
+                        cache_info={"source": "statistics_tracker"}
+                    )
+
+            if pyboy_instance and memory_reader:
+                memory_state = memory_reader.read_game_state()
+                debug_info = memory_reader.get_debug_info() if hasattr(memory_reader, 'get_debug_info') else {}
 
                 return MemoryDebugModel(
                     memory_addresses=memory_state,
@@ -244,12 +281,22 @@ class UnifiedApiEndpoints:
                     pyboy_available=True,
                     cache_info=debug_info
                 )
+            elif pyboy_instance:
+                # At least we have PyBoy, even if no memory reader
+                return MemoryDebugModel(
+                    memory_addresses={"pyboy_status": "available"},
+                    memory_read_success=True,
+                    pyboy_available=True,
+                    cache_info={"note": "PyBoy available but no memory reader"}
+                )
+
         except Exception as e:
             self.logger.warning(f"Could not get memory debug data: {e}")
 
         return MemoryDebugModel(
             memory_read_success=False,
-            pyboy_available=False
+            pyboy_available=False,
+            cache_info={"error": "No PyBoy instance or memory reader found"}
         )
 
     def _get_recent_llm_decisions(self) -> List[LLMDecisionModel]:
@@ -283,11 +330,21 @@ class UnifiedApiEndpoints:
 
         try:
             if self.trainer:
-                training_active = hasattr(self.trainer, 'training_active') and self.trainer.training_active
+                # Check multiple ways to determine if training is active
+                training_active = (
+                    (hasattr(self.trainer, 'training_active') and self.trainer.training_active) or
+                    # Infer from statistics tracker activity
+                    (hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker and
+                     self.trainer.stats_tracker.get_current_stats().get('total_actions', 0) > 0) or
+                    (hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker and
+                     self.trainer.statistics_tracker.get_current_stats().get('total_actions', 0) > 0)
+                )
 
-            # Check for web monitor
+            # Check for web monitor - try multiple attribute names
             if hasattr(self.trainer, 'web_monitor') and self.trainer.web_monitor:
                 websocket_connections = getattr(self.trainer.web_monitor, 'active_connections', 0)
+            elif hasattr(self.trainer, 'websocket_handler') and self.trainer.websocket_handler:
+                websocket_connections = getattr(self.trainer.websocket_handler, 'connection_count', 0)
 
         except Exception as e:
             self.logger.warning(f"Could not get system status: {e}")

@@ -178,6 +178,13 @@ class WebSocketHandler:
 
         return None
 
+    def update_screen_for_http(self):
+        """Update screen data for HTTP API endpoint (called externally)."""
+        try:
+            self._get_current_screen()
+        except Exception as e:
+            logger.error(f"Error updating screen for HTTP: {e}")
+
     def get_latest_screen(self) -> Optional[bytes]:
         """Get latest screen data for HTTP endpoint."""
         return self.latest_screen_data

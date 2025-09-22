@@ -66,6 +66,9 @@ class PokemonDashboard {
         // Start performance monitoring
         this.startPerformanceMonitoring();
 
+        // Start periodic screen updates (fallback for WebSocket)
+        this.startScreenUpdates();
+
         console.log('✅ Dashboard initialized successfully');
     }
 
@@ -455,6 +458,43 @@ class PokemonDashboard {
         setInterval(() => {
             this.updatePerformanceDisplay();
         }, 1000);
+    }
+
+    /**
+     * Start periodic screen updates (fallback for WebSocket)
+     */
+    startScreenUpdates() {
+        const updateScreen = async () => {
+            try {
+                // Only update if WebSocket isn't providing screen updates
+                const response = await fetch('/api/screen');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const imageUrl = URL.createObjectURL(blob);
+                    const dataUrl = await this.blobToDataUrl(blob);
+                    this.updateGameScreen(dataUrl);
+                }
+            } catch (error) {
+                console.debug('Screen update error:', error);
+            }
+        };
+
+        // Update screen every 33ms (30fps) for smooth local streaming
+        setInterval(updateScreen, 33);
+
+        // Initial update
+        updateScreen();
+    }
+
+    /**
+     * Convert blob to data URL
+     */
+    async blobToDataUrl(blob) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
     }
 
     /**
