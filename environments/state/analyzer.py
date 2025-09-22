@@ -13,6 +13,7 @@ import numpy as np
 
 class GamePhase(Enum):
     """Different phases of the Pokemon Crystal game"""
+    TUTORIAL = "tutorial"  # Initial tutorial phase
     INTRO = "intro"
     EARLY_GAME = "early_game"  # No Pokemon yet
     STARTER_PHASE = "starter_phase"  # Getting first Pokemon

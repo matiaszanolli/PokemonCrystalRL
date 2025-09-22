@@ -61,8 +61,6 @@ class LLMAgent(BaseAgent):
         self.use_game_intelligence = config.get('use_game_intelligence', True)
         self.use_experience_memory = config.get('use_experience_memory', True)
         self.use_strategic_context = config.get('use_strategic_context', True)
-        self.model_name = model_name
-        self.base_url = base_url
         self.decision_history = []
         self.last_decision_time = 0
         
@@ -134,8 +132,15 @@ class LLMAgent(BaseAgent):
             if response.status_code == 200:
                 result = response.json()
                 action = self._parse_llm_response(result.get('response', ''))
-                reasoning = result.get('response', '').strip()
-                
+                full_response = result.get('response', '').strip()
+
+                # Extract reasoning (everything after the first line if it starts with ACTION:)
+                if full_response.startswith('ACTION:'):
+                    lines = full_response.split('\n', 1)
+                    reasoning = lines[1].strip() if len(lines) > 1 else ''
+                else:
+                    reasoning = full_response
+
                 # Track decision
                 self.decision_history.append({
                     'timestamp': time.time(),
@@ -143,7 +148,7 @@ class LLMAgent(BaseAgent):
                     'reasoning': reasoning,
                     'game_state': game_state.copy()
                 })
-                
+
                 return action, reasoning
             else:
                 return self._fallback_decision(game_state), "LLM request failed"
@@ -269,8 +274,8 @@ STRATEGIC ANALYSIS:
 - Phase: {strategic_context.phase.name}
 - Criticality: {strategic_context.criticality.value}/5
 - Progress: {strategic_context.progression_score}%
-- Threats: {', '.join(strategic_context.immediate_threats) if strategic_context.immediate_threats else 'None'}
-- Opportunities: {', '.join(strategic_context.opportunities) if strategic_context.opportunities else 'None'}"""
+- Threats: {', '.join(strategic_context.immediate_threats) if strategic_context.immediate_threats and hasattr(strategic_context.immediate_threats, '__iter__') and not isinstance(strategic_context.immediate_threats, str) else 'None'}
+- Opportunities: {', '.join(strategic_context.opportunities) if strategic_context.opportunities and hasattr(strategic_context.opportunities, '__iter__') and not isinstance(strategic_context.opportunities, str) else 'None'}"""
 
         # Add learned experience if available
         experience_text = ""
@@ -396,9 +401,25 @@ Your choice:"""
                         return action
         
         # Look for any action word or synonym in the response
+        # First pass: exact word matches, prioritized by specificity (longer words first)
+        words = response_lower.split()
+        matched_actions = []
+
+        for word in words:
+            clean_word = word.strip('.,!?()[]{}').lower()
+            for action, synonyms in action_mappings.items():
+                if clean_word in synonyms:
+                    matched_actions.append((clean_word, action))
+
+        # Sort by word length (longer = more specific) and return the most specific match
+        if matched_actions:
+            matched_actions.sort(key=lambda x: len(x[0]), reverse=True)
+            return matched_actions[0][1]
+
+        # Second pass: substring matches for multi-word synonyms only
         for action, synonyms in action_mappings.items():
             for synonym in synonyms:
-                if synonym in response_lower:
+                if len(synonym) > 1 and synonym in response_lower:
                     return action
         
         # Fallback to 'a' if nothing found

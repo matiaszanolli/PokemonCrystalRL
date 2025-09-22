@@ -210,16 +210,21 @@ class DQNAgent:
     def get_action(self, game_state: Dict, screen_analysis: Dict, training: bool = True) -> Tuple[str, float]:
         """Get action using epsilon-greedy policy"""
         state_tensor = self.state_to_tensor(game_state, screen_analysis)
-        
+
         # Epsilon-greedy action selection
         if training and random.random() < self.epsilon:
             action_idx = random.randrange(self.action_size)
             q_value = 0.0  # Random action has no meaningful Q-value
         else:
+            # Set to eval mode for consistent inference
+            self.q_network.eval()
             with torch.no_grad():
                 q_values = self.q_network(state_tensor)
                 action_idx = q_values.max(1)[1].item()
                 q_value = q_values.max(1)[0].item()
+            # Set back to train mode if training
+            if training:
+                self.q_network.train()
         
         # Decay epsilon
         if training:
@@ -230,11 +235,13 @@ class DQNAgent:
     def get_action_values(self, game_state: Dict, screen_analysis: Dict) -> Dict[str, float]:
         """Get Q-values for all actions"""
         state_tensor = self.state_to_tensor(game_state, screen_analysis)
-        
+
+        # Set to eval mode for consistent inference
+        self.q_network.eval()
         with torch.no_grad():
             q_values = self.q_network(state_tensor).cpu().numpy().flatten()
-        
-        return {action: q_value for action, q_value in zip(self.actions, q_values)}
+
+        return {action: float(q_value) for action, q_value in zip(self.actions, q_values)}
     
     def store_experience(self, state: Dict, screen_analysis: Dict, action: str, 
                         reward: float, next_state: Dict, next_screen_analysis: Dict, done: bool):

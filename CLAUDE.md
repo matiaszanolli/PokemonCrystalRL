@@ -13,6 +13,8 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 - **`examples/run_hybrid_training.py`** - Hybrid LLM-RL training example
 - **`quick_start.sh`** - Quick start script for monitoring system
 
+⚠️ **IMPORTANT**: `llm_trainer.py` is deprecated and shows a deprecation warning. Always use `main.py` instead.
+
 ### Key Components
 - **`core/`** - Core systems (memory mapping, web monitoring, game intelligence, reward calculation)
 - **`trainer/`** - Training systems and LLM integration
@@ -74,12 +76,21 @@ python -m pytest -m "web_monitoring" -v
 # Install dependencies
 pip install -r requirements.txt
 
-# Install for development
+# Install for development (uses setup.py)
 pip install -e .
 
 # Code formatting and linting
 black .
 flake8
+
+# Run single test file
+python -m pytest tests/core/test_specific_file.py -v
+
+# Run specific test method
+python -m pytest tests/core/test_file.py::TestClass::test_method -v
+
+# Run tests with coverage
+python -m pytest tests/ --cov=. --cov-report=html
 ```
 
 ### LLM Setup (Required for LLM features)
@@ -94,9 +105,10 @@ ollama pull smollm2:1.7b
 ## Important Architecture Notes
 
 ### Memory System
-- Memory addresses defined in `config/memory_addresses.py` (or `core/memory/addresses.py`)
+- Memory addresses defined in `config/memory_addresses.py`
 - Memory reading utilities in `utils/memory_reader.py`
 - Game state extracted includes HP, level, badges, party data, money, etc.
+- Memory mapping system in `core/memory_map.py` provides derived calculations
 
 ### Web Monitoring
 - Integrated web dashboard at http://localhost:8080
@@ -129,7 +141,7 @@ ollama pull smollm2:1.7b
 ## Development Patterns
 
 ### Adding New Memory Addresses
-Edit `config/memory_addresses.py` or `core/memory/addresses.py` to add new memory locations and derived calculations.
+Edit `config/memory_addresses.py` to add new memory locations and update `core/memory_map.py` for derived calculations.
 
 ### Customizing Rewards
 Modify `rewards/calculator.py` or the PokemonRewardCalculator class to add custom reward logic.
@@ -138,7 +150,24 @@ Modify `rewards/calculator.py` or the PokemonRewardCalculator class to add custo
 Update prompt building methods in LLM trainer classes to customize AI decision-making context.
 
 ### Adding Test Categories
-Use pytest markers defined in `pytest.ini` for organizing tests by functionality (unit, integration, web_monitoring, llm, etc).
+Use pytest markers defined in `pytest.ini` for organizing tests by functionality. Available markers include:
+
+- `unit`: Unit tests
+- `integration`: Integration tests
+- `web_monitoring`: Web monitoring related tests
+- `llm`: LLM functionality tests
+- `performance`: Performance tests
+- `state_detection`: Game state detection tests
+- `memory_mapping`: Memory mapping and address tests
+- `trainer_validation`: Trainer memory validation tests
+- `anti_stuck`: Anti-stuck logic and recovery tests
+- `unified_trainer`: Unified trainer system tests
+
+Use markers to run specific test categories:
+```bash
+python -m pytest -m "unit and not integration" -v
+python -m pytest -m "llm or web_monitoring" -v
+```
 
 ## Project Status
 
@@ -149,4 +178,17 @@ This project is in active development with recent major refactoring:
 - Comprehensive test coverage across core components
 - Deprecation of legacy `llm_trainer.py` in favor of `main.py`
 
-The system requires a legal Pokemon Crystal ROM file placed in the `roms/` directory to function.
+### Current Development Branch
+Currently on `project-wide-refactoring` branch with ongoing improvements. Main branch is `main`.
+
+### Critical Requirements
+- Legal Pokemon Crystal ROM file placed in the `roms/` directory
+- Save state files (`.gbc.state`) strongly recommended for proper memory reading
+- Ollama installation required for LLM features
+
+### Architecture Notes for Developers
+- The project uses `setup.py` for package installation
+- Test organization uses extensive pytest markers for granular test selection
+- Memory corruption protection and validation systems are in place
+- Web monitoring is integrated directly into training systems
+- Hybrid training combines multiple AI approaches

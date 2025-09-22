@@ -243,7 +243,7 @@ class UnifiedWebServer:
         """Start both HTTP and WebSocket servers."""
         if self.running:
             logger.warning("Web server already running")
-            return
+            return True
 
         self.running = True
 
@@ -258,10 +258,12 @@ class UnifiedWebServer:
             logger.info(f"📊 Dashboard: http://{self.host}:{self.http_port}")
             logger.info(f"📡 WebSocket: ws://{self.host}:{self.ws_port}")
 
+            return True
+
         except Exception as e:
             logger.error(f"Failed to start web server: {e}")
             self.stop()
-            raise
+            return False
 
     def stop(self):
         """Stop both HTTP and WebSocket servers."""
@@ -317,8 +319,13 @@ class UnifiedWebServer:
             asyncio.set_event_loop(loop)
 
             async def websocket_main():
+                # Create wrapper to properly handle method call
+                async def websocket_wrapper(websocket):
+                    path = websocket.path if hasattr(websocket, 'path') else '/'
+                    await self.websocket_handler.handle_connection(websocket, path)
+
                 self.websocket_server = await websockets.serve(
-                    self.websocket_handler.handle_connection,
+                    websocket_wrapper,
                     self.host,
                     self.ws_port
                 )
