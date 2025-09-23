@@ -440,7 +440,10 @@ class UnifiedPokemonTrainer:
                 
                 # Get current game state
                 game_state = self._get_game_state()
-                
+
+                # Update position history for context
+                self._update_position_history(game_state)
+
                 # Decide on action based on training mode
                 action, decision_meta = self._get_action_decision(action_count, game_state)
                 
@@ -520,10 +523,21 @@ class UnifiedPokemonTrainer:
             if self.emulation_manager:
                 screen_data = self.emulation_manager.get_screen_array()
             
+            # Build enhanced context for LLM decision
+            screen_state = self._analyze_screen_state()
+            enhanced_context = {
+                'action_count': action_count,
+                'detected_state': screen_state.get('state', 'overworld'),
+                'recent_rewards': self._get_recent_rewards(),
+                'stuck_counter': self._get_stuck_counter(),
+                'last_reward': self._get_last_reward(),
+                'last_action': self._get_last_action()
+            }
+
             return self.llm_engine.get_decision(
                 game_state=game_state,
                 screen_data=screen_data,
-                context={'action_count': action_count}
+                context=enhanced_context
             )
         else:
             # Rule-based fallback
@@ -606,8 +620,97 @@ class UnifiedPokemonTrainer:
                 
         except Exception:
             return {'state': 'unknown'}
-    
-    def _record_training_step(self, action: int, decision_meta: Dict[str, Any], 
+
+    def _get_recent_rewards(self) -> List[float]:
+        """Get recent reward history for context."""
+        try:
+            if self.stats_tracker and hasattr(self.stats_tracker, 'reward_history'):
+                # Get last 10 rewards from statistics tracker
+                return list(self.stats_tracker.reward_history)[-10:]
+            elif self.stats_tracker:
+                # Fallback to getting recent rewards from current stats
+                stats = self.stats_tracker.get_current_stats()
+                return stats.get('recent_rewards', [])
+            else:
+                return []
+        except Exception as e:
+            self.logger.debug(f"Failed to get recent rewards: {e}")
+            return []
+
+    def _get_last_reward(self) -> float:
+        """Get the most recent reward value."""
+        try:
+            if self.stats_tracker and hasattr(self.stats_tracker, 'reward_history'):
+                # Get last reward from statistics tracker
+                if self.stats_tracker.reward_history:
+                    return list(self.stats_tracker.reward_history)[-1]
+            elif self.stats_tracker:
+                # Fallback to getting current stats
+                stats = self.stats_tracker.get_current_stats()
+                recent_rewards = stats.get('recent_rewards', [])
+                if recent_rewards:
+                    return recent_rewards[-1]
+            return 0.0
+        except Exception as e:
+            self.logger.debug(f"Failed to get last reward: {e}")
+            return 0.0
+
+    def _get_last_action(self) -> int:
+        """Get the most recent action taken."""
+        try:
+            # Try to get from action history if it exists
+            if hasattr(self, '_action_history') and self._action_history:
+                return self._action_history[-1]
+            elif hasattr(self, 'last_action'):
+                return self.last_action
+            else:
+                return 1  # Default to UP if no history
+        except Exception as e:
+            self.logger.debug(f"Failed to get last action: {e}")
+            return 1
+
+    def _get_stuck_counter(self) -> int:
+        """Get stuck detection counter."""
+        try:
+            # Simple stuck detection based on position history
+            if not hasattr(self, '_position_history'):
+                self._position_history = []
+                return 0
+
+            # Check if we've been in the same position for multiple actions
+            if len(self._position_history) >= 5:
+                recent_positions = self._position_history[-5:]
+                unique_positions = len(set(recent_positions))
+                if unique_positions <= 2:  # Stuck if only 1-2 unique positions in last 5 actions
+                    return len(self._position_history) - len(set(self._position_history))
+
+            return 0
+        except Exception as e:
+            self.logger.debug(f"Failed to get stuck counter: {e}")
+            return 0
+
+    def _update_position_history(self, game_state: Dict[str, Any]):
+        """Update position history for stuck detection."""
+        try:
+            if not hasattr(self, '_position_history'):
+                self._position_history = []
+
+            # Track position
+            position = (
+                game_state.get('player_x', 0),
+                game_state.get('player_y', 0),
+                game_state.get('player_map', 0)
+            )
+            self._position_history.append(position)
+
+            # Keep only last 20 positions
+            if len(self._position_history) > 20:
+                self._position_history.pop(0)
+
+        except Exception as e:
+            self.logger.debug(f"Failed to update position history: {e}")
+
+    def _record_training_step(self, action: int, decision_meta: Dict[str, Any],
                              game_state: Dict[str, Any], reward: float):
         """Record training step in statistics."""
         if not self.stats_tracker:
