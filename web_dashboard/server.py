@@ -19,6 +19,7 @@ import base64
 from io import BytesIO
 
 from .api import UnifiedApiEndpoints
+from .api.rest_endpoints import RestApiEndpoints
 from .websocket_handler import WebSocketHandler
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,9 @@ logger = logging.getLogger(__name__)
 class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for the unified web dashboard."""
 
-    def __init__(self, *args, api_endpoints=None, websocket_handler=None, **kwargs):
+    def __init__(self, *args, api_endpoints=None, rest_api=None, websocket_handler=None, **kwargs):
         self.api_endpoints = api_endpoints
+        self.rest_api = rest_api
         self.websocket_handler = websocket_handler
         super().__init__(*args, **kwargs)
 
@@ -57,6 +59,10 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
                 self._serve_api_response(self.api_endpoints.get_system_status())
             elif path == '/api/visualization_data':
                 self._serve_api_response(self.api_endpoints.get_visualization_data())
+
+            # REST API v1 endpoints (GET)
+            elif path.startswith('/api/v1/'):
+                self._handle_rest_api_request(path, {})
 
             # Screen capture
             elif path == '/api/screen':
@@ -88,6 +94,40 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(500, f"Internal server error: {str(e)}")
             except BrokenPipeError:
                 # Client disconnected while sending error response
+                logger.debug("Client disconnected while sending error response")
+                return
+
+    def do_POST(self):
+        """Handle POST requests for REST API."""
+        try:
+            parsed_path = urlparse(self.path)
+            path = parsed_path.path
+
+            # Get request body
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                body_data = self.rfile.read(content_length).decode('utf-8')
+                try:
+                    request_data = json.loads(body_data) if body_data else {}
+                except json.JSONDecodeError:
+                    request_data = {}
+            else:
+                request_data = {}
+
+            # REST API v1 endpoints
+            if path.startswith('/api/v1/'):
+                self._handle_rest_api_request(path, request_data)
+            else:
+                self.send_error(404, "REST API endpoint not found")
+
+        except BrokenPipeError:
+            logger.debug("Client disconnected during POST request")
+            return
+        except Exception as e:
+            logger.error(f"POST request error: {e}")
+            try:
+                self.send_error(500, f"Internal server error: {str(e)}")
+            except BrokenPipeError:
                 logger.debug("Client disconnected while sending error response")
                 return
 
@@ -220,6 +260,109 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
         json_response = json.dumps(health_data)
         self.wfile.write(json_response.encode('utf-8'))
 
+    def _handle_rest_api_request(self, path: str, request_data: dict):
+        """Handle REST API v1 requests."""
+        try:
+            if not hasattr(self, 'rest_api') or self.rest_api is None:
+                self.send_error(503, "REST API not available")
+                return
+
+            # Parse the path to determine the endpoint
+            path_parts = path.strip('/').split('/')
+            if len(path_parts) < 3:  # /api/v1/...
+                self.send_error(400, "Invalid REST API path")
+                return
+
+            resource = path_parts[2]  # training, agents, plugins, docs
+
+            # Route to appropriate REST API method
+            if resource == "training" and len(path_parts) >= 4 and path_parts[3] == "sessions":
+                if len(path_parts) == 4:  # /api/v1/training/sessions
+                    if self.command == "GET":
+                        response = self.rest_api.get_training_sessions()
+                    elif self.command == "POST":
+                        response = self.rest_api.create_training_session(request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                elif len(path_parts) == 5:  # /api/v1/training/sessions/{session_id}
+                    session_id = path_parts[4]
+                    if self.command == "GET":
+                        response = self.rest_api.get_training_session(session_id)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                elif len(path_parts) == 6 and path_parts[5] == "control":  # /api/v1/training/sessions/{session_id}/control
+                    session_id = path_parts[4]
+                    if self.command == "POST":
+                        response = self.rest_api.control_training_session(session_id, request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                else:
+                    self.send_error(404, "Training endpoint not found")
+                    return
+
+            elif resource == "agents":
+                if len(path_parts) == 3:  # /api/v1/agents
+                    if self.command == "GET":
+                        response = self.rest_api.get_agents()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                elif len(path_parts) == 4 and path_parts[3] == "coordination":  # /api/v1/agents/coordination
+                    if self.command == "GET":
+                        response = self.rest_api.get_coordination_status()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                elif len(path_parts) == 5 and path_parts[4] == "control":  # /api/v1/agents/{agent_id}/control
+                    agent_id = path_parts[3]
+                    if self.command == "POST":
+                        response = self.rest_api.control_agent(agent_id, request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                else:
+                    self.send_error(404, "Agent endpoint not found")
+                    return
+
+            elif resource == "plugins":
+                if len(path_parts) == 3:  # /api/v1/plugins
+                    if self.command == "GET":
+                        response = self.rest_api.get_plugins()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                elif len(path_parts) == 5 and path_parts[4] == "control":  # /api/v1/plugins/{plugin_id}/control
+                    plugin_id = path_parts[3]
+                    if self.command == "POST":
+                        response = self.rest_api.control_plugin(plugin_id, request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+                else:
+                    self.send_error(404, "Plugin endpoint not found")
+                    return
+
+            elif resource == "docs":  # /api/v1/docs
+                if self.command == "GET":
+                    response = self.rest_api.get_api_documentation()
+                else:
+                    self.send_error(405, "Method not allowed")
+                    return
+
+            else:
+                self.send_error(404, "REST API resource not found")
+                return
+
+            # Send the response
+            self._serve_api_response(response)
+
+        except Exception as e:
+            logger.error(f"REST API request error: {e}")
+            self.send_error(500, f"REST API error: {str(e)}")
+
     def _set_cors_headers(self):
         """Set CORS headers for browser compatibility."""
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -247,6 +390,9 @@ class UnifiedWebServer:
 
         # Initialize API endpoints
         self.api_endpoints = UnifiedApiEndpoints(trainer)
+
+        # Initialize REST API endpoints
+        self.rest_api_endpoints = RestApiEndpoints(trainer)
 
         # Initialize WebSocket handler
         self.websocket_handler = WebSocketHandler(trainer)
@@ -321,6 +467,7 @@ class UnifiedWebServer:
             handler = lambda *args, **kwargs: UnifiedHttpHandler(
                 *args,
                 api_endpoints=self.api_endpoints,
+                rest_api=self.rest_api_endpoints,
                 websocket_handler=self.websocket_handler,
                 **kwargs
             )
