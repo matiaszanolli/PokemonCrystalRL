@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .base_agent import BaseAgent
+from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 try:
     from training.components.strategic_context_builder import StrategicContextBuilder, QuestTracker
@@ -56,7 +57,7 @@ class ProgressionDecision:
     estimated_progress: float  # Expected progress toward current objective
 
 
-class ProgressionAgent(BaseAgent):
+class ProgressionAgent(BaseAgent, EventSubscriber):
     """Specialist agent optimized for story progression and quest completion"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -95,6 +96,10 @@ class ProgressionAgent(BaseAgent):
         self.decision_patterns = {}
         self.success_strategies = {}
         self.failed_strategies = {}
+
+        # Event system integration
+        self.event_bus = get_event_bus()
+        self.event_bus.subscribe(self)
 
         self.logger.info(f"ProgressionAgent initialized with efficiency={self.efficiency_focus}, story_priority={self.story_priority}")
 
@@ -547,3 +552,175 @@ class ProgressionAgent(BaseAgent):
         # Keep only recent history
         if len(self.progression_history) > 100:
             self.progression_history.pop(0)
+
+    def get_subscribed_events(self) -> set:
+        """Return set of event types this subscriber is interested in"""
+        return {
+            EventType.PLAYER_LEVEL_UP,
+            EventType.BADGE_EARNED,
+            EventType.QUEST_STARTED,
+            EventType.QUEST_COMPLETED,
+            EventType.QUEST_FAILED,
+            EventType.OBJECTIVE_UPDATED,
+            EventType.GAME_STATE_CHANGED
+        }
+
+    def handle_event(self, event: Event) -> None:
+        """Handle incoming events from the event system"""
+        try:
+            if event.event_type == EventType.PLAYER_LEVEL_UP:
+                self._handle_level_up_event(event)
+            elif event.event_type == EventType.BADGE_EARNED:
+                self._handle_badge_earned_event(event)
+            elif event.event_type == EventType.QUEST_STARTED:
+                self._handle_quest_started_event(event)
+            elif event.event_type == EventType.QUEST_COMPLETED:
+                self._handle_quest_completed_event(event)
+            elif event.event_type == EventType.QUEST_FAILED:
+                self._handle_quest_failed_event(event)
+            elif event.event_type == EventType.OBJECTIVE_UPDATED:
+                self._handle_objective_updated_event(event)
+            elif event.event_type == EventType.GAME_STATE_CHANGED:
+                self._handle_game_state_change_event(event)
+        except Exception as e:
+            self.logger.error(f"Error handling event {event.event_type.value}: {e}")
+
+    def _handle_level_up_event(self, event: Event) -> None:
+        """Handle player level up event"""
+        old_level = event.data.get('old_level', 0)
+        new_level = event.data.get('new_level', 0)
+
+        self.logger.info(f"Player leveled up from {old_level} to {new_level}")
+
+        # Update progression analysis
+        if new_level >= 10 and self.current_phase == ProgressionPhase.TUTORIAL:
+            self._advance_progression_phase(ProgressionPhase.EARLY_EXPLORATION)
+
+        # Publish progression milestone event
+        self._publish_progression_milestone_event('level_up', {
+            'old_level': old_level,
+            'new_level': new_level
+        })
+
+    def _handle_badge_earned_event(self, event: Event) -> None:
+        """Handle badge earned event"""
+        old_badges = event.data.get('old_badges', 0)
+        new_badges = event.data.get('new_badges', 0)
+
+        self.logger.info(f"Badge earned! Total badges: {new_badges} (was {old_badges})")
+
+        # Update story progress
+        if new_badges == 1:
+            self.story_progress['first_gym_completed'] = True
+            self._advance_progression_phase(ProgressionPhase.STORY_ADVANCEMENT)
+
+        # Publish major milestone event
+        self._publish_progression_milestone_event('badge_earned', {
+            'old_badges': old_badges,
+            'new_badges': new_badges,
+            'milestone': f'badge_{new_badges}'
+        })
+
+    def _handle_quest_started_event(self, event: Event) -> None:
+        """Handle quest started event"""
+        quest_id = event.data.get('quest_id', 'unknown')
+        quest_name = event.data.get('quest_name', 'Unknown Quest')
+
+        self.logger.info(f"Quest started: {quest_name} (ID: {quest_id})")
+
+        # Add to active objectives
+        self.active_objectives.append({
+            'id': quest_id,
+            'name': quest_name,
+            'started_at': event.timestamp,
+            'priority': event.data.get('priority', 5)
+        })
+
+    def _handle_quest_completed_event(self, event: Event) -> None:
+        """Handle quest completed event"""
+        quest_id = event.data.get('quest_id', 'unknown')
+        quest_name = event.data.get('quest_name', 'Unknown Quest')
+
+        self.logger.info(f"Quest completed: {quest_name} (ID: {quest_id})")
+
+        # Move from active to completed
+        self.completed_objectives.add(quest_id)
+        self.active_objectives = [obj for obj in self.active_objectives if obj['id'] != quest_id]
+
+        # Publish progression achievement event
+        self._publish_progression_milestone_event('quest_completed', {
+            'quest_id': quest_id,
+            'quest_name': quest_name
+        })
+
+    def _handle_quest_failed_event(self, event: Event) -> None:
+        """Handle quest failed event"""
+        quest_id = event.data.get('quest_id', 'unknown')
+        quest_name = event.data.get('quest_name', 'Unknown Quest')
+
+        self.logger.warning(f"Quest failed: {quest_name} (ID: {quest_id})")
+
+        # Move from active to failed
+        self.failed_objectives.add(quest_id)
+        self.active_objectives = [obj for obj in self.active_objectives if obj['id'] != quest_id]
+
+    def _handle_objective_updated_event(self, event: Event) -> None:
+        """Handle objective update event"""
+        objective_id = event.data.get('objective_id', 'unknown')
+        progress = event.data.get('progress', 0.0)
+
+        self.logger.info(f"Objective updated: {objective_id} - {progress:.1%} complete")
+
+        # Update objective tracking
+        for obj in self.active_objectives:
+            if obj['id'] == objective_id:
+                obj['progress'] = progress
+                break
+
+    def _handle_game_state_change_event(self, event: Event) -> None:
+        """Handle general game state changes"""
+        changes = event.data.get('changes', {})
+
+        # Check for progression-relevant changes
+        if 'level_up' in changes:
+            level_data = changes['level_up']
+            # Additional level progression processing
+        elif 'badge_earned' in changes:
+            badge_data = changes['badge_earned']
+            # Additional badge progression processing
+
+    def _advance_progression_phase(self, new_phase: ProgressionPhase) -> None:
+        """Advance to a new progression phase"""
+        old_phase = self.current_phase
+        self.current_phase = new_phase
+
+        self.logger.info(f"Progression phase advanced: {old_phase.value} -> {new_phase.value}")
+
+        # Publish phase advancement event
+        self._publish_progression_milestone_event('phase_advancement', {
+            'old_phase': old_phase.value,
+            'new_phase': new_phase.value
+        })
+
+    def _publish_progression_milestone_event(self, milestone_type: str, milestone_data: Dict[str, Any]) -> None:
+        """Publish progression milestone event"""
+        import time
+
+        event = Event(
+            event_type=EventType.AGENT_PERFORMANCE_UPDATE,
+            timestamp=time.time(),
+            source="progression_agent",
+            data={
+                'agent_type': 'progression',
+                'milestone_type': milestone_type,
+                'milestone_data': milestone_data,
+                'current_phase': self.current_phase.value,
+                'active_objectives': len(self.active_objectives),
+                'completed_objectives': len(self.completed_objectives),
+                'failed_objectives': len(self.failed_objectives),
+                'progression_efficiency': self.efficiency_focus
+            },
+            priority=7 if milestone_type in ['badge_earned', 'phase_advancement'] else 5
+        )
+
+        self.event_bus.publish(event)

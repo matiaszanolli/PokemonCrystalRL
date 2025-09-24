@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from collections import defaultdict, deque
 
 from .base_agent import BaseAgent
+from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 try:
     from training.components.strategic_context_builder import StrategicContextBuilder
@@ -42,7 +43,7 @@ class NavigationDecision:
     discovery_potential: float  # 0.0-1.0
 
 
-class ExplorerAgent(BaseAgent):
+class ExplorerAgent(BaseAgent, EventSubscriber):
     """Specialist agent optimized for exploration and map discovery"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -85,6 +86,10 @@ class ExplorerAgent(BaseAgent):
             'random_walk': self._random_walk_pattern
         }
         self.current_pattern = 'systematic_sweep'
+
+        # Event system integration
+        self.event_bus = get_event_bus()
+        self.event_bus.subscribe(self)
 
         self.logger.info(f"ExplorerAgent initialized with curiosity={self.curiosity_level}, thoroughness={self.thoroughness}")
 
@@ -470,3 +475,127 @@ class ExplorerAgent(BaseAgent):
     def _track_movement(self, decision: NavigationDecision, game_state: Dict[str, Any]):
         """Track movement for pattern analysis"""
         self.movement_history.append(decision.direction)
+
+    def get_subscribed_events(self) -> set:
+        """Return set of event types this subscriber is interested in"""
+        return {
+            EventType.LOCATION_CHANGED,
+            EventType.NEW_AREA_DISCOVERED,
+            EventType.ITEM_DISCOVERED,
+            EventType.NPC_ENCOUNTERED,
+            EventType.GAME_STATE_CHANGED
+        }
+
+    def handle_event(self, event: Event) -> None:
+        """Handle incoming events from the event system"""
+        try:
+            if event.event_type == EventType.LOCATION_CHANGED:
+                self._handle_location_changed_event(event)
+            elif event.event_type == EventType.NEW_AREA_DISCOVERED:
+                self._handle_new_area_discovered_event(event)
+            elif event.event_type == EventType.ITEM_DISCOVERED:
+                self._handle_item_discovered_event(event)
+            elif event.event_type == EventType.NPC_ENCOUNTERED:
+                self._handle_npc_encountered_event(event)
+            elif event.event_type == EventType.GAME_STATE_CHANGED:
+                self._handle_game_state_change_event(event)
+        except Exception as e:
+            self.logger.error(f"Error handling event {event.event_type.value}: {e}")
+
+    def _handle_location_changed_event(self, event: Event) -> None:
+        """Handle location change event"""
+        old_map = event.data.get('old_map', 0)
+        new_map = event.data.get('new_map', 0)
+
+        self.logger.info(f"Location changed from {old_map} to {new_map}")
+
+        # Update exploration tracking
+        self.visited_locations.add(new_map)
+        self.location_visit_counts[new_map] += 1
+
+        # Update discovered connections
+        if old_map != 0:
+            self.discovered_connections[old_map].add(new_map)
+            self.discovered_connections[new_map].add(old_map)
+
+        # Publish exploration progress event
+        self._publish_exploration_progress_event(new_map, old_map)
+
+    def _handle_new_area_discovered_event(self, event: Event) -> None:
+        """Handle new area discovery event"""
+        area_id = event.data.get('area_id', 0)
+        area_name = event.data.get('area_name', 'Unknown')
+
+        self.logger.info(f"New area discovered: {area_name} (ID: {area_id})")
+
+        # Add to discovery log
+        discovery_record = {
+            'type': 'area',
+            'timestamp': event.timestamp,
+            'area_id': area_id,
+            'area_name': area_name
+        }
+        self.discovery_log.append(discovery_record)
+
+        # Update area priorities
+        self.area_priorities[area_id] = 0.9  # High priority for new areas
+
+    def _handle_item_discovered_event(self, event: Event) -> None:
+        """Handle item discovery event"""
+        item_name = event.data.get('item_name', 'Unknown Item')
+        location = event.data.get('location', 'Unknown')
+
+        self.logger.info(f"Item discovered: {item_name} at {location}")
+
+        # Add to discovered items
+        self.discovered_items.append({
+            'name': item_name,
+            'location': location,
+            'timestamp': event.timestamp
+        })
+
+    def _handle_npc_encountered_event(self, event: Event) -> None:
+        """Handle NPC encounter event"""
+        npc_type = event.data.get('npc_type', 'Unknown')
+        location = event.data.get('location', 'Unknown')
+
+        self.logger.info(f"NPC encountered: {npc_type} at {location}")
+
+        # Add to discovered NPCs
+        self.discovered_npcs.append({
+            'type': npc_type,
+            'location': location,
+            'timestamp': event.timestamp
+        })
+
+    def _handle_game_state_change_event(self, event: Event) -> None:
+        """Handle general game state changes"""
+        changes = event.data.get('changes', {})
+
+        # Track exploration-relevant changes
+        if 'location_changed' in changes:
+            location_data = changes['location_changed']
+            # Additional location change processing
+            pass
+
+    def _publish_exploration_progress_event(self, new_map: int, old_map: int) -> None:
+        """Publish exploration progress update event"""
+        import time
+
+        event = Event(
+            event_type=EventType.AGENT_ACTION_TAKEN,
+            timestamp=time.time(),
+            source="explorer_agent",
+            data={
+                'agent_type': 'explorer',
+                'action_type': 'location_change',
+                'from_map': old_map,
+                'to_map': new_map,
+                'total_locations_visited': len(self.visited_locations),
+                'exploration_progress': len(self.visited_locations) / 100.0,  # Estimate
+                'discoveries_made': len(self.discovery_log)
+            },
+            priority=5
+        )
+
+        self.event_bus.publish(event)

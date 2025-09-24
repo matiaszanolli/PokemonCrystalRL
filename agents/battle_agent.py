@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from dataclasses import dataclass
 
 from .base_agent import BaseAgent
+from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 try:
     from core.game_intelligence import BattleStrategy
@@ -29,7 +30,7 @@ class BattleDecision:
     expected_outcome: str
 
 
-class BattleAgent(BaseAgent):
+class BattleAgent(BaseAgent, EventSubscriber):
     """Specialist agent optimized for Pokemon battle decisions"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -56,6 +57,10 @@ class BattleAgent(BaseAgent):
         # Decision patterns
         self.successful_strategies = {}
         self.failed_strategies = {}
+
+        # Event system integration
+        self.event_bus = get_event_bus()
+        self.event_bus.subscribe(self)
 
         self.logger.info(f"BattleAgent initialized with aggression={self.aggression_level}, risk_tolerance={self.risk_tolerance}")
 
@@ -417,3 +422,96 @@ class BattleAgent(BaseAgent):
         }
 
         return {**base_stats, **battle_stats}
+
+    def get_subscribed_events(self) -> set:
+        """Return set of event types this subscriber is interested in"""
+        return {
+            EventType.BATTLE_STARTED,
+            EventType.BATTLE_ENDED,
+            EventType.HP_CRITICAL,
+            EventType.GAME_STATE_CHANGED
+        }
+
+    def handle_event(self, event: Event) -> None:
+        """Handle incoming events from the event system"""
+        try:
+            if event.event_type == EventType.BATTLE_STARTED:
+                self._handle_battle_started_event(event)
+            elif event.event_type == EventType.BATTLE_ENDED:
+                self._handle_battle_ended_event(event)
+            elif event.event_type == EventType.HP_CRITICAL:
+                self._handle_hp_critical_event(event)
+            elif event.event_type == EventType.GAME_STATE_CHANGED:
+                self._handle_game_state_change_event(event)
+        except Exception as e:
+            self.logger.error(f"Error handling event {event.event_type.value}: {e}")
+
+    def _handle_battle_started_event(self, event: Event) -> None:
+        """Handle battle started event"""
+        enemy_level = event.data.get('enemy_level', 0)
+        self.logger.info(f"Battle started against level {enemy_level} enemy")
+
+        # Update battle tracking
+        self.battles_fought += 1
+
+        # Reset battle-specific state
+        self.current_battle_start_time = event.timestamp
+        self.current_battle_context = event.data
+        self.current_defensive_mode = False
+
+    def _handle_battle_ended_event(self, event: Event) -> None:
+        """Handle battle ended event"""
+        player_won = event.data.get('player_won', False)
+
+        if player_won:
+            self.battles_won += 1
+            self.logger.info("Battle won! Updating battle strategy.")
+        else:
+            self.logger.info("Battle lost. Analyzing for improvements.")
+
+        # Update win rate
+        if self.battles_fought > 0:
+            self.battle_win_rate = self.battles_won / self.battles_fought
+
+        # Publish battle performance update
+        self._publish_battle_performance_event(player_won)
+
+    def _handle_hp_critical_event(self, event: Event) -> None:
+        """Handle critical HP event"""
+        hp_ratio = event.data.get('hp_ratio', 0.0)
+        self.logger.warning(f"Critical HP detected: {hp_ratio:.2%}")
+
+        # Adjust battle strategy to be more defensive
+        self.current_defensive_mode = True
+
+    def _handle_game_state_change_event(self, event: Event) -> None:
+        """Handle general game state changes"""
+        changes = event.data.get('changes', {})
+
+        # Track if battle state changed
+        if 'battle_started' in changes:
+            self.current_battle_context = changes['battle_started']
+        elif 'battle_ended' in changes:
+            self.current_battle_context = None
+            self.current_defensive_mode = False
+
+    def _publish_battle_performance_event(self, won: bool) -> None:
+        """Publish battle performance update event"""
+        import time
+
+        event = Event(
+            event_type=EventType.AGENT_PERFORMANCE_UPDATE,
+            timestamp=time.time(),
+            source="battle_agent",
+            data={
+                'agent_type': 'battle',
+                'battle_result': 'won' if won else 'lost',
+                'battles_fought': self.battles_fought,
+                'battles_won': self.battles_won,
+                'win_rate': self.battle_win_rate,
+                'performance_change': 'improved' if won else 'declined'
+            },
+            priority=5
+        )
+
+        self.event_bus.publish(event)

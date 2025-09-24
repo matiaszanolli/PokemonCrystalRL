@@ -14,6 +14,7 @@ from .base_agent import BaseAgent
 from .battle_agent import BattleAgent
 from .explorer_agent import ExplorerAgent
 from .progression_agent import ProgressionAgent
+from ..core.event_system import EventType, Event, get_event_bus
 
 
 class AgentRole(Enum):
@@ -82,6 +83,9 @@ class MultiAgentCoordinator(BaseAgent):
         self.adaptive_weights = True
         self.learning_rate = 0.1
 
+        # Event system integration
+        self.event_bus = get_event_bus()
+
         self.logger.info("MultiAgentCoordinator initialized with 3 specialist agents")
 
     def get_action(self, game_state: Dict[str, Any], info: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
@@ -98,6 +102,9 @@ class MultiAgentCoordinator(BaseAgent):
 
         # Track decision for learning
         self._track_coordination_decision(coordination_decision, game_state, context_analysis)
+
+        # Publish agent decision event
+        self._publish_agent_decision_event(coordination_decision, context_analysis, agent_recommendations)
 
         # Update the chosen agent with the action
         self._update_chosen_agent(coordination_decision, game_state, info)
@@ -411,6 +418,9 @@ class MultiAgentCoordinator(BaseAgent):
             if self.adaptive_weights:
                 self._adjust_agent_weights(reward, chosen_agent)
 
+            # Publish agent performance update event
+            self._publish_performance_update_event(chosen_agent, reward)
+
     def _adjust_agent_weights(self, reward: float, chosen_agent: AgentRole):
         """Adjust agent weights based on performance"""
         if reward > 0.1:  # Good outcome
@@ -446,6 +456,56 @@ class MultiAgentCoordinator(BaseAgent):
             'agent_stats': agent_stats,
             'coordination_stats': coordination_stats
         }
+
+    def _publish_agent_decision_event(self,
+                                    decision: CoordinationDecision,
+                                    context_analysis: Dict[str, Any],
+                                    recommendations: List[AgentRecommendation]) -> None:
+        """Publish agent decision event to event bus"""
+        import time
+
+        event = Event(
+            event_type=EventType.AGENT_DECISION,
+            timestamp=time.time(),
+            source="multi_agent_coordinator",
+            data={
+                'chosen_agent': decision.chosen_agent.value,
+                'action': decision.action,
+                'confidence': decision.confidence,
+                'reasoning': decision.reasoning,
+                'consensus': decision.agent_consensus,
+                'context': context_analysis.get('primary_context', 'unknown'),
+                'urgency_level': context_analysis.get('urgency_level', 1),
+                'recommendations_count': len(recommendations),
+                'fallback_agents': [agent.value for agent in decision.fallback_agents]
+            },
+            priority=6
+        )
+
+        self.event_bus.publish(event)
+
+    def _publish_performance_update_event(self, agent_role: AgentRole, reward: float) -> None:
+        """Publish agent performance update event"""
+        import time
+
+        agent_stats = self.agent_performance[agent_role]
+
+        event = Event(
+            event_type=EventType.AGENT_PERFORMANCE_UPDATE,
+            timestamp=time.time(),
+            source="multi_agent_coordinator",
+            data={
+                'agent_role': agent_role.value,
+                'reward': reward,
+                'success_rate': agent_stats['success_rate'],
+                'total_decisions': agent_stats['total_decisions'],
+                'successful_outcomes': agent_stats['successful_outcomes'],
+                'current_weight': self.agent_weights.get(agent_role.value, 1.0)
+            },
+            priority=4
+        )
+
+        self.event_bus.publish(event)
 
 
 class ContextAnalyzer:
