@@ -69,6 +69,9 @@ class PokemonDashboard {
         // Start periodic screen updates (fallback for WebSocket)
         this.startScreenUpdates();
 
+        // Initialize visualizations
+        this.initializeVisualizations();
+
         console.log('✅ Dashboard initialized successfully');
     }
 
@@ -592,6 +595,310 @@ class PokemonDashboard {
             minimumFractionDigits: decimals,
             maximumFractionDigits: decimals
         });
+    }
+
+    /**
+     * Initialize visualization components
+     */
+    initializeVisualizations() {
+        console.log('📊 Initializing visualizations');
+
+        // Initialize visualization state
+        this.visualizations = {
+            charts: {},
+            activeTab: 'rewards',
+            rewardHistory: [],
+            actionPerformance: {},
+            decisionPatterns: [],
+            performanceMetrics: []
+        };
+
+        // Setup tab switching
+        this.setupVisualizationTabs();
+
+        // Initialize canvas contexts
+        this.initializeCanvases();
+
+        // Start visualization data polling
+        this.startVisualizationUpdates();
+    }
+
+    /**
+     * Setup visualization tab switching
+     */
+    setupVisualizationTabs() {
+        const tabs = document.querySelectorAll('.viz-tab');
+        const panels = document.querySelectorAll('.viz-panel');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+
+                // Update active tab
+                tabs.forEach(t => t.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(`${tabName}-viz`).classList.add('active');
+
+                this.visualizations.activeTab = tabName;
+                this.updateVisualization(tabName);
+            });
+        });
+    }
+
+    /**
+     * Initialize canvas contexts for charts
+     */
+    initializeCanvases() {
+        const canvases = ['rewards-chart', 'actions-heatmap', 'exploration-heatmap'];
+        canvases.forEach(canvasId => {
+            const canvas = document.getElementById(canvasId);
+            if (canvas) {
+                this.visualizations.charts[canvasId] = canvas.getContext('2d');
+                // Set canvas resolution for crisp rendering
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * devicePixelRatio;
+                canvas.height = rect.height * devicePixelRatio;
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = rect.height + 'px';
+                this.visualizations.charts[canvasId].scale(devicePixelRatio, devicePixelRatio);
+            }
+        });
+    }
+
+    /**
+     * Start visualization data updates
+     */
+    startVisualizationUpdates() {
+        setInterval(() => {
+            this.fetchVisualizationData();
+        }, this.config.updateIntervals.stats);
+
+        // Initial fetch
+        this.fetchVisualizationData();
+    }
+
+    /**
+     * Fetch visualization data from API
+     */
+    async fetchVisualizationData() {
+        try {
+            const response = await fetch(`${this.config.apiBaseUrl}/api/visualization_data`);
+            const data = await response.json();
+
+            if (data.success) {
+                this.updateVisualizationData(data.data);
+            }
+        } catch (error) {
+            console.warn('Visualization data fetch failed:', error);
+        }
+    }
+
+    /**
+     * Update visualization data and refresh active charts
+     */
+    updateVisualizationData(data) {
+        this.visualizations.rewardHistory = data.reward_history || [];
+        this.visualizations.actionPerformance = data.action_performance || {};
+        this.visualizations.decisionPatterns = data.decision_patterns || [];
+        this.visualizations.performanceMetrics = data.performance_metrics || [];
+        this.visualizations.explorationData = data.exploration_data || {};
+
+        // Update the active visualization
+        this.updateVisualization(this.visualizations.activeTab);
+    }
+
+    /**
+     * Update specific visualization based on tab
+     */
+    updateVisualization(tabName) {
+        switch (tabName) {
+            case 'rewards':
+                this.drawRewardChart();
+                break;
+            case 'actions':
+                this.drawActionHeatmap();
+                break;
+            case 'decisions':
+                this.updateDecisionFlow();
+                break;
+            case 'exploration':
+                this.drawExplorationHeatmap();
+                break;
+        }
+    }
+
+    /**
+     * Draw reward progress chart
+     */
+    drawRewardChart() {
+        const canvas = document.getElementById('rewards-chart');
+        const ctx = this.visualizations.charts['rewards-chart'];
+        if (!ctx || !canvas) return;
+
+        const data = this.visualizations.rewardHistory;
+        if (data.length === 0) return;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+
+        const width = canvas.width / devicePixelRatio;
+        const height = canvas.height / devicePixelRatio;
+        const padding = 40;
+
+        // Find data bounds
+        const rewards = data.map(d => d.reward);
+        const minReward = Math.min(...rewards);
+        const maxReward = Math.max(...rewards);
+        const range = maxReward - minReward || 1;
+
+        // Draw axes
+        ctx.strokeStyle = '#787c99';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, height - padding);
+        ctx.lineTo(width - padding, height - padding);
+        ctx.stroke();
+
+        // Draw reward line
+        if (data.length > 1) {
+            ctx.strokeStyle = '#2196F3';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            data.forEach((point, i) => {
+                const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
+                const y = height - padding - ((point.reward - minReward) / range) * (height - 2 * padding);
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+        }
+
+        // Draw points
+        ctx.fillStyle = '#2196F3';
+        data.forEach((point, i) => {
+            const x = padding + (i / Math.max(data.length - 1, 1)) * (width - 2 * padding);
+            const y = height - padding - ((point.reward - minReward) / range) * (height - 2 * padding);
+
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+    }
+
+    /**
+     * Draw action performance heatmap
+     */
+    drawActionHeatmap() {
+        const ctx = this.visualizations.charts['actions-heatmap'];
+        const canvas = document.getElementById('actions-heatmap');
+        if (!ctx || !canvas) return;
+
+        const data = this.visualizations.actionPerformance;
+        const actions = Object.keys(data);
+        if (actions.length === 0) return;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+
+        const width = canvas.width / devicePixelRatio;
+        const height = canvas.height / devicePixelRatio;
+        const cellWidth = width / actions.length;
+        const cellHeight = height / 2;
+
+        actions.forEach((action, i) => {
+            const actionData = data[action];
+            const frequency = actionData.frequency || 0;
+            const successRate = actionData.success_rate || 0;
+
+            // Draw frequency bar
+            ctx.fillStyle = `hsl(200, 60%, ${50 + frequency * 30}%)`;
+            ctx.fillRect(i * cellWidth, 0, cellWidth - 2, cellHeight);
+
+            // Draw success rate bar
+            ctx.fillStyle = `hsl(120, 60%, ${30 + successRate * 40}%)`;
+            ctx.fillRect(i * cellWidth, cellHeight, cellWidth - 2, cellHeight);
+
+            // Draw labels
+            ctx.fillStyle = '#a9b1d6';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(action, i * cellWidth + cellWidth / 2, cellHeight / 2);
+        });
+
+        // Update action stats
+        if (actions.length > 0) {
+            const mostUsed = actions.reduce((a, b) => data[a].count > data[b].count ? a : b);
+            const avgSuccess = actions.reduce((sum, action) => sum + data[action].success_rate, 0) / actions.length;
+
+            document.getElementById('most-used-action').textContent = mostUsed;
+            document.getElementById('avg-success-rate').textContent = (avgSuccess * 100).toFixed(1) + '%';
+        }
+    }
+
+    /**
+     * Update decision flow visualization
+     */
+    updateDecisionFlow() {
+        const container = document.getElementById('decision-flow');
+        if (!container) return;
+
+        const decisions = this.visualizations.decisionPatterns;
+        if (decisions.length === 0) {
+            container.innerHTML = '<div class="flow-item">No decision data available</div>';
+            return;
+        }
+
+        container.innerHTML = decisions.map(decision => `
+            <div class="flow-item">
+                <strong>Action:</strong> ${decision.action_name}
+                <div class="decision-meta">
+                    Confidence: ${(decision.confidence * 100).toFixed(1)}% |
+                    Reasoning: ${decision.reasoning_length} chars
+                </div>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * Draw exploration heatmap
+     */
+    drawExplorationHeatmap() {
+        const ctx = this.visualizations.charts['exploration-heatmap'];
+        const canvas = document.getElementById('exploration-heatmap');
+        if (!ctx || !canvas) return;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+
+        const data = this.visualizations.explorationData;
+        const coverage = data.exploration_coverage || 0;
+        const currentMap = data.current_map || 0;
+
+        // Simple visualization showing exploration coverage
+        const width = canvas.width / devicePixelRatio;
+        const height = canvas.height / devicePixelRatio;
+
+        // Draw coverage bar
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(10, height / 2 - 10, (width - 20) * coverage, 20);
+
+        ctx.fillStyle = '#787c99';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Exploration: ${(coverage * 100).toFixed(1)}%`, width / 2, height / 2 + 40);
+
+        // Update exploration stats
+        document.getElementById('exploration-coverage').textContent = (coverage * 100).toFixed(1) + '%';
+        document.getElementById('current-map').textContent = currentMap;
     }
 
     /**

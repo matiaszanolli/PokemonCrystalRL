@@ -8,10 +8,11 @@ consolidating functionality from multiple previous implementations.
 from typing import Dict, Any, Optional, List
 import json
 import logging
+import time
 from .models import (
     GameStateModel, TrainingStatsModel, MemoryDebugModel,
     LLMDecisionModel, SystemStatusModel, UnifiedDashboardModel,
-    ApiResponseModel
+    VisualizationDataModel, ApiResponseModel
 )
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,25 @@ class UnifiedApiEndpoints:
             return ApiResponseModel(
                 success=False,
                 error=f"Failed to get system status: {str(e)}"
+            ).to_dict()
+
+    def get_visualization_data(self) -> Dict[str, Any]:
+        """
+        Get data for training visualizations.
+
+        Returns:
+            Visualization data (reward history, action performance, decision patterns, etc.)
+
+        Endpoint: GET /api/visualization_data
+        """
+        try:
+            visualization_data = self._get_visualization_data()
+            return ApiResponseModel(success=True, data=visualization_data).to_dict()
+        except Exception as e:
+            self.logger.error(f"Visualization data error: {e}")
+            return ApiResponseModel(
+                success=False,
+                error=f"Failed to get visualization data: {str(e)}"
             ).to_dict()
 
     # Private helper methods
@@ -354,3 +374,87 @@ class UnifiedApiEndpoints:
             web_server_status="active" if training_active else "stopped",
             websocket_connections=websocket_connections
         )
+
+    def _get_visualization_data(self) -> VisualizationDataModel:
+        """Extract visualization data from trainer."""
+        if not self.trainer:
+            return VisualizationDataModel()
+
+        try:
+            # Get statistics tracker
+            tracker = None
+            if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
+                tracker = self.trainer.stats_tracker
+            elif hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker:
+                tracker = self.trainer.statistics_tracker
+
+            if not tracker:
+                return VisualizationDataModel()
+
+            # Get current stats
+            stats = tracker.get_current_stats()
+
+            # Build reward history
+            reward_history = []
+            recent_rewards = stats.get('recent_rewards', [])
+            total_reward = stats.get('total_reward', 0.0)
+
+            # Create time series for recent rewards
+            current_time = time.time()
+            for i, reward in enumerate(recent_rewards[-20:]):  # Last 20 rewards
+                timestamp = current_time - (len(recent_rewards) - i) * 30  # Estimate 30s intervals
+                reward_history.append({
+                    "timestamp": timestamp,
+                    "reward": float(reward),
+                    "cumulative": float(total_reward)
+                })
+
+            # Build action performance data
+            action_performance = {}
+            action_counts = stats.get('action_counts', {})
+            for action, count in action_counts.items():
+                action_performance[str(action)] = {
+                    "count": int(count),
+                    "success_rate": 0.8,  # Placeholder - would need success tracking
+                    "frequency": float(count) / max(stats.get('total_actions', 1), 1)
+                }
+
+            # Build performance metrics time series
+            performance_metrics = [{
+                "timestamp": current_time,
+                "actions_per_second": float(stats.get('actions_per_second', 0.0)),
+                "success_rate": float(stats.get('success_rate', 0.0)),
+                "exploration_rate": float(stats.get('exploration_rate', 0.0)),
+                "total_reward": float(total_reward)
+            }]
+
+            # Build exploration data (position heatmap)
+            exploration_data = {
+                "map_positions": stats.get('position_history', {}),
+                "current_map": stats.get('current_map', 0),
+                "exploration_coverage": float(stats.get('exploration_rate', 0.0))
+            }
+
+            # Build decision patterns from LLM decisions
+            decision_patterns = []
+            llm_decisions = self._get_recent_llm_decisions()
+            for decision in llm_decisions[-10:]:  # Last 10 decisions
+                decision_patterns.append({
+                    "action": decision.action,
+                    "action_name": decision.action_name,
+                    "confidence": decision.confidence,
+                    "timestamp": decision.timestamp,
+                    "reasoning_length": len(decision.reasoning)
+                })
+
+            return VisualizationDataModel(
+                reward_history=reward_history,
+                action_performance=action_performance,
+                decision_patterns=decision_patterns,
+                performance_metrics=performance_metrics,
+                exploration_data=exploration_data
+            )
+
+        except Exception as e:
+            self.logger.warning(f"Could not get visualization data: {e}")
+            return VisualizationDataModel()

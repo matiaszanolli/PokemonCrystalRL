@@ -127,6 +127,45 @@ class SystemStatusModel:
 
 
 @dataclass
+class VisualizationDataModel:
+    """Data model specifically for training visualizations."""
+    # Reward progression data
+    reward_history: List[Dict[str, float]] = None  # [{"timestamp": t, "reward": r, "cumulative": c}]
+
+    # Action frequency and success data
+    action_performance: Dict[str, Dict[str, Any]] = None  # {"up": {"count": 10, "success_rate": 0.8}}
+
+    # LLM decision patterns
+    decision_patterns: List[Dict[str, Any]] = None  # Decision flow data
+
+    # Performance metrics over time
+    performance_metrics: List[Dict[str, float]] = None  # Time series data
+
+    # Exploration heatmap data
+    exploration_data: Dict[str, Any] = None  # Position frequency data
+
+    timestamp: float = None
+
+    def __post_init__(self):
+        if self.reward_history is None:
+            self.reward_history = []
+        if self.action_performance is None:
+            self.action_performance = {}
+        if self.decision_patterns is None:
+            self.decision_patterns = []
+        if self.performance_metrics is None:
+            self.performance_metrics = []
+        if self.exploration_data is None:
+            self.exploration_data = {}
+        if self.timestamp is None:
+            self.timestamp = time.time()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+
+
+@dataclass
 class UnifiedDashboardModel:
     """Complete dashboard data model combining all components."""
     game_state: GameStateModel

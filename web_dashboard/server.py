@@ -55,6 +55,8 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
                 self._serve_api_response(self.api_endpoints.get_llm_decisions())
             elif path == '/api/system_status':
                 self._serve_api_response(self.api_endpoints.get_system_status())
+            elif path == '/api/visualization_data':
+                self._serve_api_response(self.api_endpoints.get_visualization_data())
 
             # Screen capture
             elif path == '/api/screen':

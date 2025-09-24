@@ -109,6 +109,55 @@
                 </div>
             </div>
         </div>
+
+        <!-- Training Visualizations Panel -->
+        <div class="panel visualization-panel">
+            <h2>📈 Training Visualizations</h2>
+            <div class="viz-tabs">
+                <button class="viz-tab active" data-tab="rewards">Reward Progress</button>
+                <button class="viz-tab" data-tab="actions">Action Performance</button>
+                <button class="viz-tab" data-tab="decisions">LLM Decisions</button>
+                <button class="viz-tab" data-tab="exploration">Exploration Map</button>
+            </div>
+
+            <div class="viz-content">
+                <div id="rewards-viz" class="viz-panel active">
+                    <canvas id="rewards-chart" width="400" height="200"></canvas>
+                    <div class="viz-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #4CAF50"></span>Cumulative Reward</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #2196F3"></span>Recent Rewards</span>
+                    </div>
+                </div>
+
+                <div id="actions-viz" class="viz-panel">
+                    <canvas id="actions-heatmap" width="400" height="200"></canvas>
+                    <div class="action-stats" id="action-stats">
+                        <div class="stat-row">
+                            <span>Most Used Action:</span>
+                            <span id="most-used-action">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Success Rate:</span>
+                            <span id="avg-success-rate">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="decisions-viz" class="viz-panel">
+                    <div class="decision-flow" id="decision-flow">
+                        <div class="flow-item">Loading decision patterns...</div>
+                    </div>
+                </div>
+
+                <div id="exploration-viz" class="viz-panel">
+                    <canvas id="exploration-heatmap" width="400" height="200"></canvas>
+                    <div class="exploration-stats">
+                        <span>Coverage: <span id="exploration-coverage">0%</span></span>
+                        <span>Current Map: <span id="current-map">0</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Error Display -->
