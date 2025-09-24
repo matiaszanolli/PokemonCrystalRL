@@ -16,9 +16,10 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 ⚠️ **IMPORTANT**: `llm_trainer.py` is deprecated and shows a deprecation warning. Always use `main.py` instead.
 
 ### Key Components
-- **`core/`** - Core systems (memory mapping, web monitoring, game intelligence, reward calculation)
+- **`core/`** - Core systems (event system, plugin system, memory mapping, web monitoring)
+- **`agents/`** - Multi-agent framework with specialist agents (battle, explorer, progression)
+- **`plugins/`** - Modular plugin system for battle strategies, exploration patterns, rewards
 - **`trainer/`** - Training systems and LLM integration
-- **`agents/`** - LLM and DQN agent implementations
 - **`environments/`** - Game state detection and PyBoy environment wrappers
 - **`training/`** - Unified training orchestration and configuration
 - **`utils/`** - Memory reading, screen analysis, action parsing utilities
@@ -28,7 +29,8 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 ### Training Modes
 1. **LLM-only training** - Uses Ollama models for decision making
 2. **Hybrid LLM-RL training** - Combines LLM guidance with DQN optimization
-3. **Traditional RL training** - Pure reinforcement learning approach
+3. **Multi-agent training** - Specialist agents coordinated by event system
+4. **Plugin-based training** - Modular components for different strategies
 
 ## Common Commands
 
@@ -62,13 +64,23 @@ python3 examples/run_hybrid_training.py
 python -m pytest tests/ -v
 
 # Run specific test categories
-python -m pytest tests/core/ tests/trainer/ -v
+python -m pytest tests/core/ tests/trainer/ tests/plugins/ -v
 python -m pytest tests/integration/ -v
 
-# Run tests with markers
+# Run tests with markers for new systems
 python -m pytest -m "unit" -v
 python -m pytest -m "integration" -v
 python -m pytest -m "web_monitoring" -v
+
+# Test specific new systems
+python -m pytest tests/core/test_event_system.py -v
+python -m pytest tests/core/test_plugin_system.py -v
+python -m pytest tests/plugins/test_plugin_manager.py -v
+python -m pytest tests/plugins/test_battle_strategies.py -v
+python -m pytest tests/plugins/test_exploration_patterns.py -v
+
+# Run single test method
+python -m pytest tests/core/test_event_system.py::TestEventBus::test_event_publishing -v
 ```
 
 ### Development Setup
@@ -104,6 +116,36 @@ ollama pull smollm2:1.7b
 
 ## Important Architecture Notes
 
+### Multi-Agent Framework (`agents/`)
+- **MultiAgentCoordinator** - Orchestrates specialist agents with intelligent coordination
+- **BattleAgent** - Combat optimization specialist leveraging enhanced BattleStrategy
+- **ExplorerAgent** - Map discovery specialist with multiple exploration patterns
+- **ProgressionAgent** - Story completion specialist with phase-aware progression
+- **Event-driven coordination** - Agents react to game events and publish performance updates
+- **Adaptive performance tracking** - Agent weights adjust based on success rates
+
+### Event System - Reactive Architecture (`core/event_system.py`)
+- **EventBus** - Central publish-subscribe system with filtering and priority handling
+- **20+ Event Types** - Battle, level-up, badge, location, agent decisions, performance updates
+- **EventSubscriber interface** - Components subscribe to relevant events for reactive behavior
+- **GameStateEventDetector** - Automatically detects and publishes game state changes
+- **EventDrivenAnalytics** - Real-time metrics tracking with performance insights
+- **Event correlation** - Track related events with correlation IDs for pattern analysis
+
+### Plugin System - Modular Architecture (`core/plugin_system.py`, `plugins/`)
+- **PluginRegistry** - Centralized plugin discovery, loading, and lifecycle management
+- **Hot-swappable plugins** - Runtime plugin updates without stopping training
+- **Plugin types**: Battle strategies, exploration patterns, reward calculators, screen analyzers
+- **PluginManager** - High-level interface for plugin coordination and recommendation aggregation
+- **Performance tracking** - Built-in monitoring for plugin call counts and execution time
+- **Configuration validation** - Ensure plugin configs are valid before activation
+
+### Official Plugin Implementations
+- **Battle Strategies**: Aggressive, Defensive, Balanced with move recommendation and switch assessment
+- **Exploration Patterns**: Systematic sweep, spiral search, wall following, random walk
+- **Reward Calculators**: Progression-focused, battle-focused, exploration-focused, balanced
+- **Plugin coordination** - Multiple plugins work together with priority-based selection
+
 ### Memory System
 - Memory addresses defined in `config/memory_addresses.py`
 - Memory reading utilities in `utils/memory_reader.py`
@@ -134,6 +176,7 @@ ollama pull smollm2:1.7b
 - Progressive scaling with bigger rewards for major milestones
 - Smart health logic that only applies when player has Pokemon
 - Early game focus with special rewards for getting first Pokemon
+- **Plugin-based rewards** - Modular reward calculators with different focuses
 
 ### Training Configuration
 - Hybrid training config in `hybrid_training_config.json`
