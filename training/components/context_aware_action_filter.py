@@ -459,3 +459,275 @@ class ContextAwareActionFilter:
             'situation_modifiers': len(self.situation_modifiers),
             'action_types': len(self.action_names)
         }
+
+
+class NPCInteractionPatterns:
+    """Enhanced NPC interaction pattern recognition and dialogue management"""
+
+    def __init__(self):
+        self.logger = logging.getLogger("NPCInteractionPatterns")
+
+        # NPC types and their interaction patterns
+        self.npc_types = {
+            'nurse_joy': {
+                'location': 'pokemon_center',
+                'purpose': 'healing',
+                'dialogue_pattern': 'service_standard',
+                'actions': ['approach', 'interact', 'confirm_healing', 'wait', 'finish'],
+                'key_phrases': ['heal', 'pokemon', 'center'],
+                'expected_outcome': 'pokemon_healed'
+            },
+            'gym_leader': {
+                'location': 'gym',
+                'purpose': 'battle',
+                'dialogue_pattern': 'challenge_introduction',
+                'actions': ['approach', 'interact', 'accept_challenge', 'battle'],
+                'key_phrases': ['challenge', 'battle', 'badge', 'gym'],
+                'expected_outcome': 'battle_initiated'
+            },
+            'professor': {
+                'location': 'lab',
+                'purpose': 'story_progression',
+                'dialogue_pattern': 'tutorial_exposition',
+                'actions': ['approach', 'listen', 'acknowledge', 'receive_item'],
+                'key_phrases': ['professor', 'research', 'pokemon', 'help'],
+                'expected_outcome': 'quest_advancement'
+            },
+            'shopkeeper': {
+                'location': 'shop',
+                'purpose': 'commerce',
+                'dialogue_pattern': 'transaction_focused',
+                'actions': ['approach', 'browse', 'select', 'purchase', 'leave'],
+                'key_phrases': ['buy', 'sell', 'shop', 'item', 'money'],
+                'expected_outcome': 'transaction_completed'
+            },
+            'trainer': {
+                'location': 'route',
+                'purpose': 'battle',
+                'dialogue_pattern': 'challenge_direct',
+                'actions': ['approach', 'engage', 'battle'],
+                'key_phrases': ['trainer', 'battle', 'pokemon', 'fight'],
+                'expected_outcome': 'battle_initiated'
+            },
+            'quest_npc': {
+                'location': 'various',
+                'purpose': 'quest_management',
+                'dialogue_pattern': 'information_exchange',
+                'actions': ['approach', 'listen', 'inquire', 'accept_quest', 'complete_quest'],
+                'key_phrases': ['help', 'quest', 'task', 'reward', 'find'],
+                'expected_outcome': 'quest_update'
+            }
+        }
+
+        # Dialogue state patterns
+        self.dialogue_states = {
+            'greeting': {
+                'indicators': ['hello', 'hi', 'welcome', 'greetings'],
+                'responses': ['A to continue', 'Listen to greeting'],
+                'next_expected': 'service_offer'
+            },
+            'service_offer': {
+                'indicators': ['help', 'heal', 'buy', 'challenge'],
+                'responses': ['A to accept', 'A to proceed'],
+                'next_expected': 'confirmation'
+            },
+            'confirmation': {
+                'indicators': ['yes', 'no', 'confirm', 'sure'],
+                'responses': ['A for yes', 'B for no'],
+                'next_expected': 'service_execution'
+            },
+            'service_execution': {
+                'indicators': ['processing', 'working', 'battling'],
+                'responses': ['Wait', 'Let action complete'],
+                'next_expected': 'completion'
+            },
+            'completion': {
+                'indicators': ['done', 'finished', 'thank you', 'goodbye'],
+                'responses': ['A to acknowledge', 'Continue interaction'],
+                'next_expected': 'exit'
+            },
+            'information_request': {
+                'indicators': ['what', 'where', 'how', 'tell me'],
+                'responses': ['A to continue', 'Listen carefully'],
+                'next_expected': 'information_delivery'
+            },
+            'information_delivery': {
+                'indicators': ['here is', 'you need', 'go to', 'find'],
+                'responses': ['A to acknowledge', 'Remember information'],
+                'next_expected': 'completion'
+            }
+        }
+
+    def identify_npc_type(self,
+                         game_state: Dict[str, Any],
+                         context: Dict[str, Any]) -> Optional[str]:
+        """Identify the type of NPC being interacted with"""
+        location = context.get('detected_state', 'unknown')
+        player_map = game_state.get('player_map', 0)
+
+        # Location-based NPC identification
+        if location == 'dialogue' or context.get('dialogue_active', False):
+            # Analyze location context
+            if 'pokemon_center' in str(context).lower() or player_map in [1, 5, 8]:  # Common Pokemon Center maps
+                return 'nurse_joy'
+            elif 'gym' in str(context).lower() or player_map in [6, 12, 16, 21]:  # Gym locations
+                return 'gym_leader'
+            elif 'shop' in str(context).lower() or 'mart' in str(context).lower():
+                return 'shopkeeper'
+            elif 'lab' in str(context).lower() or player_map == 1:  # Professor Elm's lab
+                return 'professor'
+            else:
+                # Default to quest NPC for unknown dialogue situations
+                return 'quest_npc'
+
+        return None
+
+    def get_dialogue_strategy(self,
+                            npc_type: str,
+                            game_state: Dict[str, Any],
+                            dialogue_history: List[str] = None) -> Dict[str, Any]:
+        """Get intelligent dialogue strategy for specific NPC type"""
+        if npc_type not in self.npc_types:
+            return self._get_generic_dialogue_strategy()
+
+        npc_info = self.npc_types[npc_type]
+
+        strategy = {
+            'npc_type': npc_type,
+            'primary_purpose': npc_info['purpose'],
+            'expected_actions': npc_info['actions'],
+            'dialogue_approach': self._determine_dialogue_approach(npc_type, game_state),
+            'recommended_responses': self._get_recommended_responses(npc_type),
+            'interaction_goal': npc_info['expected_outcome'],
+            'patience_level': self._calculate_patience_level(npc_type, game_state)
+        }
+
+        return strategy
+
+    def _determine_dialogue_approach(self, npc_type: str, game_state: Dict[str, Any]) -> str:
+        """Determine the best approach for dialogue with this NPC type"""
+        party_count = game_state.get('party_count', 0)
+        badges_count = game_state.get('badges_total', 0)
+        player_hp = game_state.get('player_hp', 0)
+        player_max_hp = game_state.get('player_max_hp', 1)
+        hp_ratio = player_hp / max(player_max_hp, 1) if party_count > 0 else 1.0
+
+        if npc_type == 'nurse_joy':
+            if hp_ratio < 0.5:
+                return 'urgent_healing'
+            else:
+                return 'standard_service'
+
+        elif npc_type == 'gym_leader':
+            if hp_ratio > 0.8 and party_count > 0:
+                return 'ready_for_challenge'
+            else:
+                return 'prepare_first'
+
+        elif npc_type == 'shopkeeper':
+            money = game_state.get('money', 0)
+            if money > 1000:
+                return 'purchase_ready'
+            else:
+                return 'browse_only'
+
+        elif npc_type == 'professor':
+            if party_count == 0:
+                return 'first_pokemon'
+            else:
+                return 'progress_check'
+
+        return 'standard_interaction'
+
+    def _get_recommended_responses(self, npc_type: str) -> List[str]:
+        """Get context-appropriate response recommendations"""
+        responses = {
+            'nurse_joy': [
+                'A to request healing',
+                'A to confirm healing',
+                'A to acknowledge completion'
+            ],
+            'gym_leader': [
+                'A to accept challenge',
+                'A to continue dialogue',
+                'B if not ready to battle'
+            ],
+            'shopkeeper': [
+                'A to select items',
+                'A to confirm purchase',
+                'B to exit shop'
+            ],
+            'professor': [
+                'A to continue conversation',
+                'A to accept Pokemon/items',
+                'A to acknowledge advice'
+            ],
+            'trainer': [
+                'A to engage in battle',
+                'A to continue dialogue'
+            ],
+            'quest_npc': [
+                'A to continue listening',
+                'A to accept quest',
+                'A to complete quest'
+            ]
+        }
+
+        return responses.get(npc_type, ['A to continue', 'B to exit'])
+
+    def _calculate_patience_level(self, npc_type: str, game_state: Dict[str, Any]) -> str:
+        """Calculate how patient to be with this NPC interaction"""
+        # Some NPCs require more patience than others
+        patience_map = {
+            'nurse_joy': 'high',      # Healing is important
+            'professor': 'high',      # Story progression is crucial
+            'gym_leader': 'medium',   # Challenge acceptance needs care
+            'shopkeeper': 'medium',   # Transaction efficiency
+            'trainer': 'low',         # Battle engagement is quick
+            'quest_npc': 'high'      # Quest information is valuable
+        }
+
+        return patience_map.get(npc_type, 'medium')
+
+    def _get_generic_dialogue_strategy(self) -> Dict[str, Any]:
+        """Fallback strategy for unknown NPC types"""
+        return {
+            'npc_type': 'unknown',
+            'primary_purpose': 'information_gathering',
+            'expected_actions': ['approach', 'listen', 'respond'],
+            'dialogue_approach': 'cautious_exploration',
+            'recommended_responses': ['A to continue', 'B to exit'],
+            'interaction_goal': 'gather_information',
+            'patience_level': 'medium'
+        }
+
+    def analyze_dialogue_progress(self,
+                                dialogue_history: List[str],
+                                current_state: str) -> Dict[str, Any]:
+        """Analyze dialogue progression and suggest next actions"""
+        if not dialogue_history:
+            return {
+                'stage': 'initial',
+                'suggestion': 'Begin interaction with A button',
+                'confidence': 0.8
+            }
+
+        # Analyze recent dialogue for patterns
+        recent_text = ' '.join(dialogue_history[-3:]).lower()
+
+        for state, info in self.dialogue_states.items():
+            for indicator in info['indicators']:
+                if indicator in recent_text:
+                    return {
+                        'stage': state,
+                        'suggestion': info['responses'][0],
+                        'next_expected': info['next_expected'],
+                        'confidence': 0.9
+                    }
+
+        # Default if no pattern matches
+        return {
+            'stage': 'unknown',
+            'suggestion': 'Continue with A button',
+            'confidence': 0.5
+        }

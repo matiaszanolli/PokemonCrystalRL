@@ -7,7 +7,7 @@ based on game progress, objectives, and current situation.
 
 import logging
 from typing import Dict, Any, List, Optional, Tuple
-from collections import deque
+from collections import deque, defaultdict
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,36 @@ class GameObjective:
     progress: float  # 0.0-1.0
 
 
+@dataclass
+class QuestTracker:
+    """Tracks quest progress and objectives"""
+    quest_id: str
+    name: str
+    description: str
+    location: str
+    prerequisites: List[str]
+    rewards: List[str]
+    status: str  # 'available', 'active', 'completed', 'failed'
+    progress_markers: Dict[str, bool]
+    estimated_actions: int
+
+
+@dataclass
+class LocationInfo:
+    """Enhanced location information with strategic context"""
+    map_id: int
+    name: str
+    location_type: str  # 'town', 'route', 'gym', 'center', 'cave', 'special'
+    strategic_value: int  # 1-10, importance for progression
+    available_services: List[str]  # 'healing', 'shopping', 'gym', 'pc'
+    key_npcs: List[str]
+    quests_available: List[str]
+    pokemon_encounters: List[str]
+    items_available: List[str]
+    required_hms: List[str]  # HMs needed to access
+    connections: List[int]  # Connected map IDs
+
+
 class StrategicContextBuilder:
     """Builds enhanced strategic context for LLM decision making."""
 
@@ -33,23 +63,17 @@ class StrategicContextBuilder:
         self.action_history = deque(maxlen=20)   # Last 20 actions
         self.reward_history = deque(maxlen=100)  # Last 100 rewards
 
-        # Map knowledge
+        # Enhanced map knowledge and quest tracking
         self.visited_locations = set()
-        self.important_locations = {
-            # New Bark Town area
-            1: "new_bark_town",
-            2: "route_29",
-            3: "route_30",
-            4: "route_31",
-            # Cherrygrove and beyond
-            5: "cherrygrove_city",
-            6: "route_32",
-            7: "route_33",
-            # Violet City area
-            8: "violet_city",
-            32: "sprout_tower",
-            # More locations can be added as discovered
-        }
+        self.location_database = self._initialize_location_database()
+        self.quest_tracker = self._initialize_quest_system()
+        self.navigation_history = deque(maxlen=100)  # Track movement patterns
+        self.location_visit_count = defaultdict(int)
+        self.discovered_connections = defaultdict(list)
+
+        # Strategic mapping
+        self.strategic_routes = self._initialize_strategic_routes()
+        self.progression_checkpoints = self._initialize_progression_checkpoints()
 
         # Progress tracking
         self.last_progress_check = {
@@ -402,3 +426,300 @@ class StrategicContextBuilder:
             'in_battle': game_state.get('in_battle', 0),
             'fallback_mode': True
         }
+
+    def _initialize_location_database(self) -> Dict[int, LocationInfo]:
+        """Initialize comprehensive location database with strategic information"""
+        return {
+            # New Bark Town area - Starting region
+            1: LocationInfo(
+                map_id=1,
+                name="New Bark Town",
+                location_type="town",
+                strategic_value=9,  # Very important - starting town
+                available_services=["pokemon_center", "professor_lab"],
+                key_npcs=["professor_elm", "mom"],
+                quests_available=["get_first_pokemon", "deliver_mystery_egg"],
+                pokemon_encounters=[],
+                items_available=["pokegear", "town_map"],
+                required_hms=[],
+                connections=[2]  # Route 29
+            ),
+
+            2: LocationInfo(
+                map_id=2,
+                name="Route 29",
+                location_type="route",
+                strategic_value=7,
+                available_services=[],
+                key_npcs=["trainer_1", "berry_person"],
+                quests_available=["catch_wild_pokemon"],
+                pokemon_encounters=["pidgey", "sentret"],
+                items_available=["potion", "apricorn"],
+                required_hms=[],
+                connections=[1, 5]  # New Bark Town, Cherrygrove City
+            ),
+
+            5: LocationInfo(
+                map_id=5,
+                name="Cherrygrove City",
+                location_type="town",
+                strategic_value=8,
+                available_services=["pokemon_center", "pokemart"],
+                key_npcs=["guide_npc", "nurse_joy"],
+                quests_available=["get_running_shoes"],
+                pokemon_encounters=[],
+                items_available=["running_shoes", "berries"],
+                required_hms=[],
+                connections=[2, 6]  # Route 29, Route 30
+            ),
+
+            8: LocationInfo(
+                map_id=8,
+                name="Violet City",
+                location_type="town",
+                strategic_value=10,
+                available_services=["pokemon_center", "pokemart", "gym"],
+                key_npcs=["falkner", "earl", "nurse_joy"],
+                quests_available=["challenge_falkner", "learn_about_pokemon"],
+                pokemon_encounters=[],
+                items_available=["hm_flash", "miracle_seed"],
+                required_hms=[],
+                connections=[3, 32]  # Route 31, Sprout Tower
+            ),
+
+            32: LocationInfo(
+                map_id=32,
+                name="Sprout Tower",
+                location_type="special",
+                strategic_value=6,
+                available_services=[],
+                key_npcs=["sage_masters", "monks"],
+                quests_available=["complete_sprout_tower"],
+                pokemon_encounters=["rattata", "gastly"],
+                items_available=["hm_flash", "escape_rope"],
+                required_hms=[],
+                connections=[8]  # Violet City
+            ),
+
+            # Add more locations as needed for progression tracking
+        }
+
+    def _initialize_quest_system(self) -> Dict[str, QuestTracker]:
+        """Initialize quest tracking system with major story quests"""
+        return {
+            "get_first_pokemon": QuestTracker(
+                quest_id="get_first_pokemon",
+                name="Choose Your First Pokemon",
+                description="Visit Professor Elm and receive your starter Pokemon",
+                location="new_bark_town",
+                prerequisites=[],
+                rewards=["starter_pokemon", "pokedex"],
+                status="available",
+                progress_markers={"visited_elm": False, "received_pokemon": False},
+                estimated_actions=20
+            ),
+
+            "deliver_mystery_egg": QuestTracker(
+                quest_id="deliver_mystery_egg",
+                name="Deliver the Mystery Egg",
+                description="Deliver the mysterious egg to Mr. Pokemon",
+                location="route_30",
+                prerequisites=["get_first_pokemon"],
+                rewards=["mystery_egg", "quest_progress"],
+                status="available",
+                progress_markers={"received_task": False, "found_mr_pokemon": False, "delivered_egg": False},
+                estimated_actions=100
+            ),
+
+            "challenge_falkner": QuestTracker(
+                quest_id="challenge_falkner",
+                name="Violet Gym Challenge",
+                description="Challenge Falkner for the Violet City Gym Badge",
+                location="violet_city",
+                prerequisites=["deliver_mystery_egg"],
+                rewards=["zephyr_badge", "tm_roost"],
+                status="available",
+                progress_markers={"arrived_violet": False, "entered_gym": False, "defeated_falkner": False},
+                estimated_actions=80
+            ),
+
+            "complete_sprout_tower": QuestTracker(
+                quest_id="complete_sprout_tower",
+                name="Sprout Tower Trial",
+                description="Complete the Sprout Tower challenge to prove your worth",
+                location="sprout_tower",
+                prerequisites=["get_first_pokemon"],
+                rewards=["hm_flash", "experience"],
+                status="available",
+                progress_markers={"entered_tower": False, "reached_top": False, "completed_trial": False},
+                estimated_actions=60
+            )
+        }
+
+    def _initialize_strategic_routes(self) -> Dict[str, List[int]]:
+        """Initialize optimal routes between key locations"""
+        return {
+            "starter_to_first_gym": [1, 2, 5, 6, 7, 8],  # New Bark → Violet City
+            "gym_circuit_johto": [8, 12, 16, 21, 25, 28, 31, 35],  # Johto gym order
+            "elite_four_preparation": [35, 36, 37, 38],  # Route to Elite Four
+            "kanto_access": [38, 39, 40, 41],  # Post-Elite Four Kanto access
+        }
+
+    def _initialize_progression_checkpoints(self) -> Dict[str, Dict[str, Any]]:
+        """Initialize key progression milestones"""
+        return {
+            "tutorial_complete": {
+                "requirements": {"party_count": 1, "badges": 0},
+                "description": "First Pokemon obtained",
+                "next_goal": "first_gym_preparation"
+            },
+            "first_gym_preparation": {
+                "requirements": {"party_count": 1, "player_level": 10},
+                "description": "Ready for first gym challenge",
+                "next_goal": "first_badge"
+            },
+            "first_badge": {
+                "requirements": {"badges": 1},
+                "description": "Defeated Falkner at Violet Gym",
+                "next_goal": "second_gym_preparation"
+            },
+            "johto_champion": {
+                "requirements": {"badges": 8},
+                "description": "Defeated all Johto gym leaders",
+                "next_goal": "elite_four_preparation"
+            },
+            "kanto_access": {
+                "requirements": {"badges": 8, "elite_four_beaten": True},
+                "description": "Access to Kanto region",
+                "next_goal": "kanto_gyms"
+            }
+        }
+
+    def get_current_quest_objectives(self, game_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get current active quest objectives based on game state"""
+        objectives = []
+        badges = game_state.get('badges_total', 0)
+        party_count = game_state.get('party_count', 0)
+        current_map = game_state.get('player_map', 0)
+
+        # Update quest statuses based on game state
+        self._update_quest_statuses(game_state)
+
+        # Collect active and available quests
+        for quest_id, quest in self.quest_tracker.items():
+            if quest.status in ['active', 'available']:
+                # Check if prerequisites are met
+                if self._are_prerequisites_met(quest, game_state):
+                    objective = {
+                        'quest_id': quest_id,
+                        'name': quest.name,
+                        'description': quest.description,
+                        'priority': self._calculate_quest_priority(quest, game_state),
+                        'location': quest.location,
+                        'estimated_actions': quest.estimated_actions,
+                        'progress': self._calculate_quest_progress(quest)
+                    }
+                    objectives.append(objective)
+
+        # Sort by priority
+        return sorted(objectives, key=lambda x: x['priority'], reverse=True)
+
+    def _update_quest_statuses(self, game_state: Dict[str, Any]):
+        """Update quest statuses based on current game state"""
+        party_count = game_state.get('party_count', 0)
+        badges = game_state.get('badges_total', 0)
+
+        # Update quest progress markers
+        if party_count > 0:
+            self.quest_tracker["get_first_pokemon"].progress_markers["received_pokemon"] = True
+            if self.quest_tracker["get_first_pokemon"].status == "available":
+                self.quest_tracker["get_first_pokemon"].status = "completed"
+
+        if badges >= 1:
+            self.quest_tracker["challenge_falkner"].status = "completed"
+
+    def _are_prerequisites_met(self, quest: QuestTracker, game_state: Dict[str, Any]) -> bool:
+        """Check if quest prerequisites are satisfied"""
+        for prereq in quest.prerequisites:
+            if prereq in self.quest_tracker:
+                if self.quest_tracker[prereq].status != "completed":
+                    return False
+        return True
+
+    def _calculate_quest_priority(self, quest: QuestTracker, game_state: Dict[str, Any]) -> int:
+        """Calculate dynamic quest priority based on current situation"""
+        base_priority = 5
+        party_count = game_state.get('party_count', 0)
+        badges = game_state.get('badges_total', 0)
+
+        # High priority for essential progression
+        if quest.quest_id == "get_first_pokemon" and party_count == 0:
+            return 10
+
+        if quest.quest_id == "challenge_falkner" and badges == 0 and party_count > 0:
+            return 9
+
+        # Medium priority for side content
+        if quest.quest_id == "complete_sprout_tower":
+            return 6
+
+        return base_priority
+
+    def _calculate_quest_progress(self, quest: QuestTracker) -> float:
+        """Calculate quest completion percentage"""
+        if not quest.progress_markers:
+            return 0.0
+
+        completed_markers = sum(1 for completed in quest.progress_markers.values() if completed)
+        total_markers = len(quest.progress_markers)
+
+        return completed_markers / total_markers if total_markers > 0 else 0.0
+
+    def get_navigation_advice(self, game_state: Dict[str, Any], target_location: str = None) -> Dict[str, Any]:
+        """Get intelligent navigation recommendations"""
+        current_map = game_state.get('player_map', 0)
+        current_location = self.location_database.get(current_map)
+
+        advice = {
+            'current_location': current_location.name if current_location else f"Unknown (Map {current_map})",
+            'strategic_value': current_location.strategic_value if current_location else 1,
+            'available_services': current_location.available_services if current_location else [],
+            'recommended_actions': [],
+            'navigation_priority': 'medium'
+        }
+
+        if target_location:
+            advice['target_location'] = target_location
+            advice['route_suggestions'] = self._get_route_suggestions(current_map, target_location)
+
+        # Add location-specific recommendations
+        if current_location:
+            if 'pokemon_center' in current_location.available_services:
+                party_count = game_state.get('party_count', 0)
+                if party_count > 0:
+                    hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
+                    if hp_ratio < 0.5:
+                        advice['recommended_actions'].append("Visit Pokemon Center for healing")
+
+            if 'gym' in current_location.available_services:
+                badges = game_state.get('badges_total', 0)
+                if current_map == 8 and badges == 0:  # Violet City Gym
+                    advice['recommended_actions'].append("Challenge Falkner for first badge")
+
+        return advice
+
+    def _get_route_suggestions(self, from_map: int, to_location: str) -> List[str]:
+        """Get route suggestions for navigation"""
+        # This would implement pathfinding logic
+        # For now, return basic suggestions
+        route_suggestions = []
+
+        if to_location == "violet_city":
+            route_suggestions = [
+                "Head north through Route 29",
+                "Pass through Cherrygrove City",
+                "Continue to Route 30 and 31",
+                "Arrive at Violet City"
+            ]
+
+        return route_suggestions

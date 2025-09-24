@@ -219,41 +219,399 @@ class ProgressTracker:
         return goals
 
 class BattleStrategy:
-    """Intelligent battle decision making"""
-    
+    """Intelligent battle decision making with comprehensive type effectiveness and move selection"""
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        
-        # Type effectiveness (simplified - could be expanded)
+
+        # Comprehensive type effectiveness chart
         self.type_effectiveness = {
-            # Format: (attacker_type, defender_type): multiplier
-            ("WATER", "FIRE"): 2.0,
-            ("FIRE", "GRASS"): 2.0,
-            ("GRASS", "WATER"): 2.0,
-            ("ELECTRIC", "WATER"): 2.0,
-            ("ELECTRIC", "FLYING"): 2.0,
-            # Add more type matchups as needed
+            # Water type matchups
+            ("WATER", "FIRE"): 2.0, ("WATER", "GROUND"): 2.0, ("WATER", "ROCK"): 2.0,
+            ("WATER", "WATER"): 0.5, ("WATER", "GRASS"): 0.5, ("WATER", "DRAGON"): 0.5,
+
+            # Fire type matchups
+            ("FIRE", "GRASS"): 2.0, ("FIRE", "ICE"): 2.0, ("FIRE", "BUG"): 2.0, ("FIRE", "STEEL"): 2.0,
+            ("FIRE", "FIRE"): 0.5, ("FIRE", "WATER"): 0.5, ("FIRE", "ROCK"): 0.5, ("FIRE", "DRAGON"): 0.5,
+
+            # Grass type matchups
+            ("GRASS", "WATER"): 2.0, ("GRASS", "GROUND"): 2.0, ("GRASS", "ROCK"): 2.0,
+            ("GRASS", "FIRE"): 0.5, ("GRASS", "GRASS"): 0.5, ("GRASS", "POISON"): 0.5,
+            ("GRASS", "FLYING"): 0.5, ("GRASS", "BUG"): 0.5, ("GRASS", "DRAGON"): 0.5, ("GRASS", "STEEL"): 0.5,
+
+            # Electric type matchups
+            ("ELECTRIC", "WATER"): 2.0, ("ELECTRIC", "FLYING"): 2.0,
+            ("ELECTRIC", "ELECTRIC"): 0.5, ("ELECTRIC", "GRASS"): 0.5, ("ELECTRIC", "DRAGON"): 0.5,
+            ("ELECTRIC", "GROUND"): 0.0,  # No effect
+
+            # Psychic type matchups
+            ("PSYCHIC", "FIGHTING"): 2.0, ("PSYCHIC", "POISON"): 2.0,
+            ("PSYCHIC", "PSYCHIC"): 0.5, ("PSYCHIC", "STEEL"): 0.5,
+            ("PSYCHIC", "DARK"): 0.0,  # No effect
+
+            # Fighting type matchups
+            ("FIGHTING", "NORMAL"): 2.0, ("FIGHTING", "ICE"): 2.0, ("FIGHTING", "ROCK"): 2.0,
+            ("FIGHTING", "DARK"): 2.0, ("FIGHTING", "STEEL"): 2.0,
+            ("FIGHTING", "POISON"): 0.5, ("FIGHTING", "FLYING"): 0.5, ("FIGHTING", "PSYCHIC"): 0.5,
+            ("FIGHTING", "BUG"): 0.5, ("FIGHTING", "GHOST"): 0.0,  # No effect
+
+            # Flying type matchups
+            ("FLYING", "ELECTRIC"): 0.5, ("FLYING", "ROCK"): 0.5, ("FLYING", "STEEL"): 0.5,
+            ("FLYING", "GRASS"): 2.0, ("FLYING", "FIGHTING"): 2.0, ("FLYING", "BUG"): 2.0,
+
+            # Add more comprehensive type matchups as needed
         }
-    
-    def get_battle_strategy(self, game_state: Dict) -> str:
-        """Get recommended battle strategy"""
+
+        # Status condition priorities
+        self.status_conditions = {
+            'sleep': {'priority': 3, 'action': 'Wake up or switch'},
+            'poison': {'priority': 2, 'action': 'Use antidote or heal'},
+            'burn': {'priority': 2, 'action': 'Use burn heal'},
+            'freeze': {'priority': 3, 'action': 'Use fire move or switch'},
+            'paralysis': {'priority': 1, 'action': 'Use paralyze heal if needed'}
+        }
+
+        # Move categories and priorities
+        self.move_categories = {
+            'attack': {'priority': 3, 'description': 'Direct damage moves'},
+            'status': {'priority': 1, 'description': 'Status-affecting moves'},
+            'stat_boost': {'priority': 2, 'description': 'Stat-boosting moves'},
+            'healing': {'priority': 4, 'description': 'HP recovery moves'}
+        }
+
+    def get_type_effectiveness(self, attacker_type: str, defender_type: str) -> float:
+        """Get type effectiveness multiplier"""
+        return self.type_effectiveness.get((attacker_type.upper(), defender_type.upper()), 1.0)
+
+    def analyze_battle_situation(self, game_state: Dict) -> Dict[str, Any]:
+        """Comprehensive battle situation analysis"""
         if not game_state.get('in_battle', 0):
-            return "Not in battle"
-        
-        player_hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
+            return {'in_battle': False}
+
+        player_hp = game_state.get('player_hp', 0)
+        player_max_hp = game_state.get('player_max_hp', 1)
+        player_hp_ratio = player_hp / max(player_max_hp, 1)
+
         enemy_level = game_state.get('enemy_level', 0)
         player_level = game_state.get('player_level', 0)
-        
-        # Critical health
-        if player_hp_ratio < 0.2:
-            return "CRITICAL: Use healing item or switch Pokemon"
-        
-        # Level disadvantage
-        if enemy_level > player_level + 5:
-            return "Consider switching Pokemon or using items"
-        
-        # Standard attack
-        return "Attack with your best move"
+        level_difference = enemy_level - player_level
+
+        # Determine battle phase
+        if player_hp_ratio > 0.7:
+            battle_phase = "aggressive"
+        elif player_hp_ratio > 0.3:
+            battle_phase = "cautious"
+        else:
+            battle_phase = "defensive"
+
+        # Calculate strategic metrics
+        level_advantage = "enemy" if level_difference > 3 else "player" if level_difference < -3 else "even"
+
+        return {
+            'in_battle': True,
+            'player_hp_ratio': player_hp_ratio,
+            'level_difference': level_difference,
+            'level_advantage': level_advantage,
+            'battle_phase': battle_phase,
+            'player_species': game_state.get('player_species', 0),
+            'enemy_species': game_state.get('enemy_species', 0),
+            'recommended_priority': self._get_action_priority(player_hp_ratio, level_difference)
+        }
+
+    def _get_action_priority(self, hp_ratio: float, level_diff: int) -> str:
+        """Determine action priority based on battle state"""
+        if hp_ratio < 0.15:
+            return "emergency_heal"
+        elif hp_ratio < 0.3 and level_diff > 5:
+            return "switch_or_heal"
+        elif level_diff > 8:
+            return "consider_flee"
+        elif hp_ratio > 0.8 and level_diff < -2:
+            return "aggressive_attack"
+        else:
+            return "standard_attack"
+
+    def get_battle_strategy(self, game_state: Dict) -> str:
+        """Get intelligent battle strategy with move selection"""
+        analysis = self.analyze_battle_situation(game_state)
+
+        if not analysis['in_battle']:
+            return "Not in battle"
+
+        hp_ratio = analysis['player_hp_ratio']
+        priority = analysis['recommended_priority']
+        battle_phase = analysis['battle_phase']
+        level_advantage = analysis['level_advantage']
+
+        # Emergency situations
+        if priority == "emergency_heal":
+            return "EMERGENCY: Use healing item immediately or switch Pokemon"
+
+        if priority == "consider_flee":
+            return "RETREAT: Enemy too strong - consider fleeing or switching"
+
+        # Status condition handling
+        # Note: Status condition detection would require additional memory reading
+        # For now, we'll focus on HP and level-based strategy
+
+        # Strategic recommendations based on battle phase
+        strategies = []
+
+        if battle_phase == "aggressive":
+            if level_advantage == "player":
+                strategies.append("Use strongest attack move")
+                strategies.append("Consider stat-boosting moves for setup")
+            else:
+                strategies.append("Use super-effective moves if available")
+                strategies.append("Focus on consistent damage")
+
+        elif battle_phase == "cautious":
+            strategies.append("Use reliable moves to finish the battle")
+            if level_advantage == "enemy":
+                strategies.append("Consider defensive moves or healing")
+            else:
+                strategies.append("Maintain pressure with attacks")
+
+        elif battle_phase == "defensive":
+            strategies.append("PRIORITY: Heal or use defensive moves")
+            strategies.append("Consider switching to a healthier Pokemon")
+            if game_state.get('party_count', 1) > 1:
+                strategies.append("Switch Pokemon if available")
+
+        # Add type effectiveness advice (requires knowing Pokemon types)
+        player_species = analysis.get('player_species', 0)
+        enemy_species = analysis.get('enemy_species', 0)
+
+        if player_species and enemy_species:
+            # This would require a Pokemon species -> type mapping
+            # For now, provide general type advice
+            strategies.append("Check move types for effectiveness")
+
+        return f"Battle Phase: {battle_phase.title()} | " + " | ".join(strategies[:2])
+
+    def recommend_move_selection(self, game_state: Dict, available_moves: List[str] = None) -> Dict[str, Any]:
+        """Recommend specific move selection (if move data available)"""
+        analysis = self.analyze_battle_situation(game_state)
+
+        if not analysis['in_battle']:
+            return {'recommendation': 'Not in battle'}
+
+        recommendations = {
+            'primary_strategy': analysis['recommended_priority'],
+            'battle_phase': analysis['battle_phase'],
+            'suggested_move_types': [],
+            'avoid_moves': []
+        }
+
+        # Move type recommendations based on situation
+        if analysis['battle_phase'] == "aggressive":
+            recommendations['suggested_move_types'] = ['attack', 'stat_boost']
+        elif analysis['battle_phase'] == "cautious":
+            recommendations['suggested_move_types'] = ['attack']
+        else:  # defensive
+            recommendations['suggested_move_types'] = ['healing', 'status']
+            recommendations['avoid_moves'] = ['risky_attack', 'stat_boost']
+
+        return recommendations
+
+class InventoryManager:
+    """Intelligent inventory and item management for Pokemon Crystal"""
+
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+
+        # Item categories and their strategic value
+        self.item_categories = {
+            'healing': {
+                'potion': {'hp_restore': 20, 'priority': 3, 'use_threshold': 0.5},
+                'super_potion': {'hp_restore': 50, 'priority': 4, 'use_threshold': 0.4},
+                'hyper_potion': {'hp_restore': 200, 'priority': 5, 'use_threshold': 0.3},
+                'full_heal': {'status_cure': 'all', 'priority': 4, 'use_condition': 'status_ailment'}
+            },
+            'pokeballs': {
+                'pokeball': {'catch_rate': 1.0, 'priority': 2, 'use_condition': 'wild_encounter'},
+                'great_ball': {'catch_rate': 1.5, 'priority': 3, 'use_condition': 'wild_encounter'},
+                'ultra_ball': {'catch_rate': 2.0, 'priority': 4, 'use_condition': 'wild_encounter'}
+            },
+            'battle_items': {
+                'x_attack': {'stat_boost': 'attack', 'priority': 2, 'use_condition': 'tough_battle'},
+                'x_defend': {'stat_boost': 'defense', 'priority': 2, 'use_condition': 'tough_battle'},
+                'x_speed': {'stat_boost': 'speed', 'priority': 2, 'use_condition': 'tough_battle'}
+            },
+            'key_items': {
+                'bicycle': {'functionality': 'fast_travel', 'priority': 5},
+                'surf_hm': {'functionality': 'water_travel', 'priority': 5},
+                'cut_hm': {'functionality': 'obstacle_removal', 'priority': 4}
+            }
+        }
+
+        # Item usage strategies based on game state
+        self.usage_strategies = {
+            'battle': {
+                'hp_critical': 'Use strongest healing item immediately',
+                'hp_low': 'Use appropriate healing item',
+                'status_ailment': 'Use status cure item',
+                'tough_opponent': 'Consider battle enhancement items'
+            },
+            'exploration': {
+                'wild_encounter': 'Use pokeball if Pokemon is valuable',
+                'low_health': 'Heal before entering dangerous areas',
+                'obstacle': 'Use appropriate HM or key item'
+            }
+        }
+
+    def analyze_inventory_needs(self, game_state: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze current inventory needs based on game state and context"""
+        analysis = {
+            'immediate_needs': [],
+            'recommended_items': [],
+            'item_usage_advice': [],
+            'inventory_priorities': []
+        }
+
+        # Determine current situation
+        in_battle = game_state.get('in_battle', False)
+        party_count = game_state.get('party_count', 0)
+
+        if party_count > 0:
+            hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
+        else:
+            hp_ratio = 1.0
+
+        # Health-based recommendations
+        if party_count > 0:
+            if hp_ratio < 0.2:
+                analysis['immediate_needs'].append('emergency_healing')
+                analysis['item_usage_advice'].append('Use strongest healing item immediately')
+            elif hp_ratio < 0.5:
+                analysis['recommended_items'].append('healing_item')
+                analysis['item_usage_advice'].append('Consider using healing item')
+
+        # Battle-specific item needs
+        if in_battle:
+            enemy_level = game_state.get('enemy_level', 0)
+            player_level = game_state.get('player_level', 0)
+
+            if enemy_level > player_level + 5:
+                analysis['recommended_items'].append('battle_enhancement')
+                analysis['item_usage_advice'].append('Consider using stat-boosting items')
+
+        # Exploration needs
+        current_state = context.get('detected_state', 'unknown')
+        if current_state == 'overworld':
+            badges_count = game_state.get('badges_total', 0)
+
+            # Early game priorities
+            if badges_count < 2:
+                analysis['inventory_priorities'] = [
+                    'Stock up on pokeballs for catching Pokemon',
+                    'Carry healing items for long routes',
+                    'Get key items from NPCs'
+                ]
+            else:
+                analysis['inventory_priorities'] = [
+                    'Maintain healing item supply',
+                    'Carry varied pokeball types',
+                    'Collect HMs for navigation'
+                ]
+
+        return analysis
+
+    def recommend_item_usage(self, game_state: Dict[str, Any], held_item: int = None) -> Dict[str, Any]:
+        """Recommend specific item usage based on current situation"""
+        recommendations = {
+            'should_use_item': False,
+            'item_type': None,
+            'urgency': 'normal',
+            'reasoning': ''
+        }
+
+        party_count = game_state.get('party_count', 0)
+        if party_count == 0:
+            return recommendations
+
+        hp_ratio = game_state.get('player_hp', 0) / max(game_state.get('player_max_hp', 1), 1)
+        in_battle = game_state.get('in_battle', False)
+
+        # Critical health situation
+        if hp_ratio < 0.15:
+            recommendations.update({
+                'should_use_item': True,
+                'item_type': 'healing',
+                'urgency': 'critical',
+                'reasoning': 'Pokemon health critically low - immediate healing required'
+            })
+
+        # Low health in battle
+        elif in_battle and hp_ratio < 0.3:
+            recommendations.update({
+                'should_use_item': True,
+                'item_type': 'healing',
+                'urgency': 'high',
+                'reasoning': 'Low health in battle - heal to continue fighting effectively'
+            })
+
+        # Preventive healing before tough encounters
+        elif not in_battle and hp_ratio < 0.6:
+            enemy_level = game_state.get('enemy_level', 0)
+            player_level = game_state.get('player_level', 0)
+
+            if enemy_level > player_level + 3:
+                recommendations.update({
+                    'should_use_item': True,
+                    'item_type': 'healing',
+                    'urgency': 'normal',
+                    'reasoning': 'Heal before tough encounter to maximize chances'
+                })
+
+        return recommendations
+
+    def get_optimal_pokeball(self, game_state: Dict[str, Any], wild_pokemon_info: Dict[str, Any] = None) -> str:
+        """Recommend optimal pokeball type for wild encounters"""
+        if not wild_pokemon_info:
+            return "Use standard pokeball"
+
+        enemy_level = game_state.get('enemy_level', 0)
+        player_level = game_state.get('player_level', 0)
+        enemy_hp_ratio = wild_pokemon_info.get('hp_ratio', 1.0)
+
+        # Base recommendation on pokemon strength and rarity
+        if enemy_level > player_level + 10:
+            return "Use ultra ball - strong pokemon"
+        elif enemy_level > player_level + 5 or enemy_hp_ratio > 0.7:
+            return "Use great ball - moderately strong pokemon"
+        else:
+            return "Use pokeball - standard catch attempt"
+
+    def evaluate_held_item_strategy(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Evaluate held item strategy for Pokemon"""
+        held_item = game_state.get('player_held_item', 0)
+        player_level = game_state.get('player_level', 0)
+
+        strategy = {
+            'current_item': held_item,
+            'recommendation': 'keep',
+            'alternative_items': [],
+            'reasoning': ''
+        }
+
+        # Early game: prioritize healing items
+        if player_level < 15:
+            strategy.update({
+                'recommendation': 'equip_berry',
+                'alternative_items': ['oran_berry', 'pecha_berry'],
+                'reasoning': 'Early game benefits from healing/status cure items'
+            })
+
+        # Mid game: consider stat-boosting items
+        elif player_level < 40:
+            strategy.update({
+                'recommendation': 'consider_stat_items',
+                'alternative_items': ['choice_band', 'leftovers'],
+                'reasoning': 'Mid game can leverage stat-boosting held items'
+            })
+
+        return strategy
 
 class GameIntelligence:
     """Main game intelligence coordinator"""
@@ -263,6 +621,7 @@ class GameIntelligence:
         self.location_analyzer = LocationAnalyzer()
         self.progress_tracker = ProgressTracker()
         self.battle_strategy = BattleStrategy()
+        self.inventory_manager = InventoryManager()
     
     def analyze_game_context(self, game_state: Dict, screen_analysis: Dict) -> GameContext:
         """Perform comprehensive game analysis"""
@@ -296,7 +655,19 @@ class GameIntelligence:
         if game_state.get('in_battle', 0):
             battle_advice = self.battle_strategy.get_battle_strategy(game_state)
             recommended_actions.insert(0, f"Battle: {battle_advice}")
-        
+
+        # Inventory and item recommendations
+        inventory_analysis = self.inventory_manager.analyze_inventory_needs(game_state, screen_analysis)
+        if inventory_analysis['immediate_needs']:
+            for need in inventory_analysis['immediate_needs']:
+                recommended_actions.insert(0 if need == 'emergency_healing' else 1, f"Item: {need}")
+
+        # Add item usage advice to recommendations
+        item_recommendation = self.inventory_manager.recommend_item_usage(game_state)
+        if item_recommendation['should_use_item']:
+            urgency_text = f"({item_recommendation['urgency']})" if item_recommendation['urgency'] != 'normal' else ''
+            recommended_actions.insert(0, f"Use {item_recommendation['item_type']} item {urgency_text}")
+
         # Urgency level
         urgency = 1
         if party_count == 0:
