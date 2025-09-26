@@ -14,7 +14,7 @@ from .base_agent import BaseAgent
 from .battle_agent import BattleAgent
 from .explorer_agent import ExplorerAgent
 from .progression_agent import ProgressionAgent
-from ..core.event_system import EventType, Event, get_event_bus
+from core.event_system import EventType, Event, get_event_bus
 
 
 class AgentRole(Enum):

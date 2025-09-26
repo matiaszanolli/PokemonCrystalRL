@@ -19,7 +19,7 @@ def test_semantic_dialogue_integration():
     print("=" * 60)
     
     # Initialize the dialogue state machine (includes semantic system)
-    dsm = DialogueStateMachine("test_semantic_dialogue.db")
+    dsm = DialogueStateMachine("data/test_semantic_dialogue.db")
     print()
     
     # Test scenarios with different dialogue types

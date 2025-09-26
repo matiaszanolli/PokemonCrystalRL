@@ -26,7 +26,6 @@ from .trainers import (
     GameState,
     PyBoyInterface,
     AgentInterface,
-    RewardCalculatorInterface,
     TrainerInterface,
 )
 

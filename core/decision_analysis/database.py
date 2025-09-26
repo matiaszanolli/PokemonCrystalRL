@@ -21,7 +21,7 @@ class DecisionDatabase:
     """Handles database operations for decision analysis"""
     
     def __init__(self, db_path: Optional[str] = None):
-        self.db_path = Path(db_path) if db_path else Path("decision_history.db")
+        self.db_path = Path(db_path) if db_path else Path("data/decision_history.db")
         self.logger = logging.getLogger("pokemon_trainer.decision_db")
         self._init_database()
     

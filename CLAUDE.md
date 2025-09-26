@@ -64,23 +64,21 @@ python3 examples/run_hybrid_training.py
 python -m pytest tests/ -v
 
 # Run specific test categories
-python -m pytest tests/core/ tests/trainer/ tests/plugins/ -v
+python -m pytest tests/core/ tests/trainer/ tests/monitoring/ -v
 python -m pytest tests/integration/ -v
 
-# Run tests with markers for new systems
+# Run tests with markers for current systems
 python -m pytest -m "unit" -v
 python -m pytest -m "integration" -v
 python -m pytest -m "web_monitoring" -v
 
-# Test specific new systems
-python -m pytest tests/core/test_event_system.py -v
-python -m pytest tests/core/test_plugin_system.py -v
-python -m pytest tests/plugins/test_plugin_manager.py -v
-python -m pytest tests/plugins/test_battle_strategies.py -v
-python -m pytest tests/plugins/test_exploration_patterns.py -v
+# Test specific systems
+python -m pytest tests/core/test_adaptive_strategy_system.py -v
+python -m pytest tests/trainer/test_llm_multi_turn_context.py -v
+python -m pytest tests/monitoring/test_game_streamer.py -v
 
 # Run single test method
-python -m pytest tests/core/test_event_system.py::TestEventBus::test_event_publishing -v
+python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
 ```
 
 ### Development Setup
@@ -199,14 +197,23 @@ Use pytest markers defined in `pytest.ini` for organizing tests by functionality
 
 - `unit`: Unit tests
 - `integration`: Integration tests
+- `performance`: Performance tests
 - `web_monitoring`: Web monitoring related tests
 - `llm`: LLM functionality tests
-- `performance`: Performance tests
+- `multi_model`: Tests involving multiple model configurations
 - `state_detection`: Game state detection tests
+- `enhanced_rewards`: Enhanced reward system tests
+- `monitoring`: Data monitoring system tests
 - `memory_mapping`: Memory mapping and address tests
+- `memory_corruption`: Memory corruption protection tests
 - `trainer_validation`: Trainer memory validation tests
+- `pyboy_integration`: PyBoy integration tests
+- `streaming`: Game streaming functionality tests
+- `cleanup`: Resource cleanup and shutdown tests
+- `web`: Web server and HTTP interface tests
 - `anti_stuck`: Anti-stuck logic and recovery tests
 - `unified_trainer`: Unified trainer system tests
+- `system`: System and component integration tests
 
 Use markers to run specific test categories:
 ```bash
@@ -224,7 +231,7 @@ This project is in active development with recent major refactoring:
 - Deprecation of legacy `llm_trainer.py` in favor of `main.py`
 
 ### Current Development Branch
-Currently on `project-wide-refactoring` branch with ongoing improvements. Main branch is `main`.
+Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.
 
 ### Critical Requirements
 - Legal Pokemon Crystal ROM file placed in the `roms/` directory

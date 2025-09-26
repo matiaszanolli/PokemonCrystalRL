@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from collections import deque
 
 try:
-    from trainer.llm import LLMAgent
+    from agents.llm_agent import LLMAgent
 except ImportError:
     print("⚠️  LLMAgent not available")
     LLMAgent = None

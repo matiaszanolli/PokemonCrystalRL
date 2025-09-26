@@ -108,31 +108,6 @@ class AgentInterface(ABC):
         pass
 
 
-class RewardCalculatorInterface(ABC):
-    """Interface for reward calculation."""
-    
-    @abstractmethod
-    def calculate(self, prev_state: GameState, current_state: GameState) -> float:
-        """Calculate reward between states.
-        
-        Args:
-            prev_state: Previous game state
-            current_state: Current game state
-            
-        Returns:
-            Calculated reward value
-        """
-        pass
-        
-    @abstractmethod
-    def get_reward_breakdown(self) -> Dict[str, float]:
-        """Get breakdown of reward components.
-        
-        Returns:
-            Dictionary mapping reward sources to values
-        """
-        pass
-
 
 class TrainerInterface(ABC):
     """Interface for Pokemon trainer implementations."""

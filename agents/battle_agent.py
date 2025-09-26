@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from dataclasses import dataclass
 
 from .base_agent import BaseAgent
-from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
+from core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 try:
     from core.game_intelligence import BattleStrategy

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from collections import defaultdict, deque
 
 from .base_agent import BaseAgent
-from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
+from core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 try:
     from training.components.strategic_context_builder import StrategicContextBuilder

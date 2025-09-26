@@ -39,7 +39,7 @@ class ConfigMigrator:
         if version < ConfigMigrator.CURRENT_VERSION:
             # Add new required fields
             if 'db_path' not in config:
-                config['db_path'] = 'monitoring.db'
+                config['db_path'] = 'data/monitoring.db'
             if 'data_dir' not in config:
                 config['data_dir'] = 'monitor_data'
             if 'snapshot_interval' not in config:

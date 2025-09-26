@@ -25,7 +25,7 @@ def create_example_config():
         "llm_model": "smollm2:1.7b",
         "max_context_length": 8000,
         "initial_strategy": "llm_heavy",
-        "decision_db_path": "pokemon_decisions.db",
+        "decision_db_path": "data/pokemon_decisions.db",
         "save_dir": "training_checkpoints",
         "log_level": "INFO"
     }

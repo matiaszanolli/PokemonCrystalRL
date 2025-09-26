@@ -61,7 +61,7 @@ class DialogueStateMachine:
         """Initialize dialogue state machine"""
         from core.semantic_context_system import SemanticContextSystem
         
-        self.db_path = Path(db_path) if db_path else Path("dialogue.db")
+        self.db_path = Path(db_path) if db_path else Path("data/dialogue.db")
         self.semantic_system = semantic_system or SemanticContextSystem()
         
         self.current_state = DialogueState.IDLE

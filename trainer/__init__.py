@@ -19,9 +19,9 @@ from training.config.training_strategies import TrainingStrategy, CurriculumStra
 from environments.game_state_detection import GameStateDetector
 
 # Keep local imports
-from .dialogue_state_machine import DialogueStateMachine, DialogueState
+from core.dialogue_state_machine import DialogueStateMachine, DialogueState
 from .llm_manager import LLMManager
-# from .llm import LLMAgent  # Disabled due to import issues
+# LLMAgent now imported from agents.llm_agent
 from .monitoring import WebMonitor
 from core.choice_recognition import ChoiceRecognitionSystem, ChoiceType, ChoicePosition, ChoiceContext, RecognizedChoice
 
@@ -36,7 +36,7 @@ __all__ = [
     'DialogueState',
     'GameStateDetector',
     'LLMManager',
-    # 'LLMAgent',  # Disabled due to import issues
+    # LLMAgent available from agents.llm_agent
     'LLMBackend',
     'PokemonTrainer',
     'WebMonitor',
