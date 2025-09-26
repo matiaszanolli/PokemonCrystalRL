@@ -7,7 +7,7 @@ different approaches to reward system design.
 
 import time
 from typing import Dict, Any
-from ..core.plugin_system import RewardCalculatorPlugin, PluginMetadata, PluginType
+from core.plugin_system import RewardCalculatorPlugin, PluginMetadata, PluginType
 
 
 class ProgressionFocusedReward(RewardCalculatorPlugin):

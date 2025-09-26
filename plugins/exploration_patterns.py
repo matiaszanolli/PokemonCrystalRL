@@ -9,7 +9,7 @@ import time
 import random
 from typing import Dict, Any, List, Tuple
 from collections import deque
-from ..core.plugin_system import ExplorationPatternPlugin, PluginMetadata, PluginType
+from core.plugin_system import ExplorationPatternPlugin, PluginMetadata, PluginType
 
 
 class SystematicSweepPattern(ExplorationPatternPlugin):

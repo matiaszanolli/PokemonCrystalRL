@@ -20,7 +20,7 @@ from pathlib import Path
 import json
 import time
 
-from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
+from core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 
 class PluginType(Enum):

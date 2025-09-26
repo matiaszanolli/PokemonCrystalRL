@@ -7,7 +7,7 @@ This package contains all plugins for the Pokemon Crystal RL platform:
 - Plugin base classes and utilities
 """
 
-from ..core.plugin_system import (
+from core.plugin_system import (
     BasePlugin,
     BattleStrategyPlugin,
     ExplorationPatternPlugin,

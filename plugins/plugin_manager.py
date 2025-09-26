@@ -7,11 +7,11 @@ integrating with the training system, and providing plugin orchestration.
 
 import logging
 from typing import Dict, Any, List, Optional, Type
-from ..core.plugin_system import (
+from core.plugin_system import (
     get_plugin_registry, PluginType, PluginStatus, BasePlugin,
     BattleStrategyPlugin, ExplorationPatternPlugin, RewardCalculatorPlugin
 )
-from ..core.event_system import EventType, Event, EventSubscriber, get_event_bus
+from core.event_system import EventType, Event, EventSubscriber, get_event_bus
 
 
 class PluginManager(EventSubscriber):

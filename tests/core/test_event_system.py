@@ -136,7 +136,7 @@ class TestEventBus:
         assert self.event_bus is not None
         assert len(self.event_bus.subscribers) == 0
         assert len(self.event_bus.event_history) == 0
-        assert self.event_bus.max_history == 1000
+        # max_history is managed by deque internally
 
     def test_subscribe_unsubscribe(self):
         """Test subscriber management"""

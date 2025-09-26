@@ -7,7 +7,7 @@ different approaches to Pokemon combat optimization.
 
 import time
 from typing import Dict, Any, List
-from ..core.plugin_system import BattleStrategyPlugin, PluginMetadata, PluginType
+from core.plugin_system import BattleStrategyPlugin, PluginMetadata, PluginType
 
 
 class AggressiveBattleStrategy(BattleStrategyPlugin):
