@@ -28,11 +28,12 @@ logger = logging.getLogger(__name__)
 class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for the unified web dashboard."""
 
-    def __init__(self, *args, api_endpoints=None, rest_api=None, ab_testing_api=None, automation_api=None, websocket_handler=None, **kwargs):
+    def __init__(self, *args, api_endpoints=None, rest_api=None, ab_testing_api=None, automation_api=None, advanced_api=None, websocket_handler=None, **kwargs):
         self.api_endpoints = api_endpoints
         self.rest_api = rest_api
         self.ab_testing_api = ab_testing_api
         self.automation_api = automation_api
+        self.advanced_api = advanced_api
         self.websocket_handler = websocket_handler
         super().__init__(*args, **kwargs)
 
@@ -45,6 +46,8 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
             # Serve dashboard HTML
             if path == '/' or path == '/dashboard':
                 self._serve_dashboard()
+            elif path == '/advanced' or path == '/advanced-dashboard':
+                self._serve_advanced_dashboard()
 
             # API endpoints
             elif path == '/api/dashboard':
@@ -157,6 +160,25 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Dashboard serve error: {e}")
             self.send_error(500, f"Failed to serve dashboard: {str(e)}")
+
+    def _serve_advanced_dashboard(self):
+        """Serve the advanced analytics & debugging dashboard HTML."""
+        try:
+            dashboard_path = "/mnt/data/src/pokemon_crystal_rl/web_dashboard/static/advanced_dashboard.html"
+            with open(dashboard_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self._set_cors_headers()
+            self.end_headers()
+            self.wfile.write(content.encode('utf-8'))
+
+        except FileNotFoundError:
+            self.send_error(404, "Advanced dashboard template not found")
+        except Exception as e:
+            logger.error(f"Advanced dashboard serve error: {e}")
+            self.send_error(500, f"Failed to serve advanced dashboard: {str(e)}")
 
     def _serve_api_response(self, response_data: dict):
         """Serve a JSON API response."""
@@ -361,6 +383,30 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
                     return
 
                 self._handle_automation_api(path_parts, request_data)
+                return
+
+            elif resource == "analytics":  # Advanced Analytics endpoints
+                if not hasattr(self, 'advanced_api') or self.advanced_api is None:
+                    self.send_error(503, "Advanced Analytics API not available")
+                    return
+
+                self._handle_analytics_api(path_parts, request_data)
+                return
+
+            elif resource == "debug":  # Advanced Debugging endpoints
+                if not hasattr(self, 'advanced_api') or self.advanced_api is None:
+                    self.send_error(503, "Advanced Debugging API not available")
+                    return
+
+                self._handle_debug_api(path_parts, request_data)
+                return
+
+            elif resource == "system":  # System Control endpoints
+                if not hasattr(self, 'advanced_api') or self.advanced_api is None:
+                    self.send_error(503, "System Control API not available")
+                    return
+
+                self._handle_system_api(path_parts, request_data)
                 return
 
             elif resource == "docs":  # /api/v1/docs
@@ -585,6 +631,245 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
             logger.error(f"Automation API error: {e}")
             self.send_error(500, f"Automation API error: {str(e)}")
 
+    def _handle_analytics_api(self, path_parts: list, request_data: dict):
+        """Handle advanced analytics API requests."""
+        try:
+            response = {}
+
+            if len(path_parts) == 3:  # /api/v1/analytics
+                if self.command == "GET":
+                    response = self.advanced_api.get_analytics_summary()
+                elif self.command == "POST":
+                    response = self.advanced_api.start_analytics()
+                else:
+                    self.send_error(405, "Method not allowed")
+                    return
+
+            elif len(path_parts) == 4:  # /api/v1/analytics/{resource}
+                sub_resource = path_parts[3]
+
+                if sub_resource == "health":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_analytics_health()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "metrics":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_analytics_metrics()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "summary":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_analytics_summary()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "alerts":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_analytics_alerts()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "visualization":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_visualization_data()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "start":
+                    if self.command == "POST":
+                        response = self.advanced_api.start_analytics()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "stop":
+                    if self.command == "POST":
+                        response = self.advanced_api.stop_analytics()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:
+                    self.send_error(404, "Analytics endpoint not found")
+                    return
+
+            else:
+                self.send_error(404, "Analytics endpoint not found")
+                return
+
+            # Send the response
+            self._serve_api_response(response)
+
+        except Exception as e:
+            logger.error(f"Analytics API error: {e}")
+            self.send_error(500, f"Analytics API error: {str(e)}")
+
+    def _handle_debug_api(self, path_parts: list, request_data: dict):
+        """Handle advanced debugging API requests."""
+        try:
+            response = {}
+
+            if len(path_parts) == 3:  # /api/v1/debug
+                if self.command == "GET":
+                    response = self.advanced_api.get_debug_dashboard()
+                elif self.command == "POST":
+                    response = self.advanced_api.start_debug_monitoring()
+                else:
+                    self.send_error(405, "Method not allowed")
+                    return
+
+            elif len(path_parts) == 4:  # /api/v1/debug/{resource}
+                sub_resource = path_parts[3]
+
+                if sub_resource == "dashboard":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_debug_dashboard()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "profiler":
+                    if self.command == "GET":
+                        response = self.advanced_api.get_debug_profiler()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "breakpoint":
+                    if self.command == "POST":
+                        response = self.advanced_api.add_breakpoint(request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "watch":
+                    if self.command == "POST":
+                        response = self.advanced_api.add_watch_variable(request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "start":
+                    if self.command == "POST":
+                        response = self.advanced_api.start_debug_monitoring()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "stop":
+                    if self.command == "POST":
+                        response = self.advanced_api.stop_debug_monitoring()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:
+                    self.send_error(404, "Debug endpoint not found")
+                    return
+
+            elif len(path_parts) == 5:  # /api/v1/debug/profiler/{action}
+                if path_parts[3] == "profiler":
+                    action = path_parts[4]
+
+                    if action == "start":
+                        if self.command == "POST":
+                            response = self.advanced_api.start_profiler()
+                        else:
+                            self.send_error(405, "Method not allowed")
+                            return
+
+                    elif action == "stop":
+                        if self.command == "POST":
+                            response = self.advanced_api.stop_profiler()
+                        else:
+                            self.send_error(405, "Method not allowed")
+                            return
+
+                    elif action == "reset":
+                        if self.command == "POST":
+                            response = self.advanced_api.reset_profiler()
+                        else:
+                            self.send_error(405, "Method not allowed")
+                            return
+
+                    else:
+                        self.send_error(404, "Profiler action not found")
+                        return
+
+                else:
+                    self.send_error(404, "Debug endpoint not found")
+                    return
+
+            else:
+                self.send_error(404, "Debug endpoint not found")
+                return
+
+            # Send the response
+            self._serve_api_response(response)
+
+        except Exception as e:
+            logger.error(f"Debug API error: {e}")
+            self.send_error(500, f"Debug API error: {str(e)}")
+
+    def _handle_system_api(self, path_parts: list, request_data: dict):
+        """Handle system control API requests."""
+        try:
+            response = {}
+
+            if len(path_parts) == 4:  # /api/v1/system/{action}
+                action = path_parts[3]
+
+                if action == "clear-cache":
+                    if self.command == "POST":
+                        response = self.advanced_api.clear_cache()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif action == "restart-components":
+                    if self.command == "POST":
+                        response = self.advanced_api.restart_components()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif action == "diagnostics":
+                    if self.command == "POST":
+                        response = self.advanced_api.run_diagnostics()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif action == "optimize":
+                    if self.command == "POST":
+                        response = self.advanced_api.optimize_performance()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:
+                    self.send_error(404, "System action not found")
+                    return
+
+            else:
+                self.send_error(404, "System endpoint not found")
+                return
+
+            # Send the response
+            self._serve_api_response(response)
+
+        except Exception as e:
+            logger.error(f"System API error: {e}")
+            self.send_error(500, f"System API error: {str(e)}")
+
     def _set_cors_headers(self):
         """Set CORS headers for browser compatibility."""
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -630,6 +915,10 @@ class UnifiedWebServer:
             self.automation_api = AutomationEndpoints(scheduler)
         else:
             self.automation_api = None
+
+        # Initialize Advanced Analytics & Debugging API endpoints
+        from .api.advanced_endpoints import AdvancedAPIEndpoints
+        self.advanced_api = AdvancedAPIEndpoints(trainer)
 
         # Initialize WebSocket handler with experiment manager
         self.websocket_handler = WebSocketHandler(trainer, experiment_manager)
@@ -707,6 +996,7 @@ class UnifiedWebServer:
                 rest_api=self.rest_api_endpoints,
                 ab_testing_api=self.ab_testing_api,
                 automation_api=self.automation_api,
+                advanced_api=self.advanced_api,
                 websocket_handler=self.websocket_handler,
                 **kwargs
             )

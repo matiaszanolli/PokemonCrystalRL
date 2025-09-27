@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokemon Crystal RL - Advanced Analytics & Debugging Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/advanced_styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+</head>
+<body class="advanced-dashboard">
+    <div class="dashboard-header">
+        <h1>🔬 Advanced Analytics & Debugging Dashboard</h1>
+        <div class="dashboard-controls">
+            <div class="status-indicators">
+                <span id="analytics-status" class="status-indicator">📊 Analytics</span>
+                <span id="debugger-status" class="status-indicator">🐛 Debugger</span>
+                <span id="profiler-status" class="status-indicator">⚡ Profiler</span>
+            </div>
+            <div class="control-buttons">
+                <button id="start-monitoring" class="btn btn-primary">Start Monitoring</button>
+                <button id="stop-monitoring" class="btn btn-secondary">Stop Monitoring</button>
+                <button id="export-data" class="btn btn-outline">Export Data</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-tabs">
+        <button class="tab-button active" data-tab="overview">📊 Overview</button>
+        <button class="tab-button" data-tab="analytics">📈 Analytics</button>
+        <button class="tab-button" data-tab="debugger">🔧 Debugger</button>
+        <button class="tab-button" data-tab="profiler">⚡ Performance</button>
+        <button class="tab-button" data-tab="visualizations">📊 Visualizations</button>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="overview-tab" class="tab-content active">
+        <div class="overview-grid">
+            <!-- System Health Panel -->
+            <div class="panel health-panel">
+                <h3>🏥 System Health</h3>
+                <div class="health-score-container">
+                    <div class="health-score" id="health-score">85</div>
+                    <div class="health-label" id="health-label">Healthy</div>
+                </div>
+                <div class="health-metrics">
+                    <div class="metric">
+                        <span class="metric-label">Memory</span>
+                        <span class="metric-value" id="memory-usage">1.2GB</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Threads</span>
+                        <span class="metric-value" id="thread-count">12</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Error Rate</span>
+                        <span class="metric-value" id="error-rate">0.1%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Metrics Panel -->
+            <div class="panel metrics-panel">
+                <h3>📊 Key Metrics</h3>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-title">Actions/Sec</div>
+                        <div class="metric-value" id="actions-per-sec">2.5</div>
+                        <div class="metric-trend up" id="actions-trend">↗ +5%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">Total Reward</div>
+                        <div class="metric-value" id="total-reward">1,250</div>
+                        <div class="metric-trend up" id="reward-trend">↗ +12%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">LLM Response</div>
+                        <div class="metric-value" id="llm-response">850ms</div>
+                        <div class="metric-trend down" id="llm-trend">↘ -8%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">Success Rate</div>
+                        <div class="metric-value" id="success-rate">87%</div>
+                        <div class="metric-trend stable" id="success-trend">→ 0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Alerts Panel -->
+            <div class="panel alerts-panel">
+                <h3>🚨 Active Alerts</h3>
+                <div id="alerts-container" class="alerts-container">
+                    <!-- Alerts will be populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Quick Actions Panel -->
+            <div class="panel actions-panel">
+                <h3>⚡ Quick Actions</h3>
+                <div class="action-buttons">
+                    <button class="action-btn" id="clear-cache">Clear Cache</button>
+                    <button class="action-btn" id="restart-components">Restart Components</button>
+                    <button class="action-btn" id="run-diagnostics">Run Diagnostics</button>
+                    <button class="action-btn" id="optimize-performance">Optimize Performance</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Tab -->
+    <div id="analytics-tab" class="tab-content">
+        <div class="analytics-grid">
+            <!-- Time Series Chart -->
+            <div class="panel chart-panel">
+                <h3>📈 Performance Trends</h3>
+                <div class="chart-controls">
+                    <select id="metrics-selector" multiple>
+                        <option value="actions_per_second">Actions/Second</option>
+                        <option value="total_reward">Total Reward</option>
+                        <option value="llm_response_time">LLM Response Time</option>
+                        <option value="memory_usage">Memory Usage</option>
+                    </select>
+                    <select id="time-range">
+                        <option value="short">5 Minutes</option>
+                        <option value="medium" selected>30 Minutes</option>
+                        <option value="long">1 Hour</option>
+                    </select>
+                </div>
+                <canvas id="trends-chart" width="800" height="400"></canvas>
+            </div>
+
+            <!-- Correlation Matrix -->
+            <div class="panel correlation-panel">
+                <h3>🔗 Metric Correlations</h3>
+                <div id="correlation-matrix" class="correlation-matrix">
+                    <!-- Correlation matrix will be populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Distribution Charts -->
+            <div class="panel distribution-panel">
+                <h3>📊 Value Distributions</h3>
+                <div class="distribution-grid">
+                    <div class="distribution-item">
+                        <h4>Action Times</h4>
+                        <canvas id="action-times-hist" width="300" height="200"></canvas>
+                    </div>
+                    <div class="distribution-item">
+                        <h4>Reward Values</h4>
+                        <canvas id="reward-hist" width="300" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights Panel -->
+            <div class="panel insights-panel">
+                <h3>💡 AI Insights</h3>
+                <div id="insights-container" class="insights-container">
+                    <!-- AI-generated insights will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debugger Tab -->
+    <div id="debugger-tab" class="tab-content">
+        <div class="debugger-grid">
+            <!-- Debug Console -->
+            <div class="panel console-panel">
+                <h3>🖥️ Debug Console</h3>
+                <div class="console-controls">
+                    <select id="log-level">
+                        <option value="all">All Levels</option>
+                        <option value="error">Errors Only</option>
+                        <option value="warning">Warnings+</option>
+                        <option value="info">Info+</option>
+                    </select>
+                    <input type="text" id="console-filter" placeholder="Filter messages...">
+                    <button id="clear-console">Clear</button>
+                </div>
+                <div id="debug-console" class="debug-console">
+                    <!-- Debug messages will be populated here -->
+                </div>
+            </div>
+
+            <!-- Component Health -->
+            <div class="panel component-health-panel">
+                <h3>🔧 Component Health</h3>
+                <div id="component-health" class="component-health">
+                    <!-- Component status will be populated here -->
+                </div>
+            </div>
+
+            <!-- Breakpoints & Watch -->
+            <div class="panel breakpoints-panel">
+                <h3>🎯 Breakpoints & Watch</h3>
+                <div class="debug-controls">
+                    <div class="breakpoints-section">
+                        <h4>Breakpoints</h4>
+                        <div class="breakpoint-controls">
+                            <input type="text" id="breakpoint-input" placeholder="function.name:line">
+                            <button id="add-breakpoint">Add</button>
+                        </div>
+                        <ul id="breakpoints-list" class="breakpoints-list">
+                            <!-- Breakpoints will be listed here -->
+                        </ul>
+                    </div>
+                    <div class="watch-section">
+                        <h4>Watch Variables</h4>
+                        <div class="watch-controls">
+                            <input type="text" id="watch-input" placeholder="variable.name">
+                            <button id="add-watch">Watch</button>
+                        </div>
+                        <div id="watch-variables" class="watch-variables">
+                            <!-- Watch variables will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Memory Inspector -->
+            <div class="panel memory-panel">
+                <h3>🧠 Memory Inspector</h3>
+                <div class="memory-controls">
+                    <button id="gc-collect">Force GC</button>
+                    <button id="memory-snapshot">Take Snapshot</button>
+                </div>
+                <div id="memory-analysis" class="memory-analysis">
+                    <!-- Memory analysis will be displayed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Tab -->
+    <div id="profiler-tab" class="tab-content">
+        <div class="profiler-grid">
+            <!-- Function Profiler -->
+            <div class="panel profiler-panel">
+                <h3>⚡ Function Profiler</h3>
+                <div class="profiler-controls">
+                    <button id="start-profiling">Start Profiling</button>
+                    <button id="stop-profiling">Stop Profiling</button>
+                    <button id="reset-profiler">Reset</button>
+                </div>
+                <div id="profiler-table" class="profiler-table">
+                    <!-- Profiler results will be displayed here -->
+                </div>
+            </div>
+
+            <!-- Performance Hotspots -->
+            <div class="panel hotspots-panel">
+                <h3>🔥 Performance Hotspots</h3>
+                <div id="hotspots-list" class="hotspots-list">
+                    <!-- Performance hotspots will be listed here -->
+                </div>
+            </div>
+
+            <!-- Call Graph -->
+            <div class="panel callgraph-panel">
+                <h3>📊 Call Graph</h3>
+                <canvas id="call-graph" width="600" height="400"></canvas>
+            </div>
+
+            <!-- Recommendations -->
+            <div class="panel recommendations-panel">
+                <h3>💡 Performance Recommendations</h3>
+                <div id="recommendations-list" class="recommendations-list">
+                    <!-- Performance recommendations will be listed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visualizations Tab -->
+    <div id="visualizations-tab" class="tab-content">
+        <div class="visualizations-grid">
+            <!-- Heatmap -->
+            <div class="panel heatmap-panel">
+                <h3>🌡️ Performance Heatmap</h3>
+                <canvas id="performance-heatmap" width="800" height="400"></canvas>
+            </div>
+
+            <!-- Network Graph -->
+            <div class="panel network-panel">
+                <h3>🕸️ Component Dependencies</h3>
+                <canvas id="dependency-graph" width="600" height="400"></canvas>
+            </div>
+
+            <!-- 3D Metrics -->
+            <div class="panel metrics-3d-panel">
+                <h3>📈 3D Metrics Visualization</h3>
+                <div id="metrics-3d" class="metrics-3d">
+                    <!-- 3D visualization will be rendered here -->
+                </div>
+            </div>
+
+            <!-- Custom Charts -->
+            <div class="panel custom-charts-panel">
+                <h3>📊 Custom Charts</h3>
+                <div class="chart-builder">
+                    <div class="chart-config">
+                        <select id="chart-type">
+                            <option value="line">Line Chart</option>
+                            <option value="bar">Bar Chart</option>
+                            <option value="scatter">Scatter Plot</option>
+                            <option value="radar">Radar Chart</option>
+                        </select>
+                        <select id="x-axis-metric">
+                            <option value="timestamp">Time</option>
+                            <option value="actions">Actions</option>
+                            <option value="reward">Reward</option>
+                        </select>
+                        <select id="y-axis-metric">
+                            <option value="reward">Reward</option>
+                            <option value="actions_per_second">Actions/Sec</option>
+                            <option value="memory_usage">Memory</option>
+                        </select>
+                        <button id="create-chart">Create Chart</button>
+                    </div>
+                    <canvas id="custom-chart" width="600" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading advanced analytics...</div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container">
+        <!-- Toast notifications will appear here -->
+    </div>
+
+    <script src="/static/advanced_dashboard.js"></script>
+</body>
+</html>
