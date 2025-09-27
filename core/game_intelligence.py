@@ -159,13 +159,13 @@ class ProgressTracker:
         if party_count == 0:
             return GamePhase.TUTORIAL
         elif badges_total == 0 and party_count > 0:
-            return GamePhase.EARLY_EXPLORATION
+            return GamePhase.EARLY_GAME
         elif badges_total < 4:
-            return GamePhase.GYM_CHALLENGE
+            return GamePhase.GYM_BATTLES
         elif badges_total < 8:
-            return GamePhase.MID_GAME
-        elif badges_total < 16:
             return GamePhase.LATE_GAME
+        elif badges_total < 16:
+            return GamePhase.POST_GAME
         else:
             return GamePhase.POST_GAME
     
@@ -187,12 +187,12 @@ class ProgressTracker:
         if phase == GamePhase.TUTORIAL:
             goals.append("Get your first Pokemon from Professor Elm")
             
-        elif phase == GamePhase.EARLY_EXPLORATION:
+        elif phase == GamePhase.EARLY_GAME:
             goals.append("Level up your Pokemon to ~10")
             goals.append("Explore routes and catch more Pokemon")
             goals.append("Head to Violet City for first gym")
             
-        elif phase == GamePhase.GYM_CHALLENGE:
+        elif phase == GamePhase.GYM_BATTLES:
             badges = game_state.get('badges_total', 0)
             goals.append(f"Prepare for gym #{badges + 1}")
             goals.append("Level Pokemon to ~15-20")
@@ -208,11 +208,11 @@ class ProgressTracker:
             goals.append("Complete Professor Elm's tasks")
             goals.append("Learn basic game mechanics")
             
-        elif phase == GamePhase.EARLY_EXPLORATION:
+        elif phase == GamePhase.EARLY_GAME:
             goals.append("Build a balanced party")
             goals.append("Earn first gym badge")
             
-        elif phase == GamePhase.GYM_CHALLENGE:
+        elif phase == GamePhase.GYM_BATTLES:
             goals.append("Earn all 8 Johto badges")
             goals.append("Prepare for Elite Four")
             
@@ -721,7 +721,7 @@ class GameIntelligence:
             ))
         
         # Gym challenge plan
-        elif game_context.phase == GamePhase.GYM_CHALLENGE:
+        elif game_context.phase == GamePhase.GYM_BATTLES:
             if game_context.location_type == LocationType.GYM:
                 plans.append(ActionPlan(
                     goal="Challenge gym leader",
