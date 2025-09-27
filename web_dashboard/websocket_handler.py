@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 class WebSocketHandler:
     """Handle WebSocket connections for real-time dashboard updates."""
 
-    def __init__(self, trainer=None):
+    def __init__(self, trainer=None, experiment_manager=None):
         """Initialize WebSocket handler."""
         self.trainer = trainer
+        self.experiment_manager = experiment_manager
         self.connected_clients: Set[websockets.WebSocketServerProtocol] = set()
         self.latest_screen_data: Optional[bytes] = None
         self.running = False
@@ -60,6 +61,17 @@ class WebSocketHandler:
                 await self._send_screen_update(websocket)
             elif message_type == 'request_stats':
                 await self._send_stats_update(websocket)
+            elif message_type == 'request_experiments':
+                await self._send_experiments_update(websocket)
+            elif message_type == 'request_experiment_progress':
+                experiment_id = data.get('experiment_id')
+                await self._send_experiment_progress(websocket, experiment_id)
+            elif message_type == 'subscribe_experiment':
+                experiment_id = data.get('experiment_id')
+                await self._subscribe_to_experiment(websocket, experiment_id)
+            elif message_type == 'unsubscribe_experiment':
+                experiment_id = data.get('experiment_id')
+                await self._unsubscribe_from_experiment(websocket, experiment_id)
             elif message_type == 'ping':
                 await self._send_pong(websocket)
             else:
@@ -189,6 +201,194 @@ class WebSocketHandler:
         """Get latest screen data for HTTP endpoint."""
         return self.latest_screen_data
 
+    async def _send_experiments_update(self, websocket):
+        """Send current experiments data to client."""
+        try:
+            if not self.experiment_manager:
+                return
+
+            experiments_data = self._get_experiments_summary()
+            message = {
+                'type': 'experiments_update',
+                'data': experiments_data,
+                'timestamp': time.time()
+            }
+            await websocket.send(json.dumps(message))
+
+        except Exception as e:
+            logger.error(f"Error sending experiments update: {e}")
+
+    async def _send_experiment_progress(self, websocket, experiment_id: str):
+        """Send experiment progress to client."""
+        try:
+            if not self.experiment_manager or not experiment_id:
+                return
+
+            experiment = self.experiment_manager.get_experiment(experiment_id)
+            if experiment:
+                progress_data = {
+                    'experiment_id': experiment_id,
+                    'status': experiment.status.value,
+                    'progress_percentage': experiment.get_progress(),
+                    'current_variant': experiment.current_variant,
+                    'current_run': experiment.current_run,
+                    'total_runs': experiment.total_runs,
+                    'elapsed_seconds': experiment.get_elapsed_time(),
+                    'live_metrics': {}
+                }
+
+                # Add live metrics if available
+                if experiment.live_metrics:
+                    for variant_name, metrics in experiment.live_metrics.items():
+                        progress_data['live_metrics'][variant_name] = {
+                            'sample_count': len(metrics.metrics.get('reward', [])),
+                            'latest_reward': metrics.get_latest('reward'),
+                            'average_reward': metrics.get_average('reward'),
+                            'latest_actions_per_second': metrics.get_latest('actions_per_second'),
+                            'latest_battle_win_rate': metrics.get_latest('battle_win_rate')
+                        }
+
+                message = {
+                    'type': 'experiment_progress',
+                    'data': progress_data,
+                    'timestamp': time.time()
+                }
+                await websocket.send(json.dumps(message))
+
+        except Exception as e:
+            logger.error(f"Error sending experiment progress: {e}")
+
+    async def _subscribe_to_experiment(self, websocket, experiment_id: str):
+        """Subscribe client to experiment updates."""
+        try:
+            if not hasattr(websocket, 'experiment_subscriptions'):
+                websocket.experiment_subscriptions = set()
+
+            websocket.experiment_subscriptions.add(experiment_id)
+
+            # Send initial progress data
+            await self._send_experiment_progress(websocket, experiment_id)
+
+            logger.info(f"Client {websocket.remote_address} subscribed to experiment {experiment_id[:8]}...")
+
+        except Exception as e:
+            logger.error(f"Error subscribing to experiment: {e}")
+
+    async def _unsubscribe_from_experiment(self, websocket, experiment_id: str):
+        """Unsubscribe client from experiment updates."""
+        try:
+            if hasattr(websocket, 'experiment_subscriptions'):
+                websocket.experiment_subscriptions.discard(experiment_id)
+
+            logger.info(f"Client {websocket.remote_address} unsubscribed from experiment {experiment_id[:8]}...")
+
+        except Exception as e:
+            logger.error(f"Error unsubscribing from experiment: {e}")
+
+    def _get_experiments_summary(self) -> dict:
+        """Get summary of all experiments."""
+        try:
+            if not self.experiment_manager:
+                return {'experiments': [], 'total_count': 0, 'active_count': 0, 'completed_count': 0}
+
+            experiments = []
+            active_count = 0
+            completed_count = 0
+
+            for experiment_id, experiment in self.experiment_manager.experiments.items():
+                exp_data = {
+                    'experiment_id': experiment_id,
+                    'name': experiment.config.name,
+                    'status': experiment.status.value,
+                    'experiment_type': experiment.config.experiment_type.value,
+                    'progress_percentage': experiment.get_progress(),
+                    'variant_count': len(experiment.config.variants),
+                    'total_samples': sum(experiment.result.variant_sample_counts.values()) if experiment.result else 0,
+                    'has_significant_results': bool(experiment.result and experiment.result.winning_variant),
+                    'winning_variant': experiment.result.winning_variant if experiment.result else None
+                }
+                experiments.append(exp_data)
+
+                if experiment.status.value in ['running', 'pending']:
+                    active_count += 1
+                elif experiment.status.value == 'completed':
+                    completed_count += 1
+
+            return {
+                'experiments': experiments,
+                'total_count': len(experiments),
+                'active_count': active_count,
+                'completed_count': completed_count
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting experiments summary: {e}")
+            return {'experiments': [], 'total_count': 0, 'active_count': 0, 'completed_count': 0}
+
+    async def broadcast_experiment_update(self, experiment_id: str, update_type: str = 'progress'):
+        """Broadcast experiment update to subscribed clients."""
+        if not self.connected_clients:
+            return
+
+        # Find clients subscribed to this experiment
+        subscribed_clients = []
+        for client in self.connected_clients:
+            if hasattr(client, 'experiment_subscriptions') and experiment_id in client.experiment_subscriptions:
+                subscribed_clients.append(client)
+
+        if not subscribed_clients:
+            return
+
+        try:
+            if update_type == 'progress':
+                # Send progress update to subscribed clients
+                experiment = self.experiment_manager.get_experiment(experiment_id)
+                if experiment:
+                    progress_data = {
+                        'experiment_id': experiment_id,
+                        'status': experiment.status.value,
+                        'progress_percentage': experiment.get_progress(),
+                        'current_variant': experiment.current_variant,
+                        'current_run': experiment.current_run,
+                        'total_runs': experiment.total_runs,
+                        'elapsed_seconds': experiment.get_elapsed_time(),
+                        'live_metrics': {}
+                    }
+
+                    # Add live metrics
+                    if experiment.live_metrics:
+                        for variant_name, metrics in experiment.live_metrics.items():
+                            progress_data['live_metrics'][variant_name] = {
+                                'sample_count': len(metrics.metrics.get('reward', [])),
+                                'latest_reward': metrics.get_latest('reward'),
+                                'average_reward': metrics.get_average('reward'),
+                                'latest_actions_per_second': metrics.get_latest('actions_per_second'),
+                                'latest_battle_win_rate': metrics.get_latest('battle_win_rate')
+                            }
+
+                    message = {
+                        'type': 'experiment_progress',
+                        'data': progress_data,
+                        'timestamp': time.time()
+                    }
+
+                    # Send to subscribed clients
+                    disconnected_clients = set()
+                    for client in subscribed_clients:
+                        try:
+                            await client.send(json.dumps(message))
+                        except websockets.exceptions.ConnectionClosed:
+                            disconnected_clients.add(client)
+                        except Exception as e:
+                            logger.error(f"Error broadcasting experiment update to client: {e}")
+                            disconnected_clients.add(client)
+
+                    # Remove disconnected clients
+                    self.connected_clients -= disconnected_clients
+
+        except Exception as e:
+            logger.error(f"Error broadcasting experiment update: {e}")
+
     async def broadcast_update(self, message_type: str, data: Any):
         """Broadcast update to all connected clients."""
         if not self.connected_clients:
@@ -218,7 +418,7 @@ class WebSocketHandler:
         """Get number of connected clients."""
         return len(self.connected_clients)
 
-    def start_background_updates(self, screen_interval: float = 0.1, stats_interval: float = 2.0):
+    def start_background_updates(self, screen_interval: float = 0.1, stats_interval: float = 2.0, experiment_interval: float = 1.0):
         """Start background tasks for regular updates."""
         async def screen_update_task():
             while self.running:
@@ -250,13 +450,33 @@ class WebSocketHandler:
                     logger.error(f"Stats update task error: {e}")
                     await asyncio.sleep(1.0)
 
+        async def experiment_update_task():
+            """Background task for A/B testing experiment updates."""
+            while self.running:
+                try:
+                    if self.experiment_manager and self.connected_clients:
+                        # Broadcast general experiments update
+                        experiments_data = self._get_experiments_summary()
+                        await self.broadcast_update('experiments_update', experiments_data)
+
+                        # Broadcast progress updates for running experiments
+                        for experiment_id, experiment in self.experiment_manager.experiments.items():
+                            if experiment.status.value == 'running':
+                                await self.broadcast_experiment_update(experiment_id, 'progress')
+
+                    await asyncio.sleep(experiment_interval)
+                except Exception as e:
+                    logger.error(f"Experiment update task error: {e}")
+                    await asyncio.sleep(1.0)
+
         self.running = True
 
         # Start background tasks
         asyncio.create_task(screen_update_task())
         asyncio.create_task(stats_update_task())
+        asyncio.create_task(experiment_update_task())
 
-        logger.info("Background update tasks started")
+        logger.info("Background update tasks started (including A/B testing monitoring)")
 
     def stop_background_updates(self):
         """Stop background update tasks."""

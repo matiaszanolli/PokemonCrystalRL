@@ -118,6 +118,7 @@
                 <button class="viz-tab" data-tab="actions">Action Performance</button>
                 <button class="viz-tab" data-tab="decisions">LLM Decisions</button>
                 <button class="viz-tab" data-tab="exploration">Exploration Map</button>
+                <button class="viz-tab" data-tab="abtesting">A/B Testing</button>
             </div>
 
             <div class="viz-content">
@@ -154,6 +155,184 @@
                     <div class="exploration-stats">
                         <span>Coverage: <span id="exploration-coverage">0%</span></span>
                         <span>Current Map: <span id="current-map">0</span></span>
+                    </div>
+                </div>
+
+                <div id="abtesting-viz" class="viz-panel">
+                    <!-- A/B Testing Dashboard Panel -->
+                    <div class="ab-testing-panel" id="ab-testing-panel">
+                        <!-- A/B Testing Navigation Tabs -->
+                        <div class="ab-tabs">
+                            <button class="ab-tab active" data-tab="experiments">Experiments</button>
+                            <button class="ab-tab" data-tab="create">Create Test</button>
+                            <button class="ab-tab" data-tab="templates">Templates</button>
+                            <button class="ab-tab" data-tab="analytics">Analytics</button>
+                        </div>
+
+                        <!-- Experiments List Tab -->
+                        <div id="experiments-tab" class="ab-panel active">
+                            <div class="experiments-header">
+                                <h4>Active Experiments</h4>
+                                <div class="experiment-stats">
+                                    <span class="stat-badge" id="total-experiments">0 Total</span>
+                                    <span class="stat-badge running" id="running-experiments">0 Running</span>
+                                    <span class="stat-badge completed" id="completed-experiments">0 Completed</span>
+                                </div>
+                            </div>
+
+                            <div class="experiments-list" id="experiments-list">
+                                <div class="experiment-item placeholder">
+                                    <div class="experiment-header">
+                                        <h5>No experiments yet</h5>
+                                        <span class="experiment-status pending">Create your first A/B test</span>
+                                    </div>
+                                    <div class="experiment-description">
+                                        Use the "Create Test" tab to start comparing different configurations
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create Experiment Tab -->
+                        <div id="create-tab" class="ab-panel">
+                            <h4>Create New A/B Test</h4>
+
+                            <div class="create-form">
+                                <div class="form-group">
+                                    <label for="experiment-name">Experiment Name</label>
+                                    <input type="text" id="experiment-name" placeholder="e.g., Battle Strategy Comparison">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="experiment-type">Test Type</label>
+                                    <select id="experiment-type">
+                                        <option value="plugin_comparison">Plugin Comparison</option>
+                                        <option value="agent_comparison">Agent Comparison</option>
+                                        <option value="multi_factor">Multi-Factor Test</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="sample-size">Sample Size per Variant</label>
+                                        <input type="number" id="sample-size" value="30" min="10" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="max-runtime">Max Runtime (minutes)</label>
+                                        <input type="number" id="max-runtime" value="60" min="5" max="180">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="primary-metrics">Primary Metrics</label>
+                                    <div class="checkbox-group">
+                                        <label><input type="checkbox" value="total_reward" checked> Total Reward</label>
+                                        <label><input type="checkbox" value="battle_win_rate"> Battle Win Rate</label>
+                                        <label><input type="checkbox" value="actions_per_second"> Actions/Second</label>
+                                    </div>
+                                </div>
+
+                                <div class="form-actions">
+                                    <button type="button" class="btn-primary" id="create-experiment">Create Experiment</button>
+                                    <button type="button" class="btn-secondary" id="reset-form">Reset</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Templates Tab -->
+                        <div id="templates-tab" class="ab-panel">
+                            <h4>Experiment Templates</h4>
+                            <div class="templates-grid" id="templates-grid">
+                                <div class="template-card" data-template="battle_strategy_comparison">
+                                    <div class="template-header">
+                                        <h5>Battle Strategy Comparison</h5>
+                                        <span class="template-badge beginner">Beginner</span>
+                                    </div>
+                                    <div class="template-description">
+                                        Compare aggressive vs defensive battle strategies
+                                    </div>
+                                </div>
+                                <div class="template-card" data-template="exploration_pattern_test">
+                                    <div class="template-header">
+                                        <h5>Exploration Pattern Test</h5>
+                                        <span class="template-badge intermediate">Intermediate</span>
+                                    </div>
+                                    <div class="template-description">
+                                        Test different exploration algorithms
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Analytics Tab -->
+                        <div id="analytics-tab" class="ab-panel">
+                            <h4>A/B Testing Analytics</h4>
+
+                            <div class="analytics-overview">
+                                <div class="analytics-stat">
+                                    <div class="stat-label">Success Rate</div>
+                                    <div class="stat-value" id="success-rate">0%</div>
+                                </div>
+                                <div class="analytics-stat">
+                                    <div class="stat-label">Avg. Improvement</div>
+                                    <div class="stat-value" id="avg-improvement">0%</div>
+                                </div>
+                                <div class="analytics-stat">
+                                    <div class="stat-label">Tests This Week</div>
+                                    <div class="stat-value" id="tests-this-week">0</div>
+                                </div>
+                            </div>
+
+                            <div class="recent-results">
+                                <h5>Recent Results</h5>
+                                <div id="recent-results-list">
+                                    <div class="no-data">No results yet</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Experiment Detail Modal -->
+        <div id="experiment-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h3 id="modal-experiment-name">Experiment Details</h3>
+                        <span class="real-time-indicator">Live Updates</span>
+                    </div>
+                    <span class="modal-close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="experiment-overview">
+                        <div class="overview-stat">
+                            <span class="label">Status:</span>
+                            <span class="value" id="modal-status">-</span>
+                        </div>
+                        <div class="overview-stat">
+                            <span class="label">Progress:</span>
+                            <span class="value" id="modal-progress">0%</span>
+                        </div>
+                        <div class="overview-stat">
+                            <span class="label">Runtime:</span>
+                            <span class="value" id="modal-runtime">-</span>
+                        </div>
+                    </div>
+
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="modal-progress-bar" style="width: 0%"></div>
+                    </div>
+
+                    <div class="variants-results" id="modal-variants">
+                        <!-- Variant results will be shown here -->
+                    </div>
+
+                    <div class="experiment-controls">
+                        <button class="btn-primary" id="modal-start-btn">Start</button>
+                        <button class="btn-secondary" id="modal-stop-btn">Stop</button>
+                        <button class="btn-secondary" id="modal-analyze-btn">Analyze</button>
                     </div>
                 </div>
             </div>

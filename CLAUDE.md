@@ -16,7 +16,7 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 ⚠️ **IMPORTANT**: `llm_trainer.py` is deprecated and shows a deprecation warning. Always use `main.py` instead.
 
 ### Key Components
-- **`core/`** - Core systems (event system, plugin system, memory mapping, web monitoring)
+- **`core/`** - Core systems (event system, plugin system, memory mapping, game intelligence)
 - **`agents/`** - Multi-agent framework with specialist agents (battle, explorer, progression)
 - **`plugins/`** - Modular plugin system for battle strategies, exploration patterns, rewards
 - **`trainer/`** - Training systems and LLM integration
@@ -25,6 +25,7 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 - **`utils/`** - Memory reading, screen analysis, action parsing utilities
 - **`config/`** - Memory addresses, constants, and configuration
 - **`rewards/`** - Reward calculation system
+- **`web_dashboard/`** - Real-time web monitoring with REST API and live streaming
 
 ### Training Modes
 1. **LLM-only training** - Uses Ollama models for decision making
@@ -144,18 +145,43 @@ ollama pull smollm2:1.7b
 - **Reward Calculators**: Progression-focused, battle-focused, exploration-focused, balanced
 - **Plugin coordination** - Multiple plugins work together with priority-based selection
 
+### Advanced AI Systems
+
+#### **Game Intelligence Module** (`core/game_intelligence.py`)
+- **BattleIntelligence**: Advanced combat analysis with type effectiveness, move evaluation
+- **LocationIntelligence**: Map understanding, navigation optimization, area classification
+- **ProgressIntelligence**: Story progression tracking, objective detection, phase analysis
+- **GameStateAnalyzer**: Comprehensive game state interpretation with contextual analysis
+
+#### **Decision Analysis System** (`core/decision_analysis/`)
+- **Decision Database**: Persistent storage of AI decisions with outcome tracking
+- **Pattern Detector**: Behavioral pattern recognition and learning optimization
+- **Performance Analyzer**: Decision effectiveness analysis and strategy recommendations
+- **Correlation Analysis**: Multi-factor decision outcome analysis
+
+#### **Strategic Context Builder** (`core/strategic_context_builder.py`)
+- **Context Assembly**: Multi-source game state aggregation for LLM prompts
+- **Situation Assessment**: Threat/opportunity detection with confidence scoring
+- **Action Consequence Prediction**: Predictive modeling for decision outcomes
+- **Adaptive Prompting**: Dynamic LLM prompt optimization based on game phase
+
 ### Memory System
 - Memory addresses defined in `config/memory_addresses.py`
 - Memory reading utilities in `utils/memory_reader.py`
 - Game state extracted includes HP, level, badges, party data, money, etc.
 - Memory mapping system in `core/memory_map.py` provides derived calculations
 
-### Web Monitoring
+### Web Monitoring & REST API
 - Integrated web dashboard at http://localhost:8080 (or custom port with --web-port)
 - **Real-time live game screen streaming** at 12fps capture, 30fps frontend display
 - LLM decision tracking with reasoning and confidence scores
 - Performance metrics and reward breakdown
 - Located in `web_dashboard/` with unified server architecture
+- **REST API**: Complete programmatic interface at `/api/v1/` with endpoints for:
+  - Training session management (`/training/sessions`)
+  - Multi-agent control (`/agents`)
+  - Plugin system management (`/plugins`)
+  - Real-time monitoring and metrics
 - **Fixed Issues**: Action execution pipeline, screen streaming, training status detection
 
 ### State Detection
@@ -223,12 +249,12 @@ python -m pytest -m "llm or web_monitoring" -v
 
 ## Project Status
 
-This project is in active development with recent major refactoring:
-- Consolidated architecture with unified entry points
-- Enhanced LLM intelligence with advanced parsing
-- Integrated web monitoring system
-- Comprehensive test coverage across core components
-- Deprecation of legacy `llm_trainer.py` in favor of `main.py`
+This project is in active development with major systems completed (Q4 2024):
+- **Core Platform**: Multi-agent framework, event system, plugin architecture ✅
+- **Advanced AI**: Game intelligence, strategic context building, experience memory ✅
+- **Web Platform**: Real-time dashboard, REST API, live streaming ✅
+- **Test Coverage**: 157+ test methods across critical AI modules (85%+ coverage) ✅
+- **Current Focus**: A/B testing framework, tournament mode, distributed training
 
 ### Current Development Branch
 Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.

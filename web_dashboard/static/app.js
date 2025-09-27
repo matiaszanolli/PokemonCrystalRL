@@ -72,6 +72,12 @@ class PokemonDashboard {
         // Initialize visualizations
         this.initializeVisualizations();
 
+        // Initialize A/B testing
+        this.initializeABTesting();
+
+        // Setup WebSocket handlers for A/B testing
+        this.setupABTestingWebSocket();
+
         console.log('✅ Dashboard initialized successfully');
     }
 
@@ -925,6 +931,693 @@ class PokemonDashboard {
      */
     formatTime(date) {
         return date.toLocaleTimeString();
+    }
+
+    /**
+     * Initialize A/B Testing functionality
+     */
+    initializeABTesting() {
+        this.abTesting = {
+            experiments: [],
+            templates: [],
+            activeExperiment: null,
+            updateInterval: null
+        };
+
+        this.setupABTestingTabs();
+        this.setupABTestingEventListeners();
+        this.loadABTestingData();
+    }
+
+    /**
+     * Setup A/B testing tab switching
+     */
+    setupABTestingTabs() {
+        const abTabs = document.querySelectorAll('.ab-tab');
+        const abPanels = document.querySelectorAll('.ab-panel');
+
+        abTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+
+                // Update active tab
+                abTabs.forEach(t => t.classList.remove('active'));
+                abPanels.forEach(p => p.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+
+                // Load data for specific tabs
+                if (tabName === 'templates') {
+                    this.loadTemplates();
+                } else if (tabName === 'analytics') {
+                    this.loadAnalytics();
+                }
+            });
+        });
+    }
+
+    /**
+     * Setup A/B testing event listeners
+     */
+    setupABTestingEventListeners() {
+        // Create experiment button
+        const createBtn = document.getElementById('create-experiment');
+        if (createBtn) {
+            createBtn.addEventListener('click', () => this.createExperiment());
+        }
+
+        // Reset form button
+        const resetBtn = document.getElementById('reset-form');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => this.resetExperimentForm());
+        }
+
+        // Template selection
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.template-card')) {
+                const templateId = e.target.closest('.template-card').dataset.template;
+                this.selectTemplate(templateId);
+            }
+        });
+
+        // Modal close
+        const modalClose = document.querySelector('.modal-close');
+        if (modalClose) {
+            modalClose.addEventListener('click', () => this.closeExperimentModal());
+        }
+
+        // Modal control buttons
+        const modalStartBtn = document.getElementById('modal-start-btn');
+        const modalStopBtn = document.getElementById('modal-stop-btn');
+        const modalAnalyzeBtn = document.getElementById('modal-analyze-btn');
+
+        if (modalStartBtn) {
+            modalStartBtn.addEventListener('click', () => this.controlExperiment('start'));
+        }
+        if (modalStopBtn) {
+            modalStopBtn.addEventListener('click', () => this.controlExperiment('stop'));
+        }
+        if (modalAnalyzeBtn) {
+            modalAnalyzeBtn.addEventListener('click', () => this.analyzeExperiment());
+        }
+    }
+
+    /**
+     * Load A/B testing data
+     */
+    async loadABTestingData() {
+        try {
+            // Load experiments list
+            const response = await fetch('/api/v1/experiments');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.abTesting.experiments = data.data.experiments;
+                    this.updateExperimentsList(data.data);
+                    this.updateExperimentStats(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load A/B testing data:', error);
+        }
+    }
+
+    /**
+     * Load experiment templates
+     */
+    async loadTemplates() {
+        try {
+            const response = await fetch('/api/v1/experiments/templates');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.abTesting.templates = data.data.templates;
+                    this.updateTemplatesList(data.data.templates);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load templates:', error);
+        }
+    }
+
+    /**
+     * Load analytics data
+     */
+    async loadAnalytics() {
+        try {
+            const response = await fetch('/api/v1/experiments/stats');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.updateAnalytics(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load analytics:', error);
+        }
+    }
+
+    /**
+     * Update experiments list UI
+     */
+    updateExperimentsList(experimentsData) {
+        const container = document.getElementById('experiments-list');
+        if (!container) return;
+
+        if (experimentsData.experiments.length === 0) {
+            container.innerHTML = `
+                <div class="experiment-item placeholder">
+                    <div class="experiment-header">
+                        <h5>No experiments yet</h5>
+                        <span class="experiment-status pending">Create your first A/B test</span>
+                    </div>
+                    <div class="experiment-description">
+                        Use the "Create Test" tab to start comparing different configurations
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const experimentsHtml = experimentsData.experiments.map(exp => `
+            <div class="experiment-item" data-experiment-id="${exp.experiment_id}">
+                <div class="experiment-header">
+                    <h5>${exp.name}</h5>
+                    <span class="experiment-status ${exp.status}">${exp.status.toUpperCase()}</span>
+                </div>
+                <div class="experiment-description">
+                    ${exp.experiment_type} • ${exp.variant_count} variants • ${exp.total_samples} samples
+                </div>
+                <div class="experiment-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${exp.progress_percentage}%"></div>
+                    </div>
+                    <span class="progress-text">${exp.progress_percentage.toFixed(1)}%</span>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = experimentsHtml;
+
+        // Add click listeners for experiment details
+        container.querySelectorAll('.experiment-item').forEach(item => {
+            if (!item.classList.contains('placeholder')) {
+                item.addEventListener('click', () => {
+                    const experimentId = item.dataset.experimentId;
+                    this.showExperimentDetails(experimentId);
+                });
+            }
+        });
+    }
+
+    /**
+     * Update experiment statistics
+     */
+    updateExperimentStats(experimentsData) {
+        const totalEl = document.getElementById('total-experiments');
+        const runningEl = document.getElementById('running-experiments');
+        const completedEl = document.getElementById('completed-experiments');
+
+        if (totalEl) totalEl.textContent = `${experimentsData.total_count} Total`;
+        if (runningEl) runningEl.textContent = `${experimentsData.active_count} Running`;
+        if (completedEl) completedEl.textContent = `${experimentsData.completed_count} Completed`;
+    }
+
+    /**
+     * Update templates list
+     */
+    updateTemplatesList(templates) {
+        const container = document.getElementById('templates-grid');
+        if (!container) return;
+
+        const templatesHtml = templates.map(template => `
+            <div class="template-card" data-template="${template.template_id}">
+                <div class="template-header">
+                    <h5>${template.name}</h5>
+                    <span class="template-badge ${template.difficulty_level}">${template.difficulty_level}</span>
+                </div>
+                <div class="template-description">
+                    ${template.description}
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = templatesHtml;
+    }
+
+    /**
+     * Update analytics display
+     */
+    updateAnalytics(stats) {
+        const successRateEl = document.getElementById('success-rate');
+        const avgImprovementEl = document.getElementById('avg-improvement');
+        const testsThisWeekEl = document.getElementById('tests-this-week');
+
+        if (successRateEl) successRateEl.textContent = `${(stats.success_rate * 100).toFixed(1)}%`;
+        if (avgImprovementEl) avgImprovementEl.textContent = `${(stats.avg_improvement * 100).toFixed(1)}%`;
+        if (testsThisWeekEl) testsThisWeekEl.textContent = `${stats.tests_this_week}`;
+    }
+
+    /**
+     * Create new experiment
+     */
+    async createExperiment() {
+        const form = {
+            name: document.getElementById('experiment-name')?.value,
+            experiment_type: document.getElementById('experiment-type')?.value,
+            sample_size_per_variant: parseInt(document.getElementById('sample-size')?.value) || 30,
+            max_runtime_seconds: (parseInt(document.getElementById('max-runtime')?.value) || 60) * 60,
+            primary_metrics: []
+        };
+
+        // Get selected metrics
+        const metricsCheckboxes = document.querySelectorAll('#primary-metrics input[type="checkbox"]:checked');
+        form.primary_metrics = Array.from(metricsCheckboxes).map(cb => cb.value);
+
+        if (!form.name || !form.experiment_type) {
+            this.showError('Please fill in all required fields');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/v1/experiments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(form)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.showSuccess('Experiment created successfully!');
+                    this.resetExperimentForm();
+                    this.loadABTestingData();
+
+                    // Switch to experiments tab
+                    document.querySelector('.ab-tab[data-tab="experiments"]').click();
+                } else {
+                    this.showError(data.error || 'Failed to create experiment');
+                }
+            } else {
+                this.showError('Failed to create experiment');
+            }
+        } catch (error) {
+            console.error('Create experiment error:', error);
+            this.showError('Failed to create experiment');
+        }
+    }
+
+    /**
+     * Reset experiment creation form
+     */
+    resetExperimentForm() {
+        const form = document.querySelector('.create-form');
+        if (form) {
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (input.type === 'checkbox') {
+                    input.checked = input.value === 'total_reward';
+                } else if (input.type === 'number') {
+                    input.value = input.id === 'sample-size' ? '30' : '60';
+                } else {
+                    input.value = '';
+                }
+            });
+        }
+    }
+
+    /**
+     * Select and apply a template
+     */
+    async selectTemplate(templateId) {
+        try {
+            const response = await fetch(`/api/v1/experiments/templates/${templateId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `Template: ${templateId}`,
+                    sample_size_per_variant: 30,
+                    max_runtime_seconds: 3600
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.showSuccess('Experiment created from template!');
+                    this.loadABTestingData();
+
+                    // Switch to experiments tab
+                    document.querySelector('.ab-tab[data-tab="experiments"]').click();
+                } else {
+                    this.showError(data.error || 'Failed to create experiment from template');
+                }
+            }
+        } catch (error) {
+            console.error('Template selection error:', error);
+            this.showError('Failed to create experiment from template');
+        }
+    }
+
+    /**
+     * Show experiment details modal
+     */
+    async showExperimentDetails(experimentId) {
+        try {
+            const response = await fetch(`/api/v1/experiments/${experimentId}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.populateExperimentModal(data.data);
+                    document.getElementById('experiment-modal').style.display = 'flex';
+
+                    // Subscribe to real-time updates for this experiment
+                    this.subscribeToExperiment(experimentId);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load experiment details:', error);
+        }
+    }
+
+    /**
+     * Populate experiment modal with data
+     */
+    populateExperimentModal(experiment) {
+        document.getElementById('modal-experiment-name').textContent = experiment.name;
+        document.getElementById('modal-status').textContent = experiment.status;
+        document.getElementById('modal-progress').textContent = `${experiment.progress_percentage.toFixed(1)}%`;
+        document.getElementById('modal-progress-bar').style.width = `${experiment.progress_percentage}%`;
+
+        if (experiment.duration_seconds) {
+            const minutes = Math.floor(experiment.duration_seconds / 60);
+            document.getElementById('modal-runtime').textContent = `${minutes} min`;
+        } else {
+            document.getElementById('modal-runtime').textContent = '-';
+        }
+
+        this.abTesting.activeExperiment = experiment.experiment_id;
+    }
+
+    /**
+     * Close experiment modal
+     */
+    closeExperimentModal() {
+        // Unsubscribe from updates if we have an active experiment
+        if (this.abTesting.activeExperiment) {
+            this.unsubscribeFromExperiment(this.abTesting.activeExperiment);
+        }
+
+        document.getElementById('experiment-modal').style.display = 'none';
+        this.abTesting.activeExperiment = null;
+    }
+
+    /**
+     * Control experiment (start/stop)
+     */
+    async controlExperiment(action) {
+        if (!this.abTesting.activeExperiment) return;
+
+        try {
+            const response = await fetch(`/api/v1/experiments/${this.abTesting.activeExperiment}/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.showSuccess(`Experiment ${action}ed successfully!`);
+                    this.loadABTestingData();
+                    this.closeExperimentModal();
+                } else {
+                    this.showError(data.error || `Failed to ${action} experiment`);
+                }
+            }
+        } catch (error) {
+            console.error(`Control experiment error:`, error);
+            this.showError(`Failed to ${action} experiment`);
+        }
+    }
+
+    /**
+     * Analyze experiment results
+     */
+    async analyzeExperiment() {
+        if (!this.abTesting.activeExperiment) return;
+
+        try {
+            const response = await fetch(`/api/v1/experiments/${this.abTesting.activeExperiment}/analysis`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    this.showAnalysisResults(data.data);
+                } else {
+                    this.showError(data.error || 'Failed to analyze experiment');
+                }
+            }
+        } catch (error) {
+            console.error('Analysis error:', error);
+            this.showError('Failed to analyze experiment');
+        }
+    }
+
+    /**
+     * Show analysis results
+     */
+    showAnalysisResults(analysis) {
+        // Simple display of analysis results - could be enhanced with charts
+        const resultsHtml = `
+            <div class="analysis-results">
+                <h4>Analysis Results</h4>
+                <p><strong>Has Significant Results:</strong> ${analysis.has_significant_results ? 'Yes' : 'No'}</p>
+                ${analysis.winning_variant ? `<p><strong>Winning Variant:</strong> ${analysis.winning_variant}</p>` : ''}
+                <p><strong>Confidence:</strong> ${(analysis.confidence_score * 100).toFixed(1)}%</p>
+                <p><strong>Summary:</strong> ${analysis.summary}</p>
+            </div>
+        `;
+
+        document.getElementById('modal-variants').innerHTML = resultsHtml;
+    }
+
+    /**
+     * Show success message
+     */
+    showSuccess(message) {
+        // Use existing error banner but with success styling
+        const banner = document.getElementById('error-banner');
+        const messageEl = document.getElementById('error-message');
+
+        if (banner && messageEl) {
+            messageEl.textContent = message;
+            banner.className = 'error-banner success';
+            banner.style.display = 'block';
+
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    /**
+     * Show error message
+     */
+    showError(message) {
+        const banner = document.getElementById('error-banner');
+        const messageEl = document.getElementById('error-message');
+
+        if (banner && messageEl) {
+            messageEl.textContent = message;
+            banner.className = 'error-banner';
+            banner.style.display = 'block';
+        }
+    }
+
+    /**
+     * Setup WebSocket handlers for A/B testing real-time updates
+     */
+    setupABTestingWebSocket() {
+        // Add A/B testing message handlers to existing WebSocket
+        if (this.ws) {
+            // Store original onmessage handler
+            const originalOnMessage = this.ws.onmessage;
+
+            this.ws.onmessage = (event) => {
+                // Call original handler first
+                if (originalOnMessage) {
+                    originalOnMessage.call(this.ws, event);
+                }
+
+                // Handle A/B testing messages
+                try {
+                    const message = JSON.parse(event.data);
+                    this.handleABTestingWebSocketMessage(message);
+                } catch (error) {
+                    // Ignore parsing errors for non-JSON messages
+                }
+            };
+        }
+
+        // Request initial A/B testing data via WebSocket
+        setTimeout(() => {
+            this.requestABTestingUpdates();
+        }, 1000);
+    }
+
+    /**
+     * Handle WebSocket messages for A/B testing
+     */
+    handleABTestingWebSocketMessage(message) {
+        switch (message.type) {
+            case 'experiments_update':
+                this.handleExperimentsUpdate(message.data);
+                break;
+            case 'experiment_progress':
+                this.handleExperimentProgress(message.data);
+                break;
+            default:
+                // Ignore other message types
+                break;
+        }
+    }
+
+    /**
+     * Handle real-time experiments list update
+     */
+    handleExperimentsUpdate(experimentsData) {
+        // Update experiments list if visible
+        const experimentsTab = document.getElementById('experiments-tab');
+        if (experimentsTab && experimentsTab.classList.contains('active')) {
+            this.updateExperimentsList(experimentsData);
+            this.updateExperimentStats(experimentsData);
+        }
+
+        // Update global A/B testing state
+        this.abTesting.experiments = experimentsData.experiments;
+    }
+
+    /**
+     * Handle real-time experiment progress update
+     */
+    handleExperimentProgress(progressData) {
+        const experimentId = progressData.experiment_id;
+
+        // Update experiment in list if visible
+        const experimentElement = document.querySelector(`[data-experiment-id="${experimentId}"]`);
+        if (experimentElement) {
+            // Update progress bar
+            const progressBar = experimentElement.querySelector('.progress-fill');
+            const progressText = experimentElement.querySelector('.progress-text');
+            const statusElement = experimentElement.querySelector('.experiment-status');
+
+            if (progressBar) {
+                progressBar.style.width = `${progressData.progress_percentage}%`;
+            }
+            if (progressText) {
+                progressText.textContent = `${progressData.progress_percentage.toFixed(1)}%`;
+            }
+            if (statusElement) {
+                statusElement.textContent = progressData.status.toUpperCase();
+                statusElement.className = `experiment-status ${progressData.status}`;
+            }
+        }
+
+        // Update modal if open for this experiment
+        const modal = document.getElementById('experiment-modal');
+        if (modal.style.display === 'flex' && this.abTesting.activeExperiment === experimentId) {
+            document.getElementById('modal-status').textContent = progressData.status;
+            document.getElementById('modal-progress').textContent = `${progressData.progress_percentage.toFixed(1)}%`;
+            document.getElementById('modal-progress-bar').style.width = `${progressData.progress_percentage}%`;
+
+            if (progressData.elapsed_seconds) {
+                const minutes = Math.floor(progressData.elapsed_seconds / 60);
+                document.getElementById('modal-runtime').textContent = `${minutes} min`;
+            }
+
+            // Update live metrics if available
+            if (progressData.live_metrics && Object.keys(progressData.live_metrics).length > 0) {
+                this.updateLiveMetrics(progressData.live_metrics);
+            }
+        }
+    }
+
+    /**
+     * Update live metrics display in experiment modal
+     */
+    updateLiveMetrics(liveMetrics) {
+        const variantsContainer = document.getElementById('modal-variants');
+        if (!variantsContainer) return;
+
+        let metricsHtml = '<h4>Live Metrics</h4>';
+        metricsHtml += '<div class="live-metrics-grid">';
+
+        for (const [variantName, metrics] of Object.entries(liveMetrics)) {
+            metricsHtml += `
+                <div class="variant-metrics">
+                    <h5>${variantName}</h5>
+                    <div class="metrics-row">
+                        <span class="metric-label">Samples:</span>
+                        <span class="metric-value">${metrics.sample_count}</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metric-label">Avg Reward:</span>
+                        <span class="metric-value">${metrics.average_reward?.toFixed(2) || 'N/A'}</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metric-label">Latest Reward:</span>
+                        <span class="metric-value">${metrics.latest_reward?.toFixed(2) || 'N/A'}</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metric-label">Actions/sec:</span>
+                        <span class="metric-value">${metrics.latest_actions_per_second?.toFixed(1) || 'N/A'}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        metricsHtml += '</div>';
+        variantsContainer.innerHTML = metricsHtml;
+    }
+
+    /**
+     * Request A/B testing updates via WebSocket
+     */
+    requestABTestingUpdates() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            // Request experiments list
+            this.ws.send(JSON.stringify({
+                type: 'request_experiments',
+                timestamp: Date.now()
+            }));
+        }
+    }
+
+    /**
+     * Subscribe to real-time updates for a specific experiment
+     */
+    subscribeToExperiment(experimentId) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'subscribe_experiment',
+                experiment_id: experimentId,
+                timestamp: Date.now()
+            }));
+        }
+    }
+
+    /**
+     * Unsubscribe from experiment updates
+     */
+    unsubscribeFromExperiment(experimentId) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'unsubscribe_experiment',
+                experiment_id: experimentId,
+                timestamp: Date.now()
+            }));
+        }
     }
 }
 

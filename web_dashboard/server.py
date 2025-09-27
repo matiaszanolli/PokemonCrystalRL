@@ -28,9 +28,11 @@ logger = logging.getLogger(__name__)
 class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for the unified web dashboard."""
 
-    def __init__(self, *args, api_endpoints=None, rest_api=None, websocket_handler=None, **kwargs):
+    def __init__(self, *args, api_endpoints=None, rest_api=None, ab_testing_api=None, automation_api=None, websocket_handler=None, **kwargs):
         self.api_endpoints = api_endpoints
         self.rest_api = rest_api
+        self.ab_testing_api = ab_testing_api
+        self.automation_api = automation_api
         self.websocket_handler = websocket_handler
         super().__init__(*args, **kwargs)
 
@@ -345,6 +347,22 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
                     self.send_error(404, "Plugin endpoint not found")
                     return
 
+            elif resource == "experiments":  # A/B Testing endpoints
+                if not hasattr(self, 'ab_testing_api') or self.ab_testing_api is None:
+                    self.send_error(503, "A/B Testing API not available")
+                    return
+
+                self._handle_experiments_api(path_parts, request_data)
+                return
+
+            elif resource == "automation":  # Automation endpoints
+                if not hasattr(self, 'automation_api') or self.automation_api is None:
+                    self.send_error(503, "Automation API not available")
+                    return
+
+                self._handle_automation_api(path_parts, request_data)
+                return
+
             elif resource == "docs":  # /api/v1/docs
                 if self.command == "GET":
                     response = self.rest_api.get_api_documentation()
@@ -360,8 +378,212 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
             self._serve_api_response(response)
 
         except Exception as e:
-            logger.error(f"REST API request error: {e}")
-            self.send_error(500, f"REST API error: {str(e)}")
+            self.logger.error(f"REST API error: {e}")
+            self.send_error(500, f"Internal REST API error: {str(e)}")
+
+    def _handle_experiments_api(self, path_parts: list, request_data: dict):
+        """Handle A/B Testing experiments API requests."""
+        try:
+            # Parse query parameters for GET requests
+            query_params = {}
+            if '?' in self.path:
+                from urllib.parse import parse_qs
+                query_string = self.path.split('?', 1)[1]
+                query_params = parse_qs(query_string)
+                # Convert lists to single values for simple params
+                for key, value in query_params.items():
+                    if isinstance(value, list) and len(value) == 1:
+                        query_params[key] = value[0]
+
+            if len(path_parts) == 3:  # /api/v1/experiments
+                if self.command == "GET":
+                    status_filter = query_params.get('status')
+                    response = self.ab_testing_api.list_experiments(status_filter)
+                elif self.command == "POST":
+                    response = self.ab_testing_api.create_experiment(request_data)
+                else:
+                    self.send_error(405, "Method not allowed")
+                    return
+
+            elif len(path_parts) == 4:
+                sub_resource = path_parts[3]
+
+                if sub_resource == "templates":  # /api/v1/experiments/templates
+                    if self.command == "GET":
+                        response = self.ab_testing_api.list_experiment_templates()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "stats":  # /api/v1/experiments/stats
+                    if self.command == "GET":
+                        response = self.ab_testing_api.get_manager_stats()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:  # /api/v1/experiments/{experiment_id}
+                    experiment_id = sub_resource
+                    if self.command == "GET":
+                        response = self.ab_testing_api.get_experiment(experiment_id)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+            elif len(path_parts) == 5:
+                sub_resource = path_parts[3]
+                action = path_parts[4]
+
+                if sub_resource == "templates":  # /api/v1/experiments/templates/{template_id}
+                    template_id = action
+                    if self.command == "POST":
+                        response = self.ab_testing_api.create_experiment_from_template(template_id, request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:  # /api/v1/experiments/{experiment_id}/{action}
+                    experiment_id = sub_resource
+
+                    if action == "control":  # /api/v1/experiments/{experiment_id}/control
+                        if self.command == "POST":
+                            response = self.ab_testing_api.control_experiment(experiment_id, request_data)
+                        else:
+                            self.send_error(405, "Method not allowed")
+                            return
+
+                    elif action == "progress":  # /api/v1/experiments/{experiment_id}/progress
+                        if self.command == "GET":
+                            response = self.ab_testing_api.get_experiment_progress(experiment_id)
+                        else:
+                            self.send_error(405, "Method not allowed")
+                            return
+
+                    elif action == "analysis":  # /api/v1/experiments/{experiment_id}/analysis
+                        if self.command == "GET":
+                            response = self.ab_testing_api.get_experiment_analysis(experiment_id)
+                        else:
+                            self.send_error(405, "Method not allowed")
+                            return
+
+                    else:
+                        self.send_error(404, "Experiment action not found")
+                        return
+
+            else:
+                self.send_error(404, "Experiment endpoint not found")
+                return
+
+            # Send the response
+            self._serve_api_response(response)
+
+        except Exception as e:
+            logger.error(f"Experiments API error: {e}")
+            self.send_error(500, f"Experiments API error: {str(e)}")
+
+    def _handle_automation_api(self, path_parts: list, request_data: dict):
+        """Handle automation API requests."""
+        try:
+            query_params = self._parse_query_params()
+            response = {}
+
+            if len(path_parts) == 3:  # /api/v1/automation
+                if self.command == "GET":
+                    # Default to stats
+                    response = self.automation_api.get_automation_stats()
+                elif self.command == "POST":
+                    # Start automation
+                    response = self.automation_api.start_automation()
+                else:
+                    self.send_error(405, "Method not allowed")
+                    return
+
+            elif len(path_parts) == 4:  # /api/v1/automation/{resource}
+                sub_resource = path_parts[3]
+
+                if sub_resource == "schedule":  # /api/v1/automation/schedule
+                    if self.command == "GET":
+                        status_filter = query_params.get('status')
+                        response = self.automation_api.list_scheduled_experiments(status_filter)
+                    elif self.command == "POST":
+                        response = self.automation_api.schedule_experiment(request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "templates":  # /api/v1/automation/templates
+                    if self.command == "GET":
+                        response = self.automation_api.get_automation_templates()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "start":  # /api/v1/automation/start
+                    if self.command == "POST":
+                        response = self.automation_api.start_automation()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "stop":  # /api/v1/automation/stop
+                    if self.command == "POST":
+                        response = self.automation_api.stop_automation()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "stats":  # /api/v1/automation/stats
+                    if self.command == "GET":
+                        response = self.automation_api.get_automation_stats()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "queue":  # /api/v1/automation/queue
+                    if self.command == "GET":
+                        response = self.automation_api.get_queue_status()
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:
+                    self.send_error(404, "Automation endpoint not found")
+                    return
+
+            elif len(path_parts) == 5:  # /api/v1/automation/{resource}/{id}
+                sub_resource = path_parts[3]
+                resource_id = path_parts[4]
+
+                if sub_resource == "schedule":  # /api/v1/automation/schedule/{schedule_id}
+                    if self.command == "GET":
+                        response = self.automation_api.get_schedule_status(resource_id)
+                    elif self.command == "DELETE":
+                        response = self.automation_api.cancel_scheduled_experiment(resource_id)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                elif sub_resource == "templates":  # /api/v1/automation/templates/{template_id}
+                    if self.command == "POST":
+                        response = self.automation_api.create_from_template(resource_id, request_data)
+                    else:
+                        self.send_error(405, "Method not allowed")
+                        return
+
+                else:
+                    self.send_error(404, "Automation endpoint not found")
+                    return
+
+            else:
+                self.send_error(404, "Automation endpoint not found")
+                return
+
+            # Send the response
+            self._serve_api_response(response)
+
+        except Exception as e:
+            logger.error(f"Automation API error: {e}")
+            self.send_error(500, f"Automation API error: {str(e)}")
 
     def _set_cors_headers(self):
         """Set CORS headers for browser compatibility."""
@@ -381,7 +603,7 @@ class UnifiedWebServer:
     Combines HTTP API endpoints with WebSocket screen streaming.
     """
 
-    def __init__(self, trainer=None, host='localhost', http_port=8080, ws_port=8081):
+    def __init__(self, trainer=None, experiment_manager=None, automation_api=None, host='localhost', http_port=8080, ws_port=8081):
         """Initialize the unified web server."""
         self.trainer = trainer
         self.host = host
@@ -394,8 +616,23 @@ class UnifiedWebServer:
         # Initialize REST API endpoints
         self.rest_api_endpoints = RestApiEndpoints(trainer)
 
-        # Initialize WebSocket handler
-        self.websocket_handler = WebSocketHandler(trainer)
+        # Initialize A/B Testing API endpoints
+        from .api.ab_testing_endpoints import ABTestingApiEndpoints
+        self.ab_testing_api = ABTestingApiEndpoints(trainer)
+
+        # Initialize Automation API endpoints
+        if automation_api:
+            self.automation_api = automation_api
+        elif experiment_manager:
+            from .api.automation_endpoints import AutomationEndpoints
+            from core.ab_testing.experiment_scheduler import ExperimentScheduler
+            scheduler = ExperimentScheduler(experiment_manager)
+            self.automation_api = AutomationEndpoints(scheduler)
+        else:
+            self.automation_api = None
+
+        # Initialize WebSocket handler with experiment manager
+        self.websocket_handler = WebSocketHandler(trainer, experiment_manager)
 
         # Server instances
         self.http_server = None
@@ -468,6 +705,8 @@ class UnifiedWebServer:
                 *args,
                 api_endpoints=self.api_endpoints,
                 rest_api=self.rest_api_endpoints,
+                ab_testing_api=self.ab_testing_api,
+                automation_api=self.automation_api,
                 websocket_handler=self.websocket_handler,
                 **kwargs
             )
