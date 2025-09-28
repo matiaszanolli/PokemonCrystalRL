@@ -75,6 +75,12 @@ class StrategicContextBuilder:
         self.strategic_routes = self._initialize_strategic_routes()
         self.progression_checkpoints = self._initialize_progression_checkpoints()
 
+        # Initialize important locations mapping for quick lookup
+        self.important_locations = {
+            loc_info.map_id: loc_info.name
+            for loc_info in self.location_database.values()
+        }
+
         # Progress tracking
         self.last_progress_check = {
             'badges': 0,

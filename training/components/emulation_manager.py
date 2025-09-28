@@ -126,22 +126,56 @@ class EmulationManager:
     
     def execute_action(self, action: int, frames: int = 1) -> bool:
         """Execute an action on the emulation.
-        
+
         Args:
             action: Action code (0-8)
             frames: Number of frames to execute action
-            
+
         Returns:
             bool: True if action executed successfully
         """
         with self._lock:
             if not self.is_alive():
                 return False
-            
+
             try:
-                for _ in range(frames):
-                    self.pyboy.send_input(action)
-                    self.pyboy.tick()
+                # Import WindowEvent for proper action mapping
+                from pyboy.utils import WindowEvent
+
+                # Map action integers to PyBoy WindowEvent constants
+                action_map = {
+                    0: None,  # No action
+                    1: WindowEvent.PRESS_ARROW_UP,
+                    2: WindowEvent.PRESS_ARROW_DOWN,
+                    3: WindowEvent.PRESS_ARROW_LEFT,
+                    4: WindowEvent.PRESS_ARROW_RIGHT,
+                    5: WindowEvent.PRESS_BUTTON_A,
+                    6: WindowEvent.PRESS_BUTTON_B,
+                    7: WindowEvent.PRESS_BUTTON_START,
+                    8: WindowEvent.PRESS_BUTTON_SELECT
+                }
+
+                # Clear all inputs first
+                self.pyboy.send_input(WindowEvent.RELEASE_ARROW_UP)
+                self.pyboy.send_input(WindowEvent.RELEASE_ARROW_DOWN)
+                self.pyboy.send_input(WindowEvent.RELEASE_ARROW_LEFT)
+                self.pyboy.send_input(WindowEvent.RELEASE_ARROW_RIGHT)
+                self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
+                self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_B)
+                self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+                self.pyboy.send_input(WindowEvent.RELEASE_BUTTON_SELECT)
+
+                # Execute the mapped action
+                window_event = action_map.get(action)
+                if window_event is not None:
+                    for _ in range(frames):
+                        self.pyboy.send_input(window_event)
+                        self.pyboy.tick()
+                else:
+                    # No action - just tick the emulator
+                    for _ in range(frames):
+                        self.pyboy.tick()
+
                 return True
             except Exception as e:
                 self.logger.error(f"Error executing action {action}: {e}")
