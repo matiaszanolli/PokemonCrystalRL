@@ -292,7 +292,7 @@ class Tournament:
     @property
     def can_start(self) -> bool:
         """Check if tournament can be started"""
-        return (self.status == TournamentStatus.SCHEDULED and
+        return (self.status in [TournamentStatus.DRAFT, TournamentStatus.SCHEDULED] and
                 len(self.participants) >= self.config.min_participants)
 
 

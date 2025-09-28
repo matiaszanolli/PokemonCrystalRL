@@ -19,7 +19,7 @@ from collections import deque
 from environments.state.analyzer import GameStateAnalysis, GamePhase, SituationCriticality
 from core.adaptive_strategy_system import AdaptiveStrategySystem, StrategyType, DecisionSource
 from core.decision_validator import DecisionValidator, ValidationResult
-from trainer.llm_manager import LLMManager
+from training.components.llm_manager import LLMManager
 from .base_agent import BaseAgent
 from .llm_agent import LLMAgent
 
@@ -468,7 +468,7 @@ class HybridAgent:
 
 if __name__ == "__main__":
     # Example usage
-    from trainer.llm_manager import LLMManager
+    from training.components.llm_manager import LLMManager
     from core.adaptive_strategy_system import AdaptiveStrategySystem
     from unittest.mock import Mock
     

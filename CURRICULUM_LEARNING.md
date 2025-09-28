@@ -207,10 +207,10 @@ Configure different advancement criteria per stage:
 
 ```bash
 # Run curriculum learning tests
-python -m pytest tests/training/test_curriculum_learning.py -v
+python -m pytest tests/trainer/test_curriculum_learning.py -v
 
 # Test specific functionality
-python -m pytest tests/training/test_curriculum_learning.py::TestCurriculumManager::test_record_episode_result_advancement -v
+python -m pytest tests/trainer/test_curriculum_learning.py::TestCurriculumManager::test_record_episode_result_advancement -v
 ```
 
 ## Best Practices

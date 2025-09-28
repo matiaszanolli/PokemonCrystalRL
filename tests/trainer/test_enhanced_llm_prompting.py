@@ -457,7 +457,7 @@ class TestPromptPerformanceOptimizations:
             
             # Force initialize LLM manager if it's still None
             if trainer.llm_manager is None:
-                from trainer.llm_manager import LLMManager
+                from training.components.llm_manager import LLMManager
                 trainer.llm_manager = LLMManager(
                     model=config.llm_backend.value,
                     interval=config.llm_interval

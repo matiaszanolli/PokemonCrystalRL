@@ -158,7 +158,7 @@ class BracketGenerator:
 
         # Calculate total matches: n * (n-1) / 2
         total_matches = participant_count * (participant_count - 1) // 2
-        tournament.total_rounds = participant_count - 1  # Standard round robin rounds
+        tournament.total_rounds = 1  # All matches in one round for simplicity
 
         self.logger.info(f"Generating round robin bracket for {participant_count} participants, {total_matches} matches")
 

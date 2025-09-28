@@ -20,7 +20,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from trainer.hybrid_llm_rl_trainer import HybridLLMRLTrainer, TrainingConfig
+from training.hybrid_llm_rl_trainer import HybridLLMRLTrainer, TrainingConfig
 from core.save_state_library import SaveStateLibrary
 from web_dashboard.server import WebServer
 

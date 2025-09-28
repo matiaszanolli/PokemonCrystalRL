@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from trainer.llm_manager import LLMManager
+from training.components.llm_manager import LLMManager
 
 
 class TestLLMMultiTurnContext:
@@ -21,8 +21,8 @@ class TestLLMMultiTurnContext:
     def setup_method(self):
         """Set up test fixtures"""
         # Mock LLM manager to avoid Ollama dependency
-        with patch('trainer.llm_manager.OLLAMA_AVAILABLE', True), \
-             patch('trainer.llm_manager.ollama.show'):
+        with patch('training.components.llm_manager.OLLAMA_AVAILABLE', True), \
+             patch('training.components.llm_manager.ollama.show'):
             self.llm_manager = LLMManager(model="test_model", max_context_turns=3)
 
     def test_conversation_memory_initialization(self):

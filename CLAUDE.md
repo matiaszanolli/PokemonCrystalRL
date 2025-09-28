@@ -94,11 +94,11 @@ python -m pytest -m "web_monitoring" -v
 python -m pytest tests/core/test_adaptive_strategy_system.py -v
 python -m pytest tests/trainer/test_llm_multi_turn_context.py -v
 python -m pytest tests/monitoring/test_game_streamer.py -v
-python -m pytest tests/training/test_curriculum_learning.py -v
+python -m pytest tests/trainer/test_curriculum_learning.py -v
 
 # Run single test method
 python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
-python -m pytest tests/training/test_curriculum_learning.py::TestCurriculumManager::test_record_episode_result_advancement -v
+python -m pytest tests/trainer/test_curriculum_learning.py::TestCurriculumManager::test_record_episode_result_advancement -v
 ```
 
 ### Development Setup

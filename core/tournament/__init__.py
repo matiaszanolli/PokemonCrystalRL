@@ -20,6 +20,8 @@ from .tournament_models import (
 )
 from .tournament_manager import TournamentManager
 from .bracket_generator import BracketGenerator
+from .tournament_profiles import TournamentProfiles
+from .tournament_analytics import TournamentAnalytics
 
 __all__ = [
     "TournamentType",
@@ -33,5 +35,7 @@ __all__ = [
     "Tournament",
     "TournamentSummary",
     "TournamentManager",
-    "BracketGenerator"
+    "BracketGenerator",
+    "TournamentProfiles",
+    "TournamentAnalytics"
 ]

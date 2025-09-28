@@ -12,7 +12,7 @@ import numpy as np
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 
-from trainer.hybrid_llm_rl_trainer import HybridLLMRLTrainer, TrainingConfig
+from training.hybrid_llm_rl_trainer import HybridLLMRLTrainer, TrainingConfig
 from agents.hybrid_llm_rl_agent import HybridLLMRLAgent, DecisionMode, DecisionMetrics
 from core.temporal_memory import TemporalMemoryBuffer, TemporalState
 from core.experience_memory import ExperienceMemory
@@ -286,9 +286,9 @@ class TestHybridTrainer:
         library.list_save_states.return_value = []
         return library
 
-    @patch('trainer.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
-    @patch('trainer.hybrid_llm_rl_trainer.LLMAgent')
-    @patch('trainer.hybrid_llm_rl_trainer.DQNAgent')
+    @patch('training.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
+    @patch('training.hybrid_llm_rl_trainer.LLMAgent')
+    @patch('training.hybrid_llm_rl_trainer.DQNAgent')
     def test_trainer_initialization(
         self, mock_dqn, mock_llm, mock_env,
         temp_rom_path, training_config, mock_save_state_library
@@ -311,9 +311,9 @@ class TestHybridTrainer:
         mock_llm.assert_called_once()
         mock_dqn.assert_called_once()
 
-    @patch('trainer.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
-    @patch('trainer.hybrid_llm_rl_trainer.LLMAgent')
-    @patch('trainer.hybrid_llm_rl_trainer.DQNAgent')
+    @patch('training.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
+    @patch('training.hybrid_llm_rl_trainer.LLMAgent')
+    @patch('training.hybrid_llm_rl_trainer.DQNAgent')
     def test_training_summary(
         self, mock_dqn, mock_llm, mock_env,
         temp_rom_path, training_config

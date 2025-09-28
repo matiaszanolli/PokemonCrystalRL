@@ -62,7 +62,7 @@ class TournamentManager(EventSubscriber):
         # Core components
         self.bracket_generator = BracketGenerator()
         self.experiment_manager = ExperimentManager()
-        self.experiment_scheduler = ExperimentScheduler()
+        self.experiment_scheduler = ExperimentScheduler(self.experiment_manager)
         self.statistical_analyzer = StatisticalAnalyzer()
 
         # Tournament storage
@@ -87,13 +87,18 @@ class TournamentManager(EventSubscriber):
     def subscribe_to_events(self) -> None:
         """Subscribe to relevant events"""
         # Subscribe to experiment completion events
-        self.event_bus.subscribe(EventType.BATTLE_COMPLETED, self)
-        self.event_bus.subscribe(EventType.TRAINING_COMPLETED, self)
+        self.event_bus.subscribe(EventType.BATTLE_ENDED, self)
+        self.event_bus.subscribe(EventType.TRAINING_STOPPED, self)
+        self.event_bus.subscribe(EventType.EPISODE_ENDED, self)
+
+    def get_subscribed_events(self) -> List[EventType]:
+        """Get list of events this subscriber wants to receive"""
+        return [EventType.BATTLE_ENDED, EventType.TRAINING_STOPPED, EventType.EPISODE_ENDED]
 
     def handle_event(self, event: Event) -> None:
         """Handle events from the event system"""
         try:
-            if event.event_type in [EventType.BATTLE_COMPLETED, EventType.TRAINING_COMPLETED]:
+            if event.event_type in [EventType.BATTLE_ENDED, EventType.TRAINING_STOPPED, EventType.EPISODE_ENDED]:
                 # Check if this event relates to a tournament match
                 self._check_match_completion(event)
         except Exception as e:
@@ -203,6 +208,8 @@ class TournamentManager(EventSubscriber):
                 # Publish tournament start event
                 self.event_bus.publish(Event(
                     event_type=EventType.TRAINING_STARTED,  # Reuse existing event type
+                    timestamp=time.time(),
+                    source="tournament_manager",
                     data={
                         "tournament_id": tournament_id,
                         "tournament_name": tournament.config.name,
@@ -269,32 +276,18 @@ class TournamentManager(EventSubscriber):
                 experiment_type=ExperimentType.CONFIGURATION_COMPARISON,
 
                 # Use participant configurations as experiment variants
-                variant_a_config=participant1.configuration,
-                variant_b_config=participant2.configuration,
+                variants={
+                    participant1.name: participant1.configuration,
+                    participant2.name: participant2.configuration
+                },
 
                 # Match settings
-                sample_size=1,  # Single match
-                max_duration_minutes=tournament.config.match_duration_minutes,
-                max_actions=tournament.config.max_actions_per_match,
-
-                # Use tournament save state if specified
-                save_state_path=tournament.config.save_state_path,
+                sample_size_per_variant=1,  # Single match per variant
+                max_runtime_seconds=tournament.config.match_duration_minutes * 60,
 
                 # Metrics to collect
-                primary_metric=tournament.config.primary_metric,
-                secondary_metrics=tournament.config.secondary_metrics,
-
-                # Tournament-specific metadata
-                metadata={
-                    "tournament_id": tournament.id,
-                    "tournament_name": tournament.config.name,
-                    "match_id": match.id,
-                    "round_number": match.round_number,
-                    "participant1_id": match.participant1_id,
-                    "participant1_name": participant1.name,
-                    "participant2_id": match.participant2_id,
-                    "participant2_name": participant2.name
-                }
+                primary_metrics=[tournament.config.primary_metric],
+                secondary_metrics=tournament.config.secondary_metrics
             )
 
             return experiment_config
@@ -434,7 +427,9 @@ class TournamentManager(EventSubscriber):
 
             # Publish tournament completion event
             self.event_bus.publish(Event(
-                event_type=EventType.TRAINING_COMPLETED,  # Reuse existing event type
+                event_type=EventType.TRAINING_STOPPED,  # Reuse existing event type
+                timestamp=time.time(),
+                source="tournament_manager",
                 data={
                     "tournament_id": tournament.id,
                     "tournament_name": tournament.config.name,
