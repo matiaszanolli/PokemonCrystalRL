@@ -1,0 +1,125 @@
+{
+  "first_pokemon_easy_0badges_1759020036": {
+    "id": "first_pokemon_easy_0badges_1759020036",
+    "name": "New Bark Town Start",
+    "description": "Starting position in New Bark Town after getting first Pokemon from Prof. Elm",
+    "phase": "early_game",
+    "scenario": "first_pokemon",
+    "difficulty": "easy",
+    "game_state": {
+      "player_name": "Player",
+      "location": "New Bark Town",
+      "map_id": 1,
+      "badges": 0,
+      "level": 5,
+      "party_size": 1,
+      "money": 3000,
+      "playtime_hours": 0,
+      "story_progress": "Beginning"
+    },
+    "training_objectives": [
+      "Get first Pokemon",
+      "Learn basic movement",
+      "Practice battle system"
+    ],
+    "expected_actions": 500,
+    "recommended_models": [
+      "smollm2:1.7b"
+    ],
+    "file_path": "save_states/states/first_pokemon_easy_0badges_1759020036.state",
+    "file_size": 200601,
+    "checksum": "7138f544b9bca8ea889bae9a9253aa41",
+    "created_at": "2025-09-27T21:40:36.862036",
+    "created_by": "cli",
+    "usage_count": 0,
+    "last_used": null,
+    "success_rate": null,
+    "tags": [
+      "tutorial",
+      "beginning",
+      "starter"
+    ]
+  },
+  "gym_battle_medium_0badges_1759020073": {
+    "id": "gym_battle_medium_0badges_1759020073",
+    "name": "Violet City Approach",
+    "description": "Ready to challenge the first gym in Violet City",
+    "phase": "early_game",
+    "scenario": "gym_battle",
+    "difficulty": "medium",
+    "game_state": {
+      "player_name": "Player",
+      "location": "Violet City",
+      "map_id": 2,
+      "badges": 0,
+      "level": 8,
+      "party_size": 1,
+      "money": 2800,
+      "playtime_hours": 0,
+      "story_progress": "Beginning"
+    },
+    "training_objectives": [
+      "Challenge Falkner",
+      "Practice type effectiveness",
+      "Learn gym battle mechanics"
+    ],
+    "expected_actions": 300,
+    "recommended_models": [
+      "smollm2:1.7b"
+    ],
+    "file_path": "save_states/states/gym_battle_medium_0badges_1759020073.state",
+    "file_size": 200601,
+    "checksum": "d33a52dddaf6bf1e73e566e86bf73315",
+    "created_at": "2025-09-27T21:41:13.993289",
+    "created_by": "cli",
+    "usage_count": 0,
+    "last_used": null,
+    "success_rate": null,
+    "tags": [
+      "gym",
+      "battle",
+      "flying_type"
+    ]
+  },
+  "exploration_easy_1badges_1759020082": {
+    "id": "exploration_easy_1badges_1759020082",
+    "name": "Route 32 Exploration",
+    "description": "Perfect position for training exploration and wild Pokemon encounters",
+    "phase": "early_game",
+    "scenario": "exploration",
+    "difficulty": "easy",
+    "game_state": {
+      "player_name": "Player",
+      "location": "Route 32",
+      "map_id": 3,
+      "badges": 1,
+      "level": 10,
+      "party_size": 2,
+      "money": 3500,
+      "playtime_hours": 0,
+      "story_progress": "Beginning"
+    },
+    "training_objectives": [
+      "Practice exploration patterns",
+      "Encounter wild Pokemon",
+      "Learn navigation"
+    ],
+    "expected_actions": 800,
+    "recommended_models": [
+      "smollm2:1.7b"
+    ],
+    "file_path": "save_states/states/exploration_easy_1badges_1759020082.state",
+    "file_size": 200601,
+    "checksum": "d33a52dddaf6bf1e73e566e86bf73315",
+    "created_at": "2025-09-27T21:41:22.604943",
+    "created_by": "cli",
+    "usage_count": 0,
+    "last_used": null,
+    "success_rate": null,
+    "tags": [
+      "exploration",
+      "wild_pokemon",
+      "route"
+    ]
+  }
+}

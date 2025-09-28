@@ -32,6 +32,7 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 2. **Hybrid LLM-RL training** - Combines LLM guidance with DQN optimization
 3. **Multi-agent training** - Specialist agents coordinated by event system
 4. **Plugin-based training** - Modular components for different strategies
+5. **Curriculum learning** - Progressive difficulty training with save state library integration
 
 ## Common Commands
 
@@ -45,6 +46,10 @@ python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.s
 
 # Hybrid training example
 python3 examples/run_hybrid_training.py
+
+# Curriculum learning training
+python3 main.py roms/pokemon_crystal.gbc --enable-curriculum --max-actions 500
+python3 examples/run_curriculum_training.py roms/pokemon_crystal.gbc --episodes 10
 
 # Quick start monitoring
 ./quick_start.sh
@@ -77,9 +82,11 @@ python -m pytest -m "web_monitoring" -v
 python -m pytest tests/core/test_adaptive_strategy_system.py -v
 python -m pytest tests/trainer/test_llm_multi_turn_context.py -v
 python -m pytest tests/monitoring/test_game_streamer.py -v
+python -m pytest tests/training/test_curriculum_learning.py -v
 
 # Run single test method
 python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
+python -m pytest tests/training/test_curriculum_learning.py::TestCurriculumManager::test_record_episode_result_advancement -v
 ```
 
 ### Development Setup
@@ -202,9 +209,45 @@ ollama pull smollm2:1.7b
 - Early game focus with special rewards for getting first Pokemon
 - **Plugin-based rewards** - Modular reward calculators with different focuses
 
+### Save State Library & Curriculum Learning
+
+#### **Save State Library** (`core/save_state_library.py`, `scripts/manage_save_states.py`)
+- **Metadata-driven save state management** with categorization by phase, scenario, difficulty, badges
+- **CLI management interface** with comprehensive add/list/info/recommend/verify commands
+- **Integrity verification** with checksums, usage tracking, and automatic validation
+- **Recommendation engine** for optimal training scenario selection based on curriculum level
+- **Advanced filtering** by tags, difficulty combinations, badge ranges, and scenarios
+
+```bash
+# Manage save state library
+python3 scripts/manage_save_states.py add tutorial.state "Tutorial Start" "Beginning of game" \
+  --phase tutorial --scenario first_pokemon --difficulty easy --badges 0
+
+python3 scripts/manage_save_states.py list --scenario gym_battle --difficulty medium
+python3 scripts/manage_save_states.py info
+python3 scripts/manage_save_states.py recommend gym_battle --min-badges 1 --max-badges 3
+```
+
+#### **Curriculum Learning System** (`training/curriculum_learning.py`)
+- **5-stage progressive training**: Tutorial → Basic → Intermediate → Advanced → Expert
+- **Adaptive advancement** based on success rates (60%-80%) and episode counts (5-50 episodes)
+- **Automatic save state selection** integrated with library recommendation engine
+- **Configurable JSON curriculum** with custom advancement criteria and scenarios
+- **Progress persistence** with comprehensive status reporting and advancement history
+
+```bash
+# Curriculum learning modes
+python3 main.py roms/pokemon_crystal.gbc --enable-curriculum --curriculum-episodes 10
+python3 examples/run_curriculum_training.py roms/pokemon_crystal.gbc --curriculum-config custom.json
+
+# Generate default curriculum configuration
+python3 -m training.curriculum_learning
+```
+
 ### Training Configuration
 - Hybrid training config in `hybrid_training_config.json`
 - Training parameters in `config/constants.py`
+- Curriculum config in `curriculum_config.json` with 5-stage progression
 - Supports curriculum learning and adaptive strategy switching
 
 ## Development Patterns
@@ -253,8 +296,11 @@ This project is in active development with major systems completed (Q4 2024):
 - **Core Platform**: Multi-agent framework, event system, plugin architecture ✅
 - **Advanced AI**: Game intelligence, strategic context building, experience memory ✅
 - **Web Platform**: Real-time dashboard, REST API, live streaming ✅
-- **Test Coverage**: 157+ test methods across critical AI modules (85%+ coverage) ✅
-- **Current Focus**: A/B testing framework, tournament mode, distributed training
+- **A/B Testing**: Complete automation framework with 6 workflow templates ✅
+- **Save State Library**: Metadata-driven scenario management with CLI interface ✅
+- **Curriculum Learning**: 5-stage progressive difficulty training system ✅
+- **Test Coverage**: 175+ test methods across critical AI modules (85%+ coverage) ✅
+- **Current Focus**: Tournament mode, distributed training, advanced AI research
 
 ### Current Development Branch
 Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.
@@ -325,3 +371,4 @@ Currently on `learn_to_play` branch with ongoing improvements. Main branch is `m
 **Issue**: Memory debug shows empty data
 - **Check**: PyBoy instance accessibility and save state loading
 - **Solution**: Ensure save state file exists and loads properly
+- Always priorize improving existing code rather than duplicating logic.

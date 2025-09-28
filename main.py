@@ -25,6 +25,10 @@ from agents.llm_agent import LLMAgent
 from training.unified_pokemon_trainer import create_llm_trainer as LLMTrainer
 from rewards.calculator import PokemonRewardCalculator
 
+# Curriculum Learning
+from core.save_state_library import SaveStateLibrary
+from training.curriculum_learning import CurriculumManager
+
 from utils.memory_reader import build_observation
 from utils.screen_analyzer import analyze_screen_state
 from utils.action_parser import (
@@ -87,10 +91,20 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--dqn-training-freq", type=int, default=4)
     parser.add_argument("--dqn-save-freq", type=int, default=500)
     
+    # Curriculum Learning options
+    parser.add_argument("--enable-curriculum", action="store_true",
+                       help="Enable curriculum learning with save state library")
+    parser.add_argument("--library-path", default="save_states",
+                       help="Path to save state library")
+    parser.add_argument("--curriculum-config",
+                       help="Path to curriculum configuration file")
+    parser.add_argument("--curriculum-episodes", type=int, default=5,
+                       help="Number of episodes per curriculum level")
+
     # Logging options
     parser.add_argument("--log-dir", default="logs", help="Directory for log files")
     parser.add_argument("--quiet", action="store_true", help="Disable progress output")
-    
+
     return parser.parse_args()
 
 def initialize_training_systems(args: argparse.Namespace) -> Dict:
@@ -193,22 +207,63 @@ def graceful_shutdown(systems: Dict, signum: Optional[int] = None, frame: Option
     if signum is not None:
         sys.exit(0)
 
+def run_curriculum_training(args):
+    """Run curriculum learning training mode."""
+    from examples.run_curriculum_training import CurriculumTrainer
+
+    logger.info("🎓 Starting Curriculum Learning Training")
+
+    # Verify library exists
+    if not os.path.exists(args.library_path):
+        logger.error(f"❌ Save state library not found: {args.library_path}")
+        logger.info("   Create save states using: python3 scripts/manage_save_states.py add ...")
+        return 1
+
+    try:
+        # Initialize curriculum trainer
+        trainer = CurriculumTrainer(
+            rom_path=args.rom_path,
+            library_path=args.library_path,
+            curriculum_config=args.curriculum_config,
+            llm_model=args.llm_model,
+            enable_web=args.enable_web,
+            web_port=args.web_port
+        )
+
+        # Run curriculum training
+        trainer.run_training(
+            num_episodes=args.curriculum_episodes,
+            max_actions_per_episode=args.max_actions
+        )
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"❌ Curriculum training failed: {e}")
+        raise
+
+
 def main():
     """Main training entry point."""
     # Parse arguments
     args = parse_arguments()
-    
+
     # Setup logging
     setup_logging(args.log_dir)
+
+    # Check for curriculum learning mode
+    if args.enable_curriculum:
+        return run_curriculum_training(args)
+
     logger.info("Starting Pokemon Crystal RL training...")
-    
+
     # Initialize all systems
     systems = initialize_training_systems(args)
-    
+
     # Setup graceful shutdown
     signal.signal(signal.SIGINT, lambda s, f: graceful_shutdown(systems, s, f))
     signal.signal(signal.SIGTERM, lambda s, f: graceful_shutdown(systems, s, f))
-    
+
     try:
         # Web monitor is started internally by the trainer
         # Run training

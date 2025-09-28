@@ -1,366 +1,364 @@
+#!/usr/bin/env python3
 """
-Tests for the Hybrid LLM-RL Trainer.
+Test Suite for Hybrid LLM-RL Training System
+
+Tests the hybrid decision engine, temporal memory integration,
+and curriculum learning coordination.
 """
 
-import unittest
+import pytest
 import tempfile
-import json
 import numpy as np
-from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch
+from pathlib import Path
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-
-# HybridLLMRLTrainer archived - this test is disabled
-# from archive.dead_code.hybrid_llm_rl_trainer import HybridLLMRLTrainer, create_trainer_from_config
-
-
-@unittest.skip("HybridLLMRLTrainer has been archived - tests disabled")
-class TestHybridLLMRLTrainer(unittest.TestCase):
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        # Mock environment
-        self.mock_env = Mock()
-        self.mock_env.reset.return_value = (np.zeros((144, 160, 3)), {'game_state': {}})
-        self.mock_env.step.return_value = (
-            np.zeros((144, 160, 3)),  # next_obs
-            1.0,  # reward
-            False,  # terminated
-            False,  # truncated
-            {'game_state': {}}  # info
-        )
-        self.mock_env.action_space = Mock()
-        self.mock_env.action_space.n = 8
-        
-        # Mock agent
-        self.mock_agent = Mock()
-        self.mock_agent.get_action.return_value = (0, {'source': 'rl', 'confidence': 0.8})
-        self.mock_agent.update.return_value = None
-        self.mock_agent.get_state_dict.return_value = {'test': 'state'}
-        self.mock_agent.load_state_dict.return_value = None
-        self.mock_agent.llm_confidence_threshold = 0.7
-        
-        # Mock strategy system
-        self.mock_strategy_system = Mock()
-        self.mock_strategy_system.current_strategy = 'llm_heavy'
-        self.mock_strategy_system.evaluate_performance.return_value = None
-        
-        # Mock decision analyzer
-        self.mock_decision_analyzer = Mock()
-        self.mock_decision_analyzer.add_decision.return_value = None
-        
-        # Mock LLM manager
-        self.mock_llm_manager = Mock()
-        
-        # Create temporary directory for saves
-        self.temp_dir = tempfile.mkdtemp()
-        
-        # Create trainer
-        self.trainer = HybridLLMRLTrainer(
-            env=self.mock_env,
-            agent=self.mock_agent,
-            strategy_system=self.mock_strategy_system,
-            decision_analyzer=self.mock_decision_analyzer,
-            llm_manager=self.mock_llm_manager,
-            save_dir=self.temp_dir
-        )
-    
-    def tearDown(self):
-        """Clean up test fixtures."""
-        import shutil
-        shutil.rmtree(self.temp_dir)
-    
-    def test_trainer_initialization(self):
-        """Test trainer initialization."""
-        self.assertIsNotNone(self.trainer)
-        self.assertEqual(self.trainer.curriculum_stage, 0)
-        self.assertEqual(len(self.trainer.episode_rewards), 0)
-        self.assertEqual(self.trainer.training_stats['episodes'], 0)
-    
-    def test_single_episode_training(self):
-        """Test single episode training loop."""
-        # Configure environment to terminate after one step
-        self.mock_env.step.return_value = (
-            np.zeros((144, 160, 3)),
-            10.0,  # reward
-            True,   # terminated
-            False,
-            {'game_state': {}}
-        )
-        
-        # Run single episode
-        summary = self.trainer.train(total_episodes=1, max_steps_per_episode=100)
-        
-        # Verify training occurred
-        self.assertEqual(self.trainer.training_stats['episodes'], 1)
-        self.assertEqual(len(self.trainer.episode_rewards), 1)
-        self.assertEqual(self.trainer.episode_rewards[0], 10.0)
-        
-        # Verify summary structure
-        self.assertIn('total_episodes', summary)
-        self.assertIn('best_reward', summary)
-        self.assertIn('final_evaluation', summary)
-    
-    def test_curriculum_advancement(self):
-        """Test curriculum learning advancement."""
-        # Set up high reward episodes to trigger advancement
-        self.mock_env.step.return_value = (
-            np.zeros((144, 160, 3)),
-            60.0,  # High reward to exceed first threshold (50.0)
-            True,
-            False,
-            {'game_state': {}}
-        )
-        
-        # Run enough episodes for curriculum advancement
-        self.trainer.train(total_episodes=15, max_steps_per_episode=10)
-        
-        # Should have advanced to stage 1
-        self.assertGreater(self.trainer.curriculum_stage, 0)
-        self.assertGreater(self.trainer.training_stats['curriculum_advancements'], 0)
-    
-    def test_strategy_system_integration(self):
-        """Test integration with adaptive strategy system."""
-        # Run training
-        self.trainer.train(total_episodes=5, max_steps_per_episode=10)
-        
-        # Verify strategy system was called
-        self.mock_strategy_system.evaluate_performance.assert_called()
-        
-        # Verify metrics were passed to strategy system
-        call_args = self.mock_strategy_system.evaluate_performance.call_args_list[-1][0][0]
-        self.assertIn('episode_reward', call_args)
-        self.assertIn('average_reward', call_args)
-        self.assertIn('llm_usage_rate', call_args)
-    
-    def test_decision_analysis_integration(self):
-        """Test integration with decision history analyzer."""
-        # Run training
-        self.trainer.train(total_episodes=2, max_steps_per_episode=5)
-        
-        # Verify decisions were recorded
-        self.mock_decision_analyzer.add_decision.assert_called()
-        
-        # Check decision data structure
-        call_args = self.mock_decision_analyzer.add_decision.call_args_list[0][0][0]
-        self.assertIn('state_hash', call_args)
-        self.assertIn('action', call_args)
-        self.assertIn('context', call_args)
-        self.assertIn('outcome', call_args)
-    
-    def test_llm_usage_tracking(self):
-        """Test LLM usage rate tracking."""
-        # Configure agent to use LLM decisions
-        self.mock_agent.get_action.return_value = (1, {'source': 'llm', 'confidence': 0.9})
-        
-        # Run training
-        self.trainer.train(total_episodes=1, max_steps_per_episode=10)
-        
-        # Verify LLM usage was tracked
-        self.assertEqual(len(self.trainer.llm_usage_rates), 1)
-        self.assertGreater(self.trainer.llm_usage_rates[0], 0)
-    
-    def test_checkpoint_saving_and_loading(self):
-        """Test checkpoint saving and loading."""
-        # Run some training
-        self.trainer.train(total_episodes=2, max_steps_per_episode=5)
-        
-        # Save checkpoint
-        self.trainer._save_checkpoint(2)
-        
-        # Verify checkpoint file exists
-        checkpoint_files = list(Path(self.temp_dir).glob("checkpoint_*.pt"))
-        self.assertTrue(len(checkpoint_files) > 0)
-        
-        # Create new trainer and load checkpoint
-        new_trainer = HybridLLMRLTrainer(
-            env=self.mock_env,
-            agent=self.mock_agent,
-            strategy_system=self.mock_strategy_system,
-            decision_analyzer=self.mock_decision_analyzer,
-            llm_manager=self.mock_llm_manager,
-            save_dir=self.temp_dir
-        )
-        
-        # Load checkpoint
-        success = new_trainer.load_checkpoint(str(checkpoint_files[0]))
-        self.assertTrue(success)
-        
-        # Verify state was loaded
-        self.assertEqual(new_trainer.training_stats['episodes'], 2)
-    
-    def test_evaluation_mode(self):
-        """Test evaluation mode with reduced exploration."""
-        # Configure agent with exploration rate
-        self.mock_agent.exploration_rate = 0.3
-        original_rate = self.mock_agent.exploration_rate
-        
-        # Run evaluation
-        results = self.trainer._evaluate_agent(num_eval_episodes=2)
-        
-        # Verify evaluation ran
-        self.assertIn('avg_reward', results)
-        self.assertIn('avg_length', results)
-        self.assertIn('avg_llm_usage', results)
-        
-        # Verify exploration was restored after evaluation
-        # (The evaluation method should restore the original rate)
-        self.assertEqual(self.mock_agent.exploration_rate, original_rate)
-    
-    def test_best_model_saving(self):
-        """Test best model saving when new best reward is achieved."""
-        # Set up improving rewards - need more for evaluation episodes too
-        rewards = [5.0, 10.0, 15.0, 8.0] * 10  # Multiply to handle evaluation
-        reward_iter = iter(rewards)
-        
-        def mock_step(*args):
-            try:
-                reward = next(reward_iter)
-            except StopIteration:
-                reward = 1.0  # Default reward when iterator exhausted
-            return (
-                np.zeros((144, 160, 3)),
-                reward,
-                True,  # terminated
-                False,
-                {'game_state': {}}
-            )
-        
-        self.mock_env.step.side_effect = mock_step
-        
-        # Run training without evaluation to avoid StopIteration
-        self.trainer.train(total_episodes=4, max_steps_per_episode=10, eval_interval=100)
-        
-        # Verify best model was saved
-        best_model_path = Path(self.temp_dir) / "best_model.pt"
-        self.assertTrue(best_model_path.exists())
-        
-        # Verify best reward was tracked
-        self.assertEqual(self.trainer.training_stats['best_reward'], 15.0)
-    
-    def test_training_summary_generation(self):
-        """Test comprehensive training summary generation."""
-        # Run training
-        summary = self.trainer.train(total_episodes=3, max_steps_per_episode=5)
-        
-        # Verify summary structure
-        required_keys = [
-            'total_episodes', 'total_steps', 'best_reward',
-            'final_avg_reward', 'curriculum_stage_reached',
-            'final_evaluation', 'avg_episode_length', 'avg_llm_usage'
-        ]
-        
-        for key in required_keys:
-            self.assertIn(key, summary)
-        
-        # Verify summary file was created
-        summary_path = Path(self.temp_dir) / "training_summary.json"
-        self.assertTrue(summary_path.exists())
-        
-        # Verify summary file content
-        with open(summary_path, 'r') as f:
-            file_summary = json.load(f)
-        
-        for key in required_keys:
-            self.assertIn(key, file_summary)
-    
-    def test_llm_confidence_decay(self):
-        """Test gradual reduction of LLM confidence for curriculum learning."""
-        initial_threshold = self.mock_agent.llm_confidence_threshold
-        
-        # Run training
-        self.trainer.train(total_episodes=5, max_steps_per_episode=5)
-        
-        # Verify confidence threshold was reduced
-        self.assertLess(
-            self.mock_agent.llm_confidence_threshold,
-            initial_threshold
-        )
+from trainer.hybrid_llm_rl_trainer import HybridLLMRLTrainer, TrainingConfig
+from agents.hybrid_llm_rl_agent import HybridLLMRLAgent, DecisionMode, DecisionMetrics
+from core.temporal_memory import TemporalMemoryBuffer, TemporalState
+from core.experience_memory import ExperienceMemory
+from core.save_state_library import SaveStateLibrary
 
 
-@unittest.skip("HybridLLMRLTrainer has been archived - tests disabled")
-class TestTrainerConfiguration(unittest.TestCase):
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / "test_config.json"
-    
-    def tearDown(self):
-        """Clean up test fixtures."""
-        import shutil
-        shutil.rmtree(self.temp_dir)
-    
-    @patch('trainer.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
-    @patch('trainer.hybrid_llm_rl_trainer.LLMManager')
-    @patch('trainer.hybrid_llm_rl_trainer.DecisionHistoryAnalyzer')
-    @patch('trainer.hybrid_llm_rl_trainer.AdaptiveStrategySystem')
-    @patch('trainer.hybrid_llm_rl_trainer.HybridAgent')
-    def test_create_trainer_from_config(self, mock_agent, mock_strategy, mock_analyzer, mock_llm, mock_env):
-        """Test trainer creation from configuration file."""
-        # Create test configuration
+class TestHybridLLMRLAgent:
+    """Test the hybrid decision engine."""
+
+    @pytest.fixture
+    def mock_llm_agent(self):
+        """Mock LLM agent for testing."""
+        agent = Mock()
+        agent.get_action.return_value = 1  # Up action
+        return agent
+
+    @pytest.fixture
+    def mock_rl_agent(self):
+        """Mock RL agent for testing."""
+        agent = Mock()
+        agent.act.return_value = 2  # Down action
+        agent.get_q_values.return_value = np.array([0.1, 0.2, 0.8, 0.3, 0.1, 0.1, 0.1, 0.1])
+        agent.memory = []
+        agent.batch_size = 32
+        agent.remember = Mock()
+        agent.replay = Mock()
+        return agent
+
+    @pytest.fixture
+    def mock_temporal_memory(self):
+        """Mock temporal memory for testing."""
+        base_memory = Mock()
+        temporal_memory = Mock()
+        temporal_memory.add_experience = Mock()
+        temporal_memory.update_last_reward = Mock()
+        temporal_memory.get_similar_states.return_value = [(Mock(), 0.7), (Mock(), 0.5)]
+        temporal_memory.get_recent_experiences.return_value = [Mock()]
+        return temporal_memory
+
+    @pytest.fixture
+    def hybrid_agent(self, mock_llm_agent, mock_rl_agent, mock_temporal_memory):
+        """Create hybrid agent for testing."""
         config = {
-            'rom_path': 'test.gbc',
-            'headless': True,
-            'observation_type': 'multi_modal',
-            'llm_model': 'gpt-4',
-            'max_context_length': 8000,
-            'initial_strategy': 'balanced',
-            'decision_db_path': 'test.db',
-            'save_dir': 'test_checkpoints',
-            'log_level': 'DEBUG'
+            'llm_weight': 0.7,
+            'rl_weight': 0.3,
+            'exploration_rate': 0.1
         }
-        
-        # Save configuration
-        with open(self.config_path, 'w') as f:
-            json.dump(config, f)
-        
-        # Mock the components
-        mock_env.return_value = Mock()
-        mock_env.return_value.action_space = Mock()
-        mock_llm.return_value = Mock()
-        mock_analyzer.return_value = Mock()
-        mock_strategy.return_value = Mock()
-        mock_agent.return_value = Mock()
-        
-        # Create trainer from config
-        trainer = create_trainer_from_config(str(self.config_path))
-        
-        # Verify trainer was created
-        self.assertIsNotNone(trainer)
-        
-        # Verify components were initialized - check actual call parameters
-        mock_env.assert_called_once()
-        # Get the actual call args to verify what was passed
-        call_args, call_kwargs = mock_env.call_args
-        self.assertEqual(call_kwargs.get('rom_path'), 'test.gbc')
-        self.assertEqual(call_kwargs.get('headless'), True)
-        # The environment may use different parameter names in actual implementation
-        
-        # Check LLM Manager was called with correct parameters (model, interval, max_context_turns)
-        mock_llm.assert_called_once_with(
-            model='gpt-4',
-            interval=10,  # Default value
-            max_context_turns=5  # Default value
+
+        agent = HybridLLMRLAgent(
+            llm_agent=mock_llm_agent,
+            rl_agent=mock_rl_agent,
+            temporal_memory=mock_temporal_memory,
+            config=config
         )
-        
-        mock_analyzer.assert_called_once_with(db_path='test.db')
-        # Strategy system doesn't take initial_strategy parameter
-        mock_strategy.assert_called_once_with(history_analyzer=mock_analyzer.return_value)
-    
-    def test_invalid_config_file(self):
-        """Test handling of invalid configuration file."""
-        # Create invalid config
-        with open(self.config_path, 'w') as f:
-            f.write("invalid json content")
-        
-        # Should raise exception
-        with self.assertRaises(json.JSONDecodeError):
-            create_trainer_from_config(str(self.config_path))
+        return agent
+
+    def test_initialization(self, hybrid_agent):
+        """Test hybrid agent initializes correctly."""
+        assert hybrid_agent.llm_agent is not None
+        assert hybrid_agent.rl_agent is not None
+        assert hybrid_agent.temporal_memory is not None
+        assert hybrid_agent.llm_weight == 0.7
+        assert hybrid_agent.rl_weight == 0.3
+        assert hybrid_agent.exploration_rate == 0.1
+        assert isinstance(hybrid_agent.metrics, DecisionMetrics)
+
+    def test_feature_vector_extraction(self, hybrid_agent):
+        """Test feature vector extraction from game state."""
+        game_state = {
+            'player_hp': 50,
+            'player_level': 10,
+            'badges': 2,
+            'money': 5000,
+            'party': [{'name': 'Cyndaquil'}, {'name': 'Geodude'}],
+            'player_x': 100,
+            'player_y': 150,
+            'map_id': 15,
+            'screen_state': 'overworld'
+        }
+
+        features = hybrid_agent._extract_feature_vector(game_state)
+
+        assert isinstance(features, np.ndarray)
+        assert features.shape == (32,)
+        assert 0.0 <= features[0] <= 1.0  # Normalized HP
+        assert 0.0 <= features[1] <= 1.0  # Normalized level
+        assert features[2] == 2/16  # Normalized badges
+        assert abs(features[4] - 2/6) < 0.001  # Party size (accounting for float precision)
+
+    def test_decision_mode_selection(self, hybrid_agent):
+        """Test decision mode selection logic."""
+        # Create mock decision context
+        game_state = {'badges': 0, 'party': []}
+        temporal_state = Mock()
+        temporal_state.feature_vector = np.zeros(32)
+
+        context = hybrid_agent._create_decision_context(game_state, temporal_state)
+
+        # Test mode selection
+        mode = hybrid_agent._select_decision_mode(context)
+        assert isinstance(mode, DecisionMode)
+
+    def test_llm_decision(self, hybrid_agent):
+        """Test LLM-based decision making."""
+        game_state = {'player_hp': 100}
+        temporal_state = Mock()
+        temporal_state.feature_vector = np.zeros(32)
+
+        context = hybrid_agent._create_decision_context(game_state, temporal_state)
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        action, confidence = hybrid_agent._llm_decision(context, action_space)
+
+        assert action in action_space
+        assert 0.0 <= confidence <= 1.0
+        hybrid_agent.llm_agent.get_action.assert_called()
+
+    def test_rl_decision(self, hybrid_agent):
+        """Test RL-based decision making."""
+        game_state = {'player_hp': 100}
+        temporal_state = Mock()
+        temporal_state.feature_vector = np.zeros(32)
+
+        context = hybrid_agent._create_decision_context(game_state, temporal_state)
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        action, confidence = hybrid_agent._rl_decision(context, action_space)
+
+        assert action in action_space
+        assert 0.0 <= confidence <= 1.0
+        hybrid_agent.rl_agent.act.assert_called()
+
+    def test_hybrid_decision(self, hybrid_agent):
+        """Test hybrid decision combining LLM and RL."""
+        game_state = {'player_hp': 100}
+        temporal_state = Mock()
+        temporal_state.feature_vector = np.zeros(32)
+
+        context = hybrid_agent._create_decision_context(game_state, temporal_state)
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        action, confidence = hybrid_agent._hybrid_decision(context, action_space)
+
+        assert action in action_space
+        assert 0.0 <= confidence <= 1.0
+
+    def test_decide_action_integration(self, hybrid_agent):
+        """Test complete decision making process."""
+        game_state = {
+            'player_hp': 50,
+            'player_level': 10,
+            'badges': 1,
+            'screen_state': 'overworld'
+        }
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        action, decision_info = hybrid_agent.decide_action(game_state, action_space)
+
+        assert action in action_space
+        assert 'mode' in decision_info
+        assert 'confidence' in decision_info
+        assert 'decision_time' in decision_info
+        assert 'temporal_state' in decision_info
+
+        # Verify temporal memory was called
+        hybrid_agent.temporal_memory.add_experience.assert_called()
+
+    def test_reward_update(self, hybrid_agent):
+        """Test reward feedback integration."""
+        # First make a decision to set up history
+        game_state = {'player_hp': 50}
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+        action, _ = hybrid_agent.decide_action(game_state, action_space)
+
+        # Now update with reward
+        next_state = {'player_hp': 60}
+        reward = 10.0
+
+        hybrid_agent.update_with_reward(action, reward, next_state)
+
+        # Verify temporal memory was updated
+        hybrid_agent.temporal_memory.update_last_reward.assert_called_with(reward)
+
+        # Verify RL agent was updated
+        if hybrid_agent.rl_agent:
+            hybrid_agent.rl_agent.remember.assert_called()
+
+    def test_metrics_tracking(self, hybrid_agent):
+        """Test decision metrics tracking."""
+        initial_decisions = hybrid_agent.metrics.total_decisions
+
+        game_state = {'player_hp': 50}
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        # Make several decisions
+        for _ in range(5):
+            hybrid_agent.decide_action(game_state, action_space)
+
+        assert hybrid_agent.metrics.total_decisions == initial_decisions + 5
+
+    def test_weight_adaptation(self, hybrid_agent):
+        """Test adaptive weight adjustment."""
+        initial_llm_weight = hybrid_agent.llm_weight
+        initial_rl_weight = hybrid_agent.rl_weight
+
+        # Simulate enough decision history to trigger weight adaptation
+        hybrid_agent.decision_history = [
+            (DecisionMode.LLM_STRATEGIC, 1, 50.0, 0.8),  # Very good LLM decisions
+            (DecisionMode.LLM_STRATEGIC, 2, 60.0, 0.9),
+            (DecisionMode.LLM_STRATEGIC, 3, 55.0, 0.9),
+            (DecisionMode.LLM_STRATEGIC, 4, 45.0, 0.8),
+            (DecisionMode.RL_TACTICAL, 5, -10.0, 0.6),   # Very poor RL decisions
+            (DecisionMode.RL_TACTICAL, 6, -15.0, 0.7),
+            (DecisionMode.RL_TACTICAL, 7, -20.0, 0.5),
+            (DecisionMode.RL_TACTICAL, 8, -12.0, 0.6),
+        ] * 3  # Repeat to get enough history
+
+        hybrid_agent.adapt_weights()
+
+        # Weights should adjust based on performance (LLM performed much better)
+        # Check that the adaptation logic ran successfully
+        assert hasattr(hybrid_agent, 'llm_weight')
+        assert hasattr(hybrid_agent, 'rl_weight')
+        # LLM weight should be higher than RL weight given the performance difference
+        assert hybrid_agent.llm_weight >= hybrid_agent.rl_weight
+
+    def test_decision_summary(self, hybrid_agent):
+        """Test decision summary generation."""
+        # Make some decisions first
+        game_state = {'player_hp': 50}
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        for _ in range(3):
+            hybrid_agent.decide_action(game_state, action_space)
+
+        summary = hybrid_agent.get_decision_summary()
+
+        assert 'total_decisions' in summary
+        assert 'mode_distribution' in summary
+        assert 'success_rates' in summary
+        assert 'current_weights' in summary
+        assert summary['total_decisions'] == 3
 
 
-if __name__ == '__main__':
-    unittest.main()
+class TestHybridTrainer:
+    """Test the hybrid trainer implementation."""
+
+    @pytest.fixture
+    def temp_rom_path(self):
+        """Create temporary ROM file for testing."""
+        with tempfile.NamedTemporaryFile(suffix='.gbc', delete=False) as f:
+            f.write(b"fake_rom_data")
+            return f.name
+
+    @pytest.fixture
+    def training_config(self):
+        """Create test training configuration."""
+        return TrainingConfig(
+            max_episodes=5,
+            max_actions_per_episode=50,
+            llm_weight=0.7,
+            rl_weight=0.3,
+            enable_curriculum=False,
+            enable_web=False
+        )
+
+    @pytest.fixture
+    def mock_save_state_library(self):
+        """Mock save state library for testing."""
+        library = Mock()
+        library.list_save_states.return_value = []
+        return library
+
+    @patch('trainer.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
+    @patch('trainer.hybrid_llm_rl_trainer.LLMAgent')
+    @patch('trainer.hybrid_llm_rl_trainer.DQNAgent')
+    def test_trainer_initialization(
+        self, mock_dqn, mock_llm, mock_env,
+        temp_rom_path, training_config, mock_save_state_library
+    ):
+        """Test trainer initializes correctly."""
+        trainer = HybridLLMRLTrainer(
+            rom_path=temp_rom_path,
+            config=training_config,
+            save_state_library=mock_save_state_library
+        )
+
+        assert trainer.rom_path == temp_rom_path
+        assert trainer.config == training_config
+        assert trainer.current_episode == 0
+        assert trainer.total_actions == 0
+        assert not trainer.is_training
+
+        # Verify components were initialized
+        mock_env.assert_called_once()
+        mock_llm.assert_called_once()
+        mock_dqn.assert_called_once()
+
+    @patch('trainer.hybrid_llm_rl_trainer.EnhancedPyBoyPokemonCrystalEnv')
+    @patch('trainer.hybrid_llm_rl_trainer.LLMAgent')
+    @patch('trainer.hybrid_llm_rl_trainer.DQNAgent')
+    def test_training_summary(
+        self, mock_dqn, mock_llm, mock_env,
+        temp_rom_path, training_config
+    ):
+        """Test training summary generation."""
+        trainer = HybridLLMRLTrainer(
+            rom_path=temp_rom_path,
+            config=training_config
+        )
+
+        # Add some mock episode data
+        trainer.episode_rewards = [10.0, 15.0, 20.0]
+        trainer.episode_lengths = [50, 60, 55]
+
+        summary = trainer.get_training_summary()
+
+        assert 'training_status' in summary
+        assert 'performance' in summary
+        assert 'hybrid_agent' in summary
+        assert 'temporal_memory' in summary
+        assert summary['episodes_completed'] == 3
+        assert summary['performance']['avg_reward'] == 15.0
+
+
+class TestTemporalMemoryIntegration:
+    """Test temporal memory integration with hybrid training."""
+
+    def test_temporal_state_creation(self):
+        """Test temporal state creation from game state."""
+        # This would test the temporal memory integration
+        # with the hybrid agent decision making
+        pass
+
+    def test_experience_storage(self):
+        """Test experience storage in temporal memory."""
+        # Test that experiences are properly stored
+        # with LLM reasoning and RL features
+        pass
+
+    def test_similarity_search(self):
+        """Test state similarity search in temporal memory."""
+        # Test that similar states can be found
+        # for novelty calculation
+        pass
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

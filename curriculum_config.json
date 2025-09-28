@@ -1,0 +1,90 @@
+{
+  "description": "Pokemon Crystal RL Curriculum Learning Configuration",
+  "levels": [
+    {
+      "stage": "tutorial",
+      "scenarios": [
+        "first_pokemon",
+        "exploration"
+      ],
+      "difficulty": "easy",
+      "min_success_rate": 0.6,
+      "min_episodes": 5,
+      "max_episodes": 20,
+      "phase_filter": "tutorial",
+      "badges_range": null,
+      "tags": [
+        "beginner",
+        "movement"
+      ]
+    },
+    {
+      "stage": "basic_mechanics",
+      "scenarios": [
+        "wild_encounter",
+        "team_building"
+      ],
+      "difficulty": "easy",
+      "min_success_rate": 0.65,
+      "min_episodes": 8,
+      "max_episodes": 25,
+      "phase_filter": "early_game",
+      "badges_range": [
+        0,
+        1
+      ],
+      "tags": null
+    },
+    {
+      "stage": "intermediate",
+      "scenarios": [
+        "gym_battle",
+        "battle_training"
+      ],
+      "difficulty": "medium",
+      "min_success_rate": 0.7,
+      "min_episodes": 10,
+      "max_episodes": 30,
+      "phase_filter": "early_game",
+      "badges_range": [
+        1,
+        3
+      ],
+      "tags": null
+    },
+    {
+      "stage": "advanced",
+      "scenarios": [
+        "gym_battle",
+        "progression"
+      ],
+      "difficulty": "medium",
+      "min_success_rate": 0.75,
+      "min_episodes": 15,
+      "max_episodes": 40,
+      "phase_filter": "mid_game",
+      "badges_range": [
+        3,
+        6
+      ],
+      "tags": null
+    },
+    {
+      "stage": "expert",
+      "scenarios": [
+        "elite_four",
+        "completionist"
+      ],
+      "difficulty": "hard",
+      "min_success_rate": 0.8,
+      "min_episodes": 20,
+      "max_episodes": 50,
+      "phase_filter": "late_game",
+      "badges_range": [
+        6,
+        16
+      ],
+      "tags": null
+    }
+  ]
+}
