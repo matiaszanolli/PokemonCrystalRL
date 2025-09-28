@@ -1,6 +1,6 @@
 # 🎮 Pokemon Crystal RL Training Platform
 
-**An advanced reinforcement learning environment for Pokemon Crystal featuring hybrid LLM-RL training, intelligent decision making, comprehensive memory mapping, and real-time web monitoring. Now with unified single entry point architecture and enhanced LLM intelligence.**
+**An advanced reinforcement learning environment for Pokemon Crystal featuring hybrid LLM-RL training, intelligent decision making, comprehensive memory mapping, and real-time web monitoring. Now with **unified architecture**, **tournament system**, and **streamlined training pipeline**.**
 
 ## 🌟 Features
 
@@ -38,6 +38,20 @@
 - **Phase-Aware Decisions**: Different strategies for early game vs exploration
 - **Comprehensive Logging**: Detailed decision logs with strategic context
 
+### 🏆 **Tournament System** ⭐ **NEW**
+- **Competitive AI Battles**: Tournament mode for AI configuration competitions
+- **Multiple Formats**: Single elimination, double elimination, round robin, Swiss system
+- **A/B Testing Integration**: Leverages existing automation framework for seamless execution
+- **Performance Analytics**: Comprehensive tournament insights and strategy analysis
+- **REST API**: Complete tournament management through programmatic interface
+
+### 🏗️ **Unified Architecture** ⭐ **ENHANCED**
+- **Streamlined Training Pipeline**: Single `training/` directory with clear separation of concerns
+- **Descriptive File Naming**: Eliminated confusing duplicate names (reward_calculator.py → training_reward_tracker.py, game_state_extractor.py)
+- **Legacy Code Removal**: Eliminated deprecated `trainer/` compatibility layer
+- **Component-Based Design**: Modular training components with clear interfaces
+- **Maintainable Structure**: Self-documenting architecture with reduced complexity
+
 ## 🚀 Quick Start
 
 ### 1. **Setup Environment**
@@ -60,23 +74,27 @@ mkdir roms
 # Place pokemon_crystal.gbc in the roms/ directory
 ```
 
-### 4. **Run Training - Single Entry Point** ⭐ **SIMPLIFIED**
+### 4. **Run Training - Unified Entry Point** ⭐ **SIMPLIFIED**
 ```bash
 # UNIFIED ENTRY POINT - All features in one command!
-python3 llm_trainer.py roms/pokemon_crystal.gbc --max-actions 2000
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 2000
 
-# Enhanced training with all new features
-python3 llm_trainer.py roms/pokemon_crystal.gbc \
+# Enhanced training with LLM and web monitoring
+python3 main.py roms/pokemon_crystal.gbc \
+    --save-state roms/pokemon_crystal.gbc.state \
     --max-actions 3000 \
     --llm-model smollm2:1.7b \
     --llm-interval 15 \
-    --web-port 8080
+    --enable-web --web-port 8080
 
-# Advanced hybrid training (coming soon)
-python3 examples/run_hybrid_training.py
+# Curriculum learning training
+python3 main.py roms/pokemon_crystal.gbc --enable-curriculum --max-actions 1000
+
+# Tournament demonstration
+python3 examples/tournament_demo.py
 
 # Quick test run
-python3 llm_trainer.py roms/pokemon_crystal.gbc --max-actions 500
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 500
 ```
 
 ### 5. **Monitor Training**
@@ -88,11 +106,12 @@ python3 llm_trainer.py roms/pokemon_crystal.gbc --max-actions 500
 
 ### **Core Components**
 
-#### 🤖 **Hybrid Training System** (`trainer/hybrid_llm_rl_trainer.py`)
-- **HybridLLMRLTrainer**: Main training orchestrator with curriculum learning
-- **AdaptiveStrategySystem**: Performance-based strategy switching (630 lines)
-- **DecisionHistoryAnalyzer**: Pattern learning with SQLite persistence (677 lines)
-- **HybridAgent**: Combines LLM and RL agents with decision arbitration (651 lines)
+#### 🤖 **Unified Training System** (`training/unified_pokemon_trainer.py`)
+- **UnifiedPokemonTrainer**: Main training orchestrator with all features integrated
+- **Component Architecture**: Modular design with training components (`training/components/`)
+- **Hybrid LLM-RL**: Advanced decision engine combining LLM guidance with RL optimization (`training/hybrid_llm_rl_trainer.py`)
+- **AdaptiveStrategySystem**: Performance-based strategy switching
+- **Tournament System**: Competitive AI battles with multiple formats (`core/tournament/`)
 - **EnhancedPyBoyPokemonCrystalEnv**: Multi-modal Gymnasium environment (599 lines)
 
 #### 🧠 **Enhanced LLM Integration** (`llm_trainer.py`) ⭐ **CONSOLIDATED**
