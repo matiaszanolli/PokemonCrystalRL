@@ -163,7 +163,7 @@ class ProgressionRewardComponent(RewardComponent):
                 'party_count': (0, 6),
                 'player_level': (0, 100),
                 'player_hp': (0, 999),
-                'player_max_hp': (1, 999)
+                'player_max_hp': (0, 999)  # Allow 0 for no-Pokemon states
             },
             require_screen_state=True,
             allowed_screen_states={'overworld'}

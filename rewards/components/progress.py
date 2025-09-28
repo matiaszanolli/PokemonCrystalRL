@@ -101,8 +101,10 @@ class LevelRewardComponent(RewardComponent):
         
         if curr_level > prev_level:
             level_gain = curr_level - prev_level
-            # Cap level gain to prevent huge memory spike rewards
-            level_gain = min(level_gain, 5)  # Max 5 levels per step
+
+            # Reject impossible level spikes (more than 5 levels per step)
+            if level_gain > 5:
+                return 0.0, {}  # Impossible level jump, likely memory glitch
             
             # Additional validation: require HP values to be reasonable for this level
             if 'player_hp' in current_state and 'player_max_hp' in current_state:

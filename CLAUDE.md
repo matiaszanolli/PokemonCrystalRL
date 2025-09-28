@@ -33,6 +33,7 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 3. **Multi-agent training** - Specialist agents coordinated by event system
 4. **Plugin-based training** - Modular components for different strategies
 5. **Curriculum learning** - Progressive difficulty training with save state library integration
+6. **Tournament mode** - Competitive AI configuration battles with automated scheduling
 
 ## Common Commands
 
@@ -44,12 +45,23 @@ python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.s
 # With LLM integration (recommended)
 python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 500 --llm-model smollm2:1.7b --llm-interval 10 --enable-web
 
-# Hybrid training example
+# Hybrid training examples
 python3 examples/run_hybrid_training.py
+python3 examples/run_hybrid_llm_rl_training.py
 
 # Curriculum learning training
 python3 main.py roms/pokemon_crystal.gbc --enable-curriculum --max-actions 500
 python3 examples/run_curriculum_training.py roms/pokemon_crystal.gbc --episodes 10
+
+# A/B testing examples
+python3 examples/ab_testing_demo.py
+python3 examples/ab_testing_automation_demo.py
+python3 examples/ab_testing_api_test.py
+python3 examples/ab_testing_realtime_demo.py
+python3 examples/ab_testing_web_demo.py
+
+# Tournament mode examples
+python3 examples/tournament_demo.py
 
 # Quick start monitoring
 ./quick_start.sh
@@ -151,6 +163,15 @@ ollama pull smollm2:1.7b
 - **Exploration Patterns**: Systematic sweep, spiral search, wall following, random walk
 - **Reward Calculators**: Progression-focused, battle-focused, exploration-focused, balanced
 - **Plugin coordination** - Multiple plugins work together with priority-based selection
+
+### Tournament Mode - Competitive AI Battles (`core/tournament/`)
+- **TournamentManager** - Complete tournament lifecycle management with A/B testing integration
+- **BracketGenerator** - Support for single elimination, double elimination, round robin, Swiss system
+- **Tournament Analytics** - Performance insights, strategy effectiveness analysis, competitive balance metrics
+- **REST API Integration** - Full tournament management through web dashboard API endpoints
+- **Automated Scheduling** - Leverages A/B testing automation framework for match execution
+- **Pre-built Profiles** - Quick battle, championship, research, endurance, speedrun configurations
+- **Real-time Monitoring** - Live tournament progress tracking and bracket visualization
 
 ### Advanced AI Systems
 
@@ -292,7 +313,7 @@ python -m pytest -m "llm or web_monitoring" -v
 
 ## Project Status
 
-This project is in active development with major systems completed (Q4 2024):
+This project is in active development with major systems completed (2024-2025):
 - **Core Platform**: Multi-agent framework, event system, plugin architecture ✅
 - **Advanced AI**: Game intelligence, strategic context building, experience memory ✅
 - **Web Platform**: Real-time dashboard, REST API, live streaming ✅
@@ -300,7 +321,8 @@ This project is in active development with major systems completed (Q4 2024):
 - **Save State Library**: Metadata-driven scenario management with CLI interface ✅
 - **Curriculum Learning**: 5-stage progressive difficulty training system ✅
 - **Test Coverage**: 175+ test methods across critical AI modules (85%+ coverage) ✅
-- **Current Focus**: Tournament mode, distributed training, advanced AI research
+- **Tournament Mode**: Complete competitive AI battle system with automated scheduling ✅
+- **Current Focus**: Distributed training, advanced AI research, production deployment
 
 ### Current Development Branch
 Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.
@@ -319,7 +341,7 @@ Currently on `learn_to_play` branch with ongoing improvements. Main branch is `m
 
 ## Web Dashboard Troubleshooting
 
-### Recent Critical Fixes (September 2024)
+### Recent Critical Fixes (2024)
 
 **✅ LLM Action Execution Bug (CRITICAL)**
 - **Issue**: LLM decisions not executing - game character stuck at (0,0) despite LLM making decisions

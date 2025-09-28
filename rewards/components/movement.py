@@ -64,16 +64,13 @@ class ExplorationRewardComponent(RewardComponent):
             if map_diff <= 10:  # Reasonable map transition
                 # Only reward first time entering this map
                 if curr_map not in self.visited_maps:
-                    # Validate coordinate delta
-                    coord_delta = abs(curr_x - prev_x) + abs(curr_y - prev_y)
-                    if coord_delta <= 8:  # Reasonable transition distance
-                        # Rate limit map rewards
-                        if (self.step_counter - self.last_map_reward_step) >= 50:
-                            self.visited_maps.add(curr_map)
-                            self.visited_locations.add(current_location)
-                            self.last_map_reward_step = self.step_counter
-                            rewards['new_map'] = 10.0
-                            total_reward += 10.0
+                    # Rate limit map rewards
+                    if (self.step_counter - self.last_map_reward_step) >= 50:
+                        self.visited_maps.add(curr_map)
+                        self.visited_locations.add(current_location)
+                        self.last_map_reward_step = self.step_counter
+                        rewards['new_map'] = 10.0
+                        total_reward += 10.0
         
         # Check if this location has been visited before
         if current_location not in self.visited_locations:

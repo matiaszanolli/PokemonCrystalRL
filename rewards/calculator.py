@@ -118,7 +118,7 @@ class PokemonRewardCalculator(RewardCalculatorInterface):
         """
         summary_parts = []
         for category, value in rewards.items():
-            if abs(value) > 0.01:  # Only show significant rewards
+            if abs(value) >= 0.01:  # Only show significant rewards (inclusive of 0.01)
                 summary_parts.append(f"{category}: {value:+.2f}")
         
         return " | ".join(summary_parts) if summary_parts else "no rewards"
@@ -661,7 +661,7 @@ class PokemonRewardCalculator(RewardCalculatorInterface):
         """Get human-readable reward summary"""
         summary_parts = []
         for category, value in rewards.items():
-            if abs(value) > 0.01:  # Only show significant rewards
+            if abs(value) >= 0.01:  # Only show significant rewards (inclusive of 0.01)
                 summary_parts.append(f"{category}: {value:+.2f}")
         
         return " | ".join(summary_parts) if summary_parts else "no rewards"
