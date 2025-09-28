@@ -15,6 +15,10 @@ from config.constants import (
 
 logger = logging.getLogger(__name__)
 
+# Global position history for corruption detection
+_position_history = []
+_last_good_position = (1, 5, 4, 0)  # Safe default position
+
 def get_safe_memory(memory, address: int, default: int = 0) -> int:
     """Safely read memory address with bounds checking and validation."""
     try:
@@ -40,24 +44,33 @@ def read_party_pokemon(memory, slot: int) -> Dict[str, Any]:
 
     try:
         base = MEMORY_ADDRESSES['party_data_start'] + slot * TRAINING_PARAMS['PARTY_SLOT_SIZE']
-        
+
         species = get_safe_memory(memory, base)
+
+        # If species is 0 or common uninitialized values, this is an empty slot
+        if species == 0 or species in [96, 127, 223, 255]:
+            return {
+                "species": 0, "held_item": 0, "hp": 0, "max_hp": 0,
+                "level": 0, "status": 0, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0]
+            }
+
+        # Only validate if this appears to be a real Pokemon
         if species not in POKEMON_SPECIES:
             logger.warning(f"Invalid Pokemon species {species} in slot {slot}")
             species = 0
-            
+
         level = get_safe_memory(memory, base + 8)
         if not 0 <= level <= TRAINING_PARAMS['MAX_LEVEL']:
             logger.warning(f"Invalid level {level} for Pokemon {slot}")
             level = 0
-            
+
         hp = get_safe_memory(memory, base + 4) + (get_safe_memory(memory, base + 5) << 8)
         max_hp = get_safe_memory(memory, base + 6) + (get_safe_memory(memory, base + 7) << 8)
-        
+
         if hp > max_hp:
             logger.warning(f"HP {hp} exceeds max HP {max_hp} for Pokemon {slot}")
             hp = max_hp
-            
+
         status = get_safe_memory(memory, base + 9)
         if status not in STATUS_CONDITIONS:
             logger.warning(f"Invalid status {status} for Pokemon {slot}")
@@ -107,34 +120,64 @@ def read_money(memory) -> int:
         return 0
 
 def read_location(memory) -> Tuple[int, int, int, int]:
-    """Read and validate player location data."""
+    """Read and validate player location data with memory corruption detection."""
+    global _position_history, _last_good_position
+
     try:
         map_id = get_safe_memory(memory, MEMORY_ADDRESSES['player_map'])
         x = get_safe_memory(memory, MEMORY_ADDRESSES['player_x'])
         y = get_safe_memory(memory, MEMORY_ADDRESSES['player_y'])
         facing = get_safe_memory(memory, MEMORY_ADDRESSES['player_direction'])
-        
+
+        current_position = (map_id, x, y, facing)
+
+        # Detect obvious memory corruption patterns
+        corruption_indicators = [
+            # All zeros - likely corrupted
+            (map_id == 0 and x == 0 and y == 0),
+            # All max values - likely corrupted
+            (map_id == 255 and x == 255 and y == 255),
+            # Common corruption patterns
+            (x == 0xFF or y == 0xFF),
+            # Impossible coordinate combinations
+            (x == 0 and y == 0 and map_id > 0),
+        ]
+
+        if any(corruption_indicators):
+            logger.debug(f"Memory corruption detected in position data: map={map_id}, x={x}, y={y}, facing={facing}")
+            # Return last known good position
+            return _last_good_position
+
         # Validate coordinates (0xFF is invalid sentinel value)
         if x == 0xFF or not 0 <= x <= 254:
-            logger.warning(f"Invalid X coordinate {x}, resetting to 0")
-            x = 0
+            logger.warning(f"Invalid X coordinate {x}, using last good position")
+            return _last_good_position
         if y == 0xFF or not 0 <= y <= 254:
-            logger.warning(f"Invalid Y coordinate {y}, resetting to 0")
-            y = 0
-            
+            logger.warning(f"Invalid Y coordinate {y}, using last good position")
+            return _last_good_position
+
         # Validate map ID and facing direction
         if not 0 <= map_id <= 255:
-            logger.warning(f"Invalid map ID {map_id}, resetting to 0")
-            map_id = 0
+            logger.warning(f"Invalid map ID {map_id}, using last good position")
+            return _last_good_position
         if facing not in [0, 2, 4, 6, 8]:  # Valid GB directions
-            logger.warning(f"Invalid direction {facing}, resetting to 0")
+            # Only log warning for direction if it's not a common uninitialized value
+            if facing not in [1, 3, 31, 255]:  # Common uninitialized values in early game
+                logger.debug(f"Invalid direction {facing}, keeping position but resetting direction")
             facing = 0
-            
-        return map_id, x, y, facing
-        
+
+        # This position looks valid, update our tracking
+        validated_position = (map_id, x, y, facing)
+        _position_history.append(validated_position)
+        if len(_position_history) > 10:
+            _position_history.pop(0)
+        _last_good_position = validated_position
+
+        return validated_position
+
     except Exception as e:
         logger.error(f"Error reading location data: {str(e)}")
-        return 0, 0, 0, 0
+        return _last_good_position
 
 def build_observation(memory) -> Dict[str, Any]:
     """Build complete game state observation with validated memory values."""

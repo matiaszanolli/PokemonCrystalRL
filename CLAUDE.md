@@ -16,16 +16,23 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 ⚠️ **IMPORTANT**: `llm_trainer.py` is deprecated and shows a deprecation warning. Always use `main.py` instead.
 
 ### Key Components
-- **`core/`** - Core systems (event system, plugin system, memory mapping, game intelligence)
+- **`core/`** - Core systems (event system, plugin system, memory mapping, game intelligence, tournament system)
 - **`agents/`** - Multi-agent framework with specialist agents (battle, explorer, progression)
 - **`plugins/`** - Modular plugin system for battle strategies, exploration patterns, rewards
-- **`trainer/`** - Training systems and LLM integration
+- **`training/`** - **Unified training orchestration** with component-based architecture
 - **`environments/`** - Game state detection and PyBoy environment wrappers
-- **`training/`** - Unified training orchestration and configuration
 - **`utils/`** - Memory reading, screen analysis, action parsing utilities
 - **`config/`** - Memory addresses, constants, and configuration
 - **`rewards/`** - Reward calculation system
 - **`web_dashboard/`** - Real-time web monitoring with REST API and live streaming
+
+### ⚠️ **IMPORTANT ARCHITECTURAL CHANGES** (September 2024)
+- **`trainer/` directory REMOVED** - Legacy compatibility layer eliminated for cleaner architecture
+- **Descriptive file naming** - Eliminated confusing duplicates:
+  - `core/reward_calculator.py` → `core/game_state_extractor.py` (game state extraction utility)
+  - `training/components/reward_calculator.py` → `training/components/training_reward_tracker.py` (training pipeline tracker)
+  - `rewards/calculator.py` remains as the main reward calculation logic
+- **All imports updated** - Use descriptive names for better maintainability
 
 ### Training Modes
 1. **LLM-only training** - Uses Ollama models for decision making
@@ -218,7 +225,7 @@ ollama pull smollm2:1.7b
 - Game state detection in `environments/game_state_detection.py`
 
 ### LLM Integration
-- Ollama-based LLM communication in `trainer/llm_manager.py`
+- Ollama-based LLM communication in `training/components/llm_manager.py`
 - Enhanced parsing with natural language synonyms
 - Stuck pattern detection and recovery
 - Strategic context building for prompts
@@ -320,9 +327,10 @@ This project is in active development with major systems completed (2024-2025):
 - **A/B Testing**: Complete automation framework with 6 workflow templates ✅
 - **Save State Library**: Metadata-driven scenario management with CLI interface ✅
 - **Curriculum Learning**: 5-stage progressive difficulty training system ✅
-- **Test Coverage**: 175+ test methods across critical AI modules (85%+ coverage) ✅
 - **Tournament Mode**: Complete competitive AI battle system with automated scheduling ✅
-- **Current Focus**: Distributed training, advanced AI research, production deployment
+- **Architecture Unification**: Streamlined codebase with descriptive naming and legacy removal ✅
+- **Test Coverage**: 175+ test methods across critical AI modules (85%+ coverage) ✅
+- **Current Focus**: Advanced analytics dashboard, distributed training, production deployment
 
 ### Current Development Branch
 Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.
@@ -348,6 +356,7 @@ Currently on `learn_to_play` branch with ongoing improvements. Main branch is `m
 - **Root Cause**: Action string to integer conversion bug in `training/components/llm_decision_engine.py:192-206`
 - **Fix**: Added proper action mapping dictionary for "up"→1, "down"→2, etc.
 - **Files Modified**: `/training/components/llm_decision_engine.py`
+- **Note**: LLM manager moved from deprecated `trainer/llm_manager.py` to `training/components/llm_manager.py`
 
 **✅ Live Game Screen Streaming**
 - **Issue**: Game screen not displaying in web dashboard

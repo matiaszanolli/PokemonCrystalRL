@@ -241,7 +241,25 @@ class EnhancedStuckDetector:
         position_counts = Counter(recent_positions)
         most_common = position_counts.most_common(1)[0]
 
+        # Memory corruption detection: if all positions are exactly the same
+        # and they look like corrupted values, don't trigger stuck detection
         if most_common[1] >= self.thresholds['position_loop_threshold'] * 0.6:
+            repeated_pos = most_common[0]
+
+            # Check for common memory corruption patterns
+            if (
+                # All positions are (0, 0, 0) - likely corrupted
+                repeated_pos == (0, 0, 0) or
+                # All positions have same corrupted coordinates
+                (len(set(recent_positions)) == 1 and
+                 (repeated_pos[0] == 0 or repeated_pos[1] == 0 or repeated_pos[2] == 0)) or
+                # Impossible/invalid position values
+                any(coord < 0 or coord > 255 for coord in repeated_pos)
+            ):
+                # This looks like memory corruption, not a real stuck loop
+                self.logger.debug(f"Ignoring position loop detection due to likely memory corruption: {repeated_pos}")
+                return None
+
             severity = min(1.0, most_common[1] / self.thresholds['position_loop_threshold'])
 
             return StuckPattern(

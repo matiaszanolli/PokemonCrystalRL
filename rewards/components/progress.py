@@ -141,24 +141,42 @@ class BadgeRewardComponent(RewardComponent):
     def calculate(self, current_state: Dict, previous_state: Dict) -> Tuple[float, Dict[str, float]]:
         if not (self.validate_state(current_state) and self.validate_state(previous_state)):
             return 0.0, {}
-            
+
         curr_badges = current_state.get('badges_total', 0)
         prev_badges = previous_state.get('badges_total', curr_badges)
-        
+
         # Get badge raw values (bitmasks)
         curr_raw = (current_state.get('badges', 0), current_state.get('kanto_badges', 0))
         prev_raw = (previous_state.get('badges', curr_raw[0]), previous_state.get('kanto_badges', curr_raw[1]))
-        
-        # Additional validation: avoid early game memory spikes
-        if ('party_count' in current_state and 'player_level' in current_state):
-            early_game = current_state.get('party_count', 0) == 0 and current_state.get('player_level', 0) == 0
-            if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
-                return 0.0, {}
-        
-        # Additional validation: must have at least one Pokemon to earn badges
-        if 'party_count' in current_state and current_state.get('party_count', 0) == 0:
+
+        # CRITICAL: Early game badge detection protection
+        party_count = current_state.get('party_count', 0)
+        player_level = current_state.get('player_level', 0)
+        player_hp = current_state.get('player_hp', 0)
+        player_max_hp = current_state.get('player_max_hp', 0)
+
+        # ABSOLUTE PROTECTION: Multiple validation layers
+        early_game_indicators = [
+            party_count == 0,                    # No Pokemon
+            player_level == 0,                   # No level
+            player_hp == 0,                      # No HP
+            player_max_hp == 0,                  # No max HP
+            (party_count == 0 and player_level <= 5)  # Early game combination
+        ]
+
+        if any(early_game_indicators):
+            self.logger.debug(f"Badge detection blocked - early game state: party={party_count}, level={player_level}, hp={player_hp}/{player_max_hp}")
             return 0.0, {}
-            
+
+        # Additional protection: if player has no meaningful progression, no badges
+        if player_level <= 5 and party_count <= 1:
+            self.logger.debug(f"Badge detection blocked - insufficient progression: level={player_level}, party={party_count}")
+            return 0.0, {}
+
+        # Additional validation: avoid obvious memory corruption
+        if (0xFF in curr_raw or 0xFF in prev_raw) or (curr_badges > 16 or prev_badges > 16):
+            return 0.0, {}
+
         # Only reward if the total is within plausible range AND actually increased
         if 0 <= curr_badges <= 16 and 0 <= prev_badges <= 16 and curr_badges > prev_badges:
             # Create milestone key to prevent repeat rewards
@@ -167,11 +185,14 @@ class BadgeRewardComponent(RewardComponent):
             # Only reward each badge milestone once
             if milestone_key not in self.badge_milestones:
                 self.badge_milestones.add(milestone_key)
-                
+
                 # Cap to 1 badge per step to prevent jumps
                 badge_gain = min(curr_badges - prev_badges, 1)
                 reward = badge_gain * 500.0
-                
+
+                # LOG BADGE AWARD FOR DEBUGGING
+                self.logger.warning(f"🏆 BADGE AWARDED: {badge_gain} badges (+{reward} points) | State: party={party_count}, level={player_level}, hp={player_hp}/{player_max_hp} | Raw badges: {curr_raw}")
+
                 return reward, {'badge_earned': reward}
                 
         return 0.0, {}

@@ -74,6 +74,13 @@ class RewardCalculator:
         # Time tracking
         self.start_time = time.time()
         self.last_reward_time = self.start_time
+
+        # Anti-farming tracking
+        self.recent_map_transitions = []  # List of (from_map, to_map) tuples
+        self.map_transition_history_size = 20  # Remember last 20 transitions
+        self.map_transition_cooldown = {}  # Track cooldowns for specific transitions
+        self.step_counter = 0
+        self.last_map_reward_step = -10_000
     
     def calculate_reward(self, 
                         current_state: Dict[str, Any],
@@ -178,16 +185,42 @@ class RewardCalculator:
         player_x = current_state.get('player_x', 0)
         player_y = current_state.get('player_y', 0)
         current_location = (player_map, player_x, player_y)
-        
-        # Reward for visiting new locations
+        prev_map = self.previous_state.get('player_map', player_map)
+
+        # Track step counter for rate limiting
+        self.step_counter += 1
+
+        # Check for map transitions and apply anti-farming logic
+        if player_map != prev_map:
+            # Track this map transition for anti-farming
+            transition = (prev_map, player_map)
+            self.recent_map_transitions.append(transition)
+            if len(self.recent_map_transitions) > self.map_transition_history_size:
+                self.recent_map_transitions.pop(0)
+
+            # Check for farming pattern: back-and-forth between same maps
+            is_farming = self._detect_map_farming(transition)
+
+            # Only reward if not farming and first time entering this map
+            if not is_farming:
+                # Check if this is a new map entirely
+                visited_maps = {loc[0] for loc in self.visited_locations}
+                if player_map not in visited_maps:
+                    # Rate limit map rewards
+                    if (self.step_counter - self.last_map_reward_step) >= 50:
+                        reward += self.config.new_area_reward * 2
+                        self.last_map_reward_step = self.step_counter
+                        self.logger.info(f"New map exploration (legitimate): +{self.config.new_area_reward * 2}")
+            else:
+                # Apply penalty for farming behavior
+                penalty = self._calculate_farming_penalty(transition)
+                reward += penalty
+                self.logger.info(f"Map farming detected: {penalty:.1f}")
+
+        # Reward for visiting new locations (but smaller reward to prevent exploitation)
         if current_location not in self.visited_locations:
             self.visited_locations.add(current_location)
             reward += self.config.new_area_reward
-            
-            # Bonus for new maps
-            if player_map not in {loc[0] for loc in self.visited_locations if loc != current_location}:
-                reward += self.config.new_area_reward * 2
-                self.logger.info(f"New map exploration: +{self.config.new_area_reward * 2}")
         
         # Track location visits for stuck detection
         self.location_visit_count[current_location] += 1
@@ -427,3 +460,56 @@ class RewardCalculator:
         except Exception as e:
             self.logger.error(f"Failed to load progress: {e}")
             return False
+
+    def _detect_map_farming(self, transition: Tuple[int, int]) -> bool:
+        """Detect if this transition is part of a farming pattern."""
+        if len(self.recent_map_transitions) < 4:
+            return False
+
+        from_map, to_map = transition
+
+        # Check for back-and-forth pattern in recent history
+        recent_transitions = self.recent_map_transitions[-6:]  # Last 6 transitions
+
+        # Count how many times we've seen this exact transition recently
+        same_transition_count = recent_transitions.count(transition)
+
+        # Count how many times we've seen the reverse transition recently
+        reverse_transition = (to_map, from_map)
+        reverse_transition_count = recent_transitions.count(reverse_transition)
+
+        # Farming detected if we've done this transition + reverse multiple times
+        total_oscillations = same_transition_count + reverse_transition_count
+
+        # Also check if we're only moving between 2 maps in recent history
+        unique_maps_in_transitions = set()
+        for t in recent_transitions:
+            unique_maps_in_transitions.add(t[0])
+            unique_maps_in_transitions.add(t[1])
+
+        # Farming patterns:
+        # 1. High oscillation between same two maps
+        # 2. Only been on 2 maps recently with multiple transitions
+        is_high_oscillation = total_oscillations >= 3
+        is_limited_exploration = len(unique_maps_in_transitions) <= 2 and len(recent_transitions) >= 4
+
+        return is_high_oscillation or is_limited_exploration
+
+    def _calculate_farming_penalty(self, transition: Tuple[int, int]) -> float:
+        """Calculate escalating penalty for farming behavior."""
+        transition_key = f"{transition[0]}_{transition[1]}"
+
+        # Track how many times we've penalized this specific transition
+        if transition_key not in self.map_transition_cooldown:
+            self.map_transition_cooldown[transition_key] = 0
+
+        self.map_transition_cooldown[transition_key] += 1
+        penalty_count = self.map_transition_cooldown[transition_key]
+
+        # Much smaller escalating penalty: -0.1, -0.15, -0.2, etc., capped at -0.5
+        base_penalty = -0.1
+        escalation = penalty_count * 0.05  # Smaller escalation
+        penalty = base_penalty - escalation
+        penalty = max(penalty, -0.5)  # Cap at -0.5
+
+        return penalty

@@ -488,8 +488,8 @@ class PokemonDashboard {
             }
         };
 
-        // Update screen every 33ms (30fps) for smooth local streaming
-        setInterval(updateScreen, 33);
+        // Update screen every 200ms (5fps) to reduce system load
+        setInterval(updateScreen, 200);
 
         // Initial update
         updateScreen();

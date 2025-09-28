@@ -195,29 +195,53 @@ class UnifiedApiEndpoints:
 
             if tracker:
                 stats = tracker.get_current_stats()
-                # Extract position properly
-                pos = stats.get('player_position', {})
-                if isinstance(pos, dict):
-                    position = {"x": pos.get('x', 0), "y": pos.get('y', 0)}
-                else:
-                    position = {"x": 0, "y": 0}
 
-                # Try to get map name/ID - check different possible keys
-                current_map = (
-                    stats.get('current_map') or
-                    stats.get('map_id') or
-                    stats.get('map') or
-                    stats.get('location') or
-                    0
-                )
+                # Check if we have the new statistics format with game_states
+                if 'game_states' in stats:
+                    game_state = stats['game_states']
+
+                    # Extract position from current_position array [x, y]
+                    pos = game_state.get('current_position', [0, 0])
+                    if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                        position = {"x": pos[0], "y": pos[1]}
+                    else:
+                        position = {"x": 0, "y": 0}
+
+                    # Extract other values from game_states
+                    current_map = game_state.get('current_map', 0)
+                    badges = game_state.get('badges', 0)
+                    money = game_state.get('money', 0)
+                    party_count = game_state.get('party_count', 0)
+                    level = game_state.get('level', 0)
+
+                    self.logger.debug(f"✅ Game state extracted from stats: map={current_map}, pos={position}, badges={badges}, money={money}")
+                else:
+                    # Fallback to old format
+                    pos = stats.get('player_position', {})
+                    if isinstance(pos, dict):
+                        position = {"x": pos.get('x', 0), "y": pos.get('y', 0)}
+                    else:
+                        position = {"x": 0, "y": 0}
+
+                    current_map = (
+                        stats.get('current_map') or
+                        stats.get('map_id') or
+                        stats.get('map') or
+                        stats.get('location') or
+                        0
+                    )
+                    badges = stats.get('badges', 0)
+                    money = stats.get('money', 0)
+                    party_count = stats.get('party_count', 0)
+                    level = stats.get('level', 0)
 
                 return GameStateModel(
                     current_map=current_map,
                     player_position=position,
-                    money=stats.get('money', 0),
-                    badges_earned=stats.get('badges', 0),
-                    party_count=stats.get('party_count', 0),
-                    player_level=stats.get('level', 0),
+                    money=money,
+                    badges_earned=badges,
+                    party_count=party_count,
+                    player_level=level,
                     hp_current=stats.get('hp_current', 0),
                     hp_max=stats.get('hp_max', 0),
                     in_battle=stats.get('in_battle', False),

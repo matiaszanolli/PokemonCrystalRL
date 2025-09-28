@@ -218,14 +218,27 @@ class PokemonRewardCalculator(RewardCalculatorInterface):
         curr_raw = (current.get('badges', 0), current.get('kanto_badges', 0))
         prev_raw = (previous.get('badges', curr_raw[0]), previous.get('kanto_badges', curr_raw[1]))
         
-        # Additional validation: avoid early game memory spikes (only if fields exist)
-        if ('party_count' in current and 'player_level' in current):
-            early_game = current.get('party_count', 0) == 0 and current.get('player_level', 0) == 0
-            if early_game and (0xFF in curr_raw or 0xFF in prev_raw):
-                return 0.0
-        
-        # Additional validation: must have at least one Pokemon to earn badges (if info provided)
-        if 'party_count' in current and current.get('party_count', 0) == 0:
+        # ENHANCED EARLY GAME PROTECTION: Multiple validation layers
+        party_count = current.get('party_count', 0)
+        player_level = current.get('player_level', 0)
+        player_hp = current.get('player_hp', 0)
+        player_max_hp = current.get('player_max_hp', 0)
+
+        # ABSOLUTE PROTECTION: Block badges in early game state
+        early_game_indicators = [
+            party_count == 0,                    # No Pokemon
+            player_level == 0,                   # No level
+            player_hp == 0,                      # No HP
+            player_max_hp == 0,                  # No max HP
+            (party_count == 0 and player_level <= 5)  # Early game combination
+        ]
+
+        if any(early_game_indicators):
+            print(f"🚫 BADGE BLOCKED (main calc): party={party_count}, level={player_level}, hp={player_hp}/{player_max_hp}")
+            return 0.0
+
+        # Additional validation: avoid memory corruption
+        if (0xFF in curr_raw or 0xFF in prev_raw):
             return 0.0
             
         # Only reward if the total is within plausible range AND actually increased
@@ -242,9 +255,10 @@ class PokemonRewardCalculator(RewardCalculatorInterface):
                 
                 # Cap to 1 badge per step to prevent jumps awarding huge rewards
                 badge_gain = min(curr_badges - prev_badges, 1)
-                
-                # Debug logging to track badge rewards
-                # print removed to keep tests clean
+
+                # LOG BADGE AWARD FOR DEBUGGING
+                print(f"🏆 BADGE AWARDED (main calc): {badge_gain} badges (+{badge_gain * 500.0} points) | State: party={party_count}, level={player_level}, hp={player_hp}/{player_max_hp} | Raw badges: {curr_raw}")
+
                 return badge_gain * 500.0  # Huge reward for badge progress!
             else:
                 # Already rewarded this badge milestone

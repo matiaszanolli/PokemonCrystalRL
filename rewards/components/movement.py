@@ -14,13 +14,17 @@ from ..component import RewardComponent, StateValidation
 
 class ExplorationRewardComponent(RewardComponent):
     """Rewards for exploring new areas and locations."""
-    
+
     def __init__(self):
         super().__init__("exploration")
         self.visited_maps: Set[int] = set()
         self.visited_locations: Set[Tuple[int, int, int]] = set()
         self.step_counter = 0
         self.last_map_reward_step = -10_000
+        # Anti-farming: Track recent map transitions
+        self.recent_map_transitions = []  # List of (from_map, to_map) tuples
+        self.map_transition_history_size = 20  # Remember last 20 transitions
+        self.map_transition_cooldown = {}  # Track cooldowns for specific transitions
         
     def get_validation_rules(self) -> StateValidation:
         return StateValidation(
@@ -62,8 +66,17 @@ class ExplorationRewardComponent(RewardComponent):
         if curr_map != prev_map:
             map_diff = abs(curr_map - prev_map)
             if map_diff <= 10:  # Reasonable map transition
-                # Only reward first time entering this map
-                if curr_map not in self.visited_maps:
+                # Track this map transition for anti-farming
+                transition = (prev_map, curr_map)
+                self.recent_map_transitions.append(transition)
+                if len(self.recent_map_transitions) > self.map_transition_history_size:
+                    self.recent_map_transitions.pop(0)
+
+                # Check for farming pattern: back-and-forth between same maps
+                is_farming = self._detect_map_farming(transition)
+
+                # Only reward if not farming and first time entering this map
+                if not is_farming and curr_map not in self.visited_maps:
                     # Rate limit map rewards
                     if (self.step_counter - self.last_map_reward_step) >= 50:
                         self.visited_maps.add(curr_map)
@@ -71,6 +84,11 @@ class ExplorationRewardComponent(RewardComponent):
                         self.last_map_reward_step = self.step_counter
                         rewards['new_map'] = 10.0
                         total_reward += 10.0
+                elif is_farming:
+                    # Apply penalty for farming behavior
+                    penalty = self._calculate_farming_penalty(transition)
+                    rewards['farming_penalty'] = penalty
+                    total_reward += penalty
         
         # Check if this location has been visited before
         if current_location not in self.visited_locations:
@@ -83,6 +101,59 @@ class ExplorationRewardComponent(RewardComponent):
                 total_reward += 0.1
         
         return total_reward, rewards
+
+    def _detect_map_farming(self, transition: Tuple[int, int]) -> bool:
+        """Detect if this transition is part of a farming pattern."""
+        if len(self.recent_map_transitions) < 4:
+            return False
+
+        from_map, to_map = transition
+
+        # Check for back-and-forth pattern in recent history
+        recent_transitions = self.recent_map_transitions[-6:]  # Last 6 transitions
+
+        # Count how many times we've seen this exact transition recently
+        same_transition_count = recent_transitions.count(transition)
+
+        # Count how many times we've seen the reverse transition recently
+        reverse_transition = (to_map, from_map)
+        reverse_transition_count = recent_transitions.count(reverse_transition)
+
+        # Farming detected if we've done this transition + reverse multiple times
+        total_oscillations = same_transition_count + reverse_transition_count
+
+        # Also check if we're only moving between 2 maps in recent history
+        unique_maps_in_transitions = set()
+        for t in recent_transitions:
+            unique_maps_in_transitions.add(t[0])
+            unique_maps_in_transitions.add(t[1])
+
+        # Farming patterns:
+        # 1. High oscillation between same two maps
+        # 2. Only been on 2 maps recently with multiple transitions
+        is_high_oscillation = total_oscillations >= 3
+        is_limited_exploration = len(unique_maps_in_transitions) <= 2 and len(recent_transitions) >= 4
+
+        return is_high_oscillation or is_limited_exploration
+
+    def _calculate_farming_penalty(self, transition: Tuple[int, int]) -> float:
+        """Calculate escalating penalty for farming behavior."""
+        transition_key = f"{transition[0]}_{transition[1]}"
+
+        # Track how many times we've penalized this specific transition
+        if transition_key not in self.map_transition_cooldown:
+            self.map_transition_cooldown[transition_key] = 0
+
+        self.map_transition_cooldown[transition_key] += 1
+        penalty_count = self.map_transition_cooldown[transition_key]
+
+        # Much smaller escalating penalty: -0.1, -0.15, -0.2, etc., capped at -0.5
+        base_penalty = -0.1
+        escalation = penalty_count * 0.05  # Smaller escalation
+        penalty = base_penalty - escalation
+        penalty = max(penalty, -0.5)  # Cap at -0.5
+
+        return penalty
 
 
 class MovementRewardComponent(RewardComponent):
@@ -176,7 +247,7 @@ class MovementRewardComponent(RewardComponent):
             if 1 <= coord_diff <= 3:
                 rewards['movement'] = 0.01
                 total_reward += 0.01
-                
+
         return total_reward, rewards
 
 
