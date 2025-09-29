@@ -36,11 +36,12 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 
 ### Training Modes
 1. **LLM-only training** - Uses Ollama models for decision making
-2. **Hybrid LLM-RL training** - Combines LLM guidance with DQN optimization
-3. **Multi-agent training** - Specialist agents coordinated by event system
-4. **Plugin-based training** - Modular components for different strategies
-5. **Curriculum learning** - Progressive difficulty training with save state library integration
-6. **Tournament mode** - Competitive AI configuration battles with automated scheduling
+2. **Advanced Hybrid LLM-RL training** - Combines strategic LLM reasoning with tactical RL optimization using temporal memory
+3. **Basic Hybrid training** - Simple DQN + LLM combination with basic coordination
+4. **Multi-agent training** - Specialist agents coordinated by event system
+5. **Plugin-based training** - Modular components for different strategies
+6. **Curriculum learning** - Progressive difficulty training with save state library integration
+7. **Tournament mode** - Competitive AI configuration battles with automated scheduling
 
 ## Common Commands
 
@@ -51,6 +52,9 @@ python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.s
 
 # With LLM integration (recommended)
 python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 500 --llm-model smollm2:1.7b --llm-interval 10 --enable-web
+
+# Advanced Hybrid LLM-RL training (combines strategic LLM with tactical RL)
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --enable-hybrid-llm-rl --max-episodes 50 --llm-weight 0.7 --rl-weight 0.3 --enable-web
 
 # Hybrid training examples
 python3 examples/run_hybrid_training.py
@@ -182,6 +186,30 @@ ollama pull smollm2:1.7b
 
 ### Advanced AI Systems
 
+#### **Hybrid LLM-RL Training System** (`training/hybrid_llm_rl_trainer.py`, `agents/hybrid_llm_rl_agent.py`)
+- **Advanced Decision Engine**: Intelligently combines LLM strategic reasoning with RL tactical optimization
+- **Temporal Memory Integration**: Bridges decisions across time scales using `TemporalMemoryBuffer`
+- **Curriculum Learning Integration**: Progressive skill development with save state library
+- **Adaptive Weight Adjustment**: Dynamic balancing of LLM vs RL influence based on performance
+- **Multiple Decision Modes**: Strategic LLM, Tactical RL, Hybrid Balanced, Exploration, Curriculum-Guided
+- **Novelty Detection**: Uses state similarity to trigger appropriate decision modes
+- **Performance Tracking**: Comprehensive metrics for LLM success rates, RL optimization, mode switches
+
+**Usage**:
+```bash
+# Basic hybrid training
+python3 main.py roms/pokemon_crystal.gbc --enable-hybrid-llm-rl --max-episodes 100
+
+# Advanced configuration with curriculum learning
+python3 main.py roms/pokemon_crystal.gbc --enable-hybrid-llm-rl --enable-curriculum \
+  --llm-weight 0.8 --rl-weight 0.2 --exploration-rate 0.15 --max-episodes 200 \
+  --temporal-buffer-size 150000 --enable-web --web-port 8080
+
+# Standalone advanced trainer
+python3 examples/run_hybrid_llm_rl_training.py roms/pokemon_crystal.gbc \
+  --max-episodes 50 --enable-web --curriculum-config custom_curriculum.json
+```
+
 #### **Game Intelligence Module** (`core/game_intelligence.py`)
 - **BattleIntelligence**: Advanced combat analysis with type effectiveness, move evaluation
 - **LocationIntelligence**: Map understanding, navigation optimization, area classification
@@ -207,10 +235,19 @@ ollama pull smollm2:1.7b
 - Memory mapping system in `core/memory_map.py` provides derived calculations
 
 ### Web Monitoring & REST API
-- Integrated web dashboard at http://localhost:8080 (or custom port with --web-port)
+- **Integrated web dashboards** at http://localhost:8080 (or custom port with --web-port):
+  - `/dashboard` - Original unified training dashboard
+  - `/hybrid` - **NEW: Modern hybrid LLM-RL monitoring dashboard**
+  - `/advanced` - Advanced analytics & debugging dashboard
 - **Real-time live game screen streaming** at 12fps capture, 30fps frontend display
-- LLM decision tracking with reasoning and confidence scores
-- Performance metrics and reward breakdown
+- **Hybrid Dashboard Features**:
+  - **Information-dense design** - Maximum screen space utilization
+  - **Real-time LLM vs RL decision tracking** with live decision stream
+  - **Advanced metrics**: Success rates, mode distribution, temporal memory stats
+  - **Live performance charts** - Reward trends, confidence tracking, distribution analysis
+  - **Curriculum learning progress** with stage indicators
+  - **System diagnostics** - Response times, memory usage, GPU utilization
+  - **WebSocket-powered live updates** with 60fps dashboard refresh
 - Located in `web_dashboard/` with unified server architecture
 - **REST API**: Complete programmatic interface at `/api/v1/` with endpoints for:
   - Training session management (`/training/sessions`)

@@ -46,6 +46,8 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
             # Serve dashboard HTML
             if path == '/' or path == '/dashboard':
                 self._serve_dashboard()
+            elif path == '/hybrid' or path == '/hybrid-dashboard':
+                self._serve_hybrid_dashboard()
             elif path == '/advanced' or path == '/advanced-dashboard':
                 self._serve_advanced_dashboard()
 
@@ -160,6 +162,25 @@ class UnifiedHttpHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Dashboard serve error: {e}")
             self.send_error(500, f"Failed to serve dashboard: {str(e)}")
+
+    def _serve_hybrid_dashboard(self):
+        """Serve the hybrid LLM-RL training dashboard HTML."""
+        try:
+            dashboard_path = "/mnt/data/src/pokemon_crystal_rl/web_dashboard/static/hybrid_dashboard.html"
+            with open(dashboard_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self._set_cors_headers()
+            self.end_headers()
+            self.wfile.write(content.encode('utf-8'))
+
+        except FileNotFoundError:
+            self.send_error(404, "Hybrid dashboard template not found")
+        except Exception as e:
+            logger.error(f"Hybrid dashboard serve error: {e}")
+            self.send_error(500, f"Failed to serve hybrid dashboard: {str(e)}")
 
     def _serve_advanced_dashboard(self):
         """Serve the advanced analytics & debugging dashboard HTML."""
@@ -888,7 +909,7 @@ class UnifiedWebServer:
     Combines HTTP API endpoints with WebSocket screen streaming.
     """
 
-    def __init__(self, trainer=None, experiment_manager=None, automation_api=None, host='localhost', http_port=8080, ws_port=8081):
+    def __init__(self, trainer=None, experiment_manager=None, automation_api=None, websocket_handler=None, host='localhost', http_port=8080, ws_port=8081):
         """Initialize the unified web server."""
         self.trainer = trainer
         self.host = host
@@ -920,8 +941,13 @@ class UnifiedWebServer:
         from .api.advanced_endpoints import AdvancedAPIEndpoints
         self.advanced_api = AdvancedAPIEndpoints(trainer)
 
-        # Initialize WebSocket handler with experiment manager
-        self.websocket_handler = WebSocketHandler(trainer, experiment_manager)
+        # Use provided WebSocket handler or create a new one
+        if websocket_handler:
+            self.websocket_handler = websocket_handler
+            logger.info("🔗 Using provided WebSocket handler for unified server")
+        else:
+            self.websocket_handler = WebSocketHandler(trainer, experiment_manager)
+            logger.info("🔗 Created new WebSocket handler for unified server")
 
         # Server instances
         self.http_server = None
@@ -1029,12 +1055,20 @@ class UnifiedWebServer:
                 )
                 logger.info(f"WebSocket server listening on {self.host}:{self.ws_port}")
 
-                # Keep server running
-                await self.websocket_server.wait_closed()
+                # Keep server running indefinitely
+                try:
+                    await self.websocket_server.wait_closed()
+                except asyncio.CancelledError:
+                    logger.info("WebSocket server cancelled")
+                except Exception as e:
+                    logger.error(f"WebSocket server error: {e}")
+                    # Keep running even if there's an error
+                    while True:
+                        await asyncio.sleep(1)
 
             loop.run_until_complete(websocket_main())
 
-        thread = threading.Thread(target=run_websocket_server, daemon=True)
+        thread = threading.Thread(target=run_websocket_server, daemon=False)
         thread.start()
         self.threads.append(thread)
 

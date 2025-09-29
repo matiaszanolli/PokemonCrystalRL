@@ -343,21 +343,95 @@ class TestTemporalMemoryIntegration:
 
     def test_temporal_state_creation(self):
         """Test temporal state creation from game state."""
-        # This would test the temporal memory integration
-        # with the hybrid agent decision making
-        pass
+        from agents.hybrid_llm_rl_agent import HybridLLMRLAgent
+
+        agent = HybridLLMRLAgent(
+            llm_agent=Mock(),
+            rl_agent=Mock(),
+            temporal_memory=Mock()
+        )
+
+        game_state = {
+            'player_x': 10,
+            'player_y': 20,
+            'player_hp': 50,
+            'player_max_hp': 100,
+            'player_level': 5,
+            'badges': 1,
+            'party': [{'name': 'Cyndaquil'}],
+            'money': 500,
+            'screen_state': 'overworld',
+            'map_id': 15
+        }
+
+        temporal_state = agent._create_temporal_state(game_state)
+
+        assert temporal_state.position == (10, 20)
+        assert temporal_state.hp_ratio == 0.5
+        assert temporal_state.level == 5
+        assert temporal_state.badges == 1
+        assert temporal_state.party_size == 1
+        assert temporal_state.screen_state == 'overworld'
 
     def test_experience_storage(self):
         """Test experience storage in temporal memory."""
-        # Test that experiences are properly stored
-        # with LLM reasoning and RL features
-        pass
+        # Create a mock temporal memory that tracks stored experiences
+        temporal_memory = Mock()
+        experiences = []
+        temporal_memory.add_experience.side_effect = lambda exp: experiences.append(exp)
+
+        agent = HybridLLMRLAgent(
+            llm_agent=Mock(),
+            rl_agent=Mock(),
+            temporal_memory=temporal_memory
+        )
+
+        game_state = {'player_hp': 100, 'screen_state': 'overworld'}
+        action_space = [0, 1, 2, 3, 4, 5, 6, 7]
+
+        # Make a decision - should store experience
+        action, decision_info = agent.decide_action(game_state, action_space)
+
+        # Verify experience was stored
+        temporal_memory.add_experience.assert_called_once()
+        assert len(experiences) == 1
+
+        # Verify experience has proper structure
+        exp = experiences[0]
+        assert hasattr(exp, 'state')
+        assert hasattr(exp, 'action')
+        assert hasattr(exp, 'decision_source')
 
     def test_similarity_search(self):
         """Test state similarity search in temporal memory."""
-        # Test that similar states can be found
-        # for novelty calculation
-        pass
+        # Create a mock temporal memory with similarity search
+        temporal_memory = Mock()
+        temporal_memory.get_similar_states.return_value = [
+            (Mock(), 0.8),  # High similarity
+            (Mock(), 0.6),  # Medium similarity
+            (Mock(), 0.3)   # Low similarity
+        ]
+
+        agent = HybridLLMRLAgent(
+            llm_agent=Mock(),
+            rl_agent=Mock(),
+            temporal_memory=temporal_memory
+        )
+
+        # Create a test temporal state
+        game_state = {'player_hp': 100}
+        temporal_state = agent._create_temporal_state(game_state)
+
+        # Test novelty calculation uses similarity search
+        novelty = agent._calculate_novelty_score(temporal_state)
+
+        # Verify similarity search was called
+        temporal_memory.get_similar_states.assert_called_with(temporal_state, top_k=5)
+
+        # Novelty should be 1 - average_similarity
+        # Average of [0.8, 0.6, 0.3] = 0.567, so novelty ≈ 0.433
+        assert 0.0 <= novelty <= 1.0
+        assert novelty < 0.6  # Should be less than 0.6 given the similarities
 
 
 if __name__ == "__main__":

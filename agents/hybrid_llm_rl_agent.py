@@ -171,7 +171,17 @@ class HybridLLMRLAgent:
                 llm_reasoning=context.get('llm_reasoning') if context else None,
                 llm_confidence=confidence if decision_mode == DecisionMode.LLM_STRATEGIC else None
             )
-            self.temporal_memory.add_experience(experience)
+            # Record experience in temporal memory using the correct method
+            self.temporal_memory.record_temporal_experience(
+                game_state=decision_context.game_state,
+                screen_analysis={'state': temporal_state.screen_state},
+                action=action,
+                reward=0.0,  # Will be updated later with actual reward
+                decision_source=decision_source_map.get(decision_mode, DecisionSource.HYBRID),
+                context=context,
+                llm_reasoning=context.get('llm_reasoning') if context else None,
+                llm_confidence=confidence if decision_mode == DecisionMode.LLM_STRATEGIC else None
+            )
 
         decision_info = {
             'mode': decision_mode.value,
@@ -372,13 +382,20 @@ class HybridLLMRLAgent:
         try:
             # Use game intelligence for enhanced context
             if self.game_intelligence:
-                enhanced_context = self.game_intelligence.analyze_state(
-                    context.game_state
+                enhanced_context = self.game_intelligence.analyze_game_context(
+                    context.game_state,
+                    {'state': context.temporal_state.screen_state}
                 )
             else:
                 enhanced_context = context.game_state
 
-            action = self.llm_agent.get_action(enhanced_context)
+            # Convert enhanced context to dict for LLM agent
+            if hasattr(enhanced_context, '__dict__'):
+                context_dict = enhanced_context.__dict__
+            else:
+                context_dict = enhanced_context
+
+            action = self.llm_agent.get_action(context_dict)
 
             # Ensure action is in action space
             if action not in action_space:
@@ -404,17 +421,36 @@ class HybridLLMRLAgent:
             return random.choice(action_space), 0.1
 
         try:
-            state = context.temporal_state.feature_vector
-            action = self.rl_agent.act(state)
+            # Convert temporal state to game state format for DQN agent
+            game_state = {
+                'player_x': context.temporal_state.position[0],
+                'player_y': context.temporal_state.position[1],
+                'player_hp': int(context.temporal_state.hp_ratio * 100),
+                'player_level': context.temporal_state.level,
+                'badges': context.temporal_state.badges,
+                'money': context.temporal_state.money,
+                'map_id': context.temporal_state.map_id,
+                'party': [{'level': context.temporal_state.level}] * context.temporal_state.party_size
+            }
+            screen_analysis = {'state': context.temporal_state.screen_state}
+
+            action_str, confidence_score = self.rl_agent.get_action(
+                game_state, screen_analysis, training=True
+            )
+
+            # Convert action string to integer
+            action_map = {
+                'none': 0, 'up': 1, 'down': 2, 'left': 3, 'right': 4,
+                'a': 5, 'b': 6, 'start': 7, 'select': 8
+            }
+            action = action_map.get(action_str.lower(), 0)
 
             # Ensure action is in action space
             if action not in action_space:
                 action = random.choice(action_space)
 
-            # RL confidence based on Q-value
-            q_values = self.rl_agent.get_q_values(state)
-            max_q = np.max(q_values) if len(q_values) > 0 else 0.5
-            confidence = min(0.9, max(0.1, (max_q + 1) / 2))  # Normalize Q-value
+            # RL confidence from the DQN agent confidence score
+            confidence = min(0.9, max(0.1, confidence_score))
 
             return action, confidence
 
@@ -460,10 +496,17 @@ class HybridLLMRLAgent:
 
         performance = {}
         for mode in ['llm_strategic', 'rl_tactical', 'hybrid_balanced']:
-            mode_decisions = [
-                (reward, confidence) for decision_mode, action, reward, confidence in recent
-                if decision_mode.value == mode
-            ]
+            mode_decisions = []
+            for entry in recent:
+                # Handle variable-length tuples (with or without reward)
+                if len(entry) >= 4:  # Has reward
+                    decision_mode, action, reward, confidence = entry[:4]
+                    if decision_mode.value == mode:
+                        mode_decisions.append((reward, confidence))
+                elif len(entry) == 3:  # No reward yet
+                    decision_mode, action, confidence = entry
+                    if decision_mode.value == mode:
+                        mode_decisions.append((0.0, confidence))  # Default reward
 
             if mode_decisions:
                 avg_reward = np.mean([reward for reward, _ in mode_decisions])
@@ -479,21 +522,25 @@ class HybridLLMRLAgent:
             return 0.5
 
         try:
-            # Get similar states from memory
-            similar_states = self.temporal_memory.get_similar_states(
-                temporal_state, top_k=5
-            )
+            # Use simple heuristic based on position and state
+            # More sophisticated similarity could be added later
+            position_str = f"{temporal_state.position[0]}_{temporal_state.position[1]}"
+            state_str = f"{temporal_state.map_id}_{temporal_state.screen_state}"
 
-            if not similar_states:
-                return 1.0  # Very novel if no similar states
+            # Check against recent experiences for novelty
+            if len(self.temporal_memory.experience_buffer) > 10:
+                recent_positions = set()
+                for exp in list(self.temporal_memory.experience_buffer)[-10:]:
+                    exp_pos = f"{exp.state.position[0]}_{exp.state.position[1]}"
+                    recent_positions.add(exp_pos)
 
-            # Calculate average similarity
-            similarities = [sim for _, sim in similar_states]
-            avg_similarity = np.mean(similarities)
+                # Novel if current position not in recent positions
+                if position_str not in recent_positions:
+                    return 0.8  # High novelty
+                else:
+                    return 0.2  # Low novelty
 
-            # Convert similarity to novelty (inverse)
-            novelty = 1.0 - avg_similarity
-            return max(0.0, min(1.0, novelty))
+            return 0.5  # Medium novelty for insufficient data
 
         except Exception as e:
             logger.warning(f"Novelty calculation failed: {e}")
@@ -555,27 +602,50 @@ class HybridLLMRLAgent:
         # Update RL agent if available
         if self.rl_agent and self.temporal_memory:
             try:
-                # Get current and next temporal states
-                recent_experiences = self.temporal_memory.get_recent_experiences(1)
-                if recent_experiences:
-                    experience = recent_experiences[0]
+                # Get most recent experience from buffer
+                if len(self.temporal_memory.experience_buffer) > 0:
+                    experience = self.temporal_memory.experience_buffer[-1]
                     current_state = experience.state.feature_vector
                     next_state_vector = self._extract_feature_vector(next_state)
 
-                    # Update RL agent
-                    done = reward < -10  # Terminal condition heuristic
-                    self.rl_agent.remember(current_state, action, reward, next_state_vector, done)
+                    # Store experience in RL agent
+                    game_state = {
+                        'player_x': experience.state.position[0],
+                        'player_y': experience.state.position[1],
+                        'player_hp': int(experience.state.hp_ratio * 100),
+                        'player_level': experience.state.level,
+                        'badges': experience.state.badges,
+                        'money': experience.state.money,
+                        'map_id': experience.state.map_id
+                    }
+                    screen_analysis = {'state': experience.state.screen_state}
 
-                    # Trigger learning if enough experiences
-                    if len(self.rl_agent.memory) > self.rl_agent.batch_size:
-                        self.rl_agent.replay()
+                    # Convert action int to string for DQN agent
+                    action_map = {
+                        0: 'none', 1: 'up', 2: 'down', 3: 'left', 4: 'right',
+                        5: 'a', 6: 'b', 7: 'start', 8: 'select'
+                    }
+                    action_str = action_map.get(action, 'none')
+
+                    # Create next screen analysis from next state
+                    next_screen_analysis = {'state': next_state.get('screen_state', 'unknown')}
+
+                    self.rl_agent.store_experience(
+                        game_state, screen_analysis, action_str, reward, next_state, next_screen_analysis, done=(reward < -10)
+                    )
+
+                    # Trigger training if enough experiences
+                    if hasattr(self.rl_agent, 'train_step'):
+                        self.rl_agent.train_step()
 
             except Exception as e:
                 logger.warning(f"RL update failed: {e}")
 
         # Update temporal memory with reward
-        if self.temporal_memory:
-            self.temporal_memory.update_last_reward(reward)
+        if self.temporal_memory and len(self.temporal_memory.experience_buffer) > 0:
+            # Update the last experience with the reward
+            last_experience = self.temporal_memory.experience_buffer[-1]
+            last_experience.reward = reward
 
         # Update success rates
         self._update_success_rates(reward)

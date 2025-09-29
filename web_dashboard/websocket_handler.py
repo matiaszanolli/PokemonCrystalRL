@@ -148,6 +148,134 @@ class WebSocketHandler:
         except Exception as e:
             logger.error(f"Error sending pong: {e}")
 
+    async def broadcast_hybrid_update(self, data):
+        """Broadcast hybrid training update to all connected clients."""
+        if not self.connected_clients:
+            return
+
+        message = {
+            'type': 'training_update',
+            'data': data,
+            'timestamp': time.time()
+        }
+
+        # Send to all connected clients
+        disconnected = []
+        for websocket in self.connected_clients:
+            try:
+                await websocket.send(json.dumps(message))
+            except websockets.exceptions.ConnectionClosed:
+                disconnected.append(websocket)
+            except Exception as e:
+                logger.error(f"Error broadcasting to client: {e}")
+                disconnected.append(websocket)
+
+        # Remove disconnected clients
+        for websocket in disconnected:
+            self.connected_clients.discard(websocket)
+
+    async def broadcast_decision(self, decision_data):
+        """Broadcast LLM/RL decision to all connected clients."""
+        if not self.connected_clients:
+            return
+
+        message = {
+            'type': 'decision_made',
+            'data': decision_data,
+            'timestamp': time.time()
+        }
+
+        disconnected = []
+        for websocket in self.connected_clients:
+            try:
+                await websocket.send(json.dumps(message))
+            except websockets.exceptions.ConnectionClosed:
+                disconnected.append(websocket)
+            except Exception as e:
+                logger.error(f"Error broadcasting decision: {e}")
+                disconnected.append(websocket)
+
+        for websocket in disconnected:
+            self.connected_clients.discard(websocket)
+
+    def broadcast_sync(self, data, message_type='training_update'):
+        """Thread-safe synchronous broadcast for training data."""
+        message = {
+            'type': message_type,
+            'data': data,
+            'timestamp': time.time()
+        }
+
+        # Debug logging to understand what's happening
+        logger.info(f"📢 broadcast_sync: {message_type}, clients={len(self.connected_clients)}")
+
+        if not self.connected_clients:
+            logger.info(f"📢 No clients connected, message will be skipped: {message_type}")
+            return
+
+        # Use thread-safe approach with asyncio
+        import asyncio
+        import threading
+
+        def send_to_clients():
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                async def broadcast():
+                    disconnected = []
+                    message_json = json.dumps(message)
+                    logger.debug(f"📤 Sending {message_type} to {len(self.connected_clients)} clients")
+
+                    for websocket in list(self.connected_clients):  # Create copy to avoid modification during iteration
+                        try:
+                            await websocket.send(message_json)
+                            logger.debug(f"✅ Sent {message_type} to client")
+                        except Exception as e:
+                            logger.debug(f"❌ Failed to send {message_type} to client: {e}")
+                            disconnected.append(websocket)
+
+                    # Clean up disconnected clients
+                    for websocket in disconnected:
+                        self.connected_clients.discard(websocket)
+
+                loop.run_until_complete(broadcast())
+                loop.close()
+            except Exception as e:
+                logger.warning(f"Sync broadcast error: {e}")
+
+        # Run in daemon thread to avoid blocking
+        thread = threading.Thread(target=send_to_clients, daemon=True)
+        thread.start()
+
+    async def broadcast_log_entry(self, level, message):
+        """Broadcast log entry to all connected clients."""
+        if not self.connected_clients:
+            return
+
+        log_message = {
+            'type': 'log_entry',
+            'data': {
+                'level': level,
+                'message': message,
+                'timestamp': time.time()
+            }
+        }
+
+        disconnected = []
+        for websocket in self.connected_clients:
+            try:
+                await websocket.send(json.dumps(log_message))
+            except websockets.exceptions.ConnectionClosed:
+                disconnected.append(websocket)
+            except Exception as e:
+                logger.error(f"Error broadcasting log: {e}")
+                disconnected.append(websocket)
+
+        for websocket in disconnected:
+            self.connected_clients.discard(websocket)
+
     def _get_current_screen(self) -> Optional[str]:
         """Get current game screen as base64 encoded image."""
         try:

@@ -313,7 +313,7 @@ class EnhancedPyBoyPokemonCrystalEnv(gym.Env):
         observation['action_history'] = np.array(action_history, dtype=np.int8)
         
         # 5. Game phase and criticality (use list index for discrete spaces)
-        from core.state.analyzer import GamePhase, SituationCriticality
+        from environments.state.analyzer import GamePhase, SituationCriticality
         observation['game_phase'] = list(GamePhase).index(game_analysis.phase)
         observation['criticality'] = list(SituationCriticality).index(game_analysis.criticality)
         

@@ -10,6 +10,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -19,6 +20,7 @@ from core.game_intelligence import GameIntelligence
 from core.experience_memory import ExperienceMemory
 from agents.dqn_agent import DQNAgent
 from agents.hybrid_agent import HybridAgent
+from training.hybrid_llm_rl_trainer import HybridLLMRLTrainer, TrainingConfig
 from core.strategic_context_builder import StrategicContextBuilder
 
 from agents.llm_agent import LLMAgent
@@ -90,6 +92,20 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--dqn-memory-size", type=int, default=50000)
     parser.add_argument("--dqn-training-freq", type=int, default=4)
     parser.add_argument("--dqn-save-freq", type=int, default=500)
+
+    # Advanced Hybrid LLM-RL Training options
+    parser.add_argument("--enable-hybrid-llm-rl", action="store_true",
+                       help="Enable advanced hybrid LLM-RL training with temporal memory")
+    parser.add_argument("--llm-weight", type=float, default=0.7,
+                       help="Weight for LLM decisions in hybrid mode (0.0-1.0)")
+    parser.add_argument("--rl-weight", type=float, default=0.3,
+                       help="Weight for RL decisions in hybrid mode (0.0-1.0)")
+    parser.add_argument("--exploration-rate", type=float, default=0.1,
+                       help="Exploration rate for hybrid agent")
+    parser.add_argument("--temporal-buffer-size", type=int, default=100000,
+                       help="Temporal memory buffer size")
+    parser.add_argument("--max-episodes", type=int, default=100,
+                       help="Maximum episodes for hybrid training")
     
     # Curriculum Learning options
     parser.add_argument("--enable-curriculum", action="store_true",
@@ -243,6 +259,134 @@ def run_curriculum_training(args):
         raise
 
 
+def run_hybrid_llm_rl_training(args):
+    """Run advanced hybrid LLM-RL training mode."""
+    from core.save_state_library import SaveStateLibrary
+
+    logger.info("🤖 Starting Advanced Hybrid LLM-RL Training")
+    logger.info(f"   LLM Weight: {args.llm_weight}, RL Weight: {args.rl_weight}")
+    logger.info(f"   Episodes: {args.max_episodes}, Actions per episode: {args.max_actions}")
+
+    try:
+        # Load save state library if curriculum is enabled
+        save_state_library = None
+        if args.enable_curriculum:
+            if not os.path.exists(args.library_path):
+                logger.warning(f"Save state library not found: {args.library_path}")
+                logger.info("   Creating empty library. Consider adding save states.")
+                os.makedirs(args.library_path, exist_ok=True)
+
+            save_state_library = SaveStateLibrary(args.library_path)
+            states = save_state_library.list_save_states()
+            logger.info(f"📁 Loaded save state library with {len(states)} states")
+
+        # Create training configuration
+        config = TrainingConfig(
+            max_episodes=args.max_episodes,
+            max_actions_per_episode=args.max_actions,
+            llm_weight=args.llm_weight,
+            rl_weight=args.rl_weight,
+            exploration_rate=args.exploration_rate,
+            enable_curriculum=args.enable_curriculum,
+            curriculum_config=args.curriculum_config,
+            rl_learning_rate=args.dqn_learning_rate,
+            rl_batch_size=args.dqn_batch_size,
+            rl_memory_size=args.dqn_memory_size,
+            temporal_buffer_size=args.temporal_buffer_size,
+            enable_web=args.enable_web,
+            web_port=args.web_port
+        )
+
+        # Initialize hybrid trainer
+        trainer = HybridLLMRLTrainer(
+            rom_path=args.rom_path,
+            config=config,
+            save_state_library=save_state_library
+        )
+
+        # Enable WebSocket integration if web monitoring is enabled
+        if args.enable_web:
+            try:
+                from web_dashboard.server import UnifiedWebServer
+                from web_dashboard.websocket_handler import WebSocketHandler
+
+                # Create WebSocket handler
+                websocket_handler = WebSocketHandler(trainer=trainer)
+                trainer.websocket_handler = websocket_handler
+
+                # Start web server with WebSocket support
+                web_server = UnifiedWebServer(
+                    trainer=trainer,
+                    websocket_handler=websocket_handler,
+                    host="localhost",
+                    http_port=args.web_port
+                )
+                web_server.start()
+
+                logger.info(f"🌐 Hybrid dashboard available at http://localhost:{args.web_port}/hybrid")
+                logger.info("   Real-time LLM-RL decision monitoring with live metrics")
+
+            except Exception as e:
+                logger.warning(f"Failed to start web monitoring: {e}")
+                logger.info("Training will continue without web dashboard")
+
+        logger.info("🚀 Hybrid trainer initialized successfully")
+
+        # Setup signal handlers for graceful shutdown
+        def signal_handler(signum, frame):
+            logger.info("🛑 Shutdown signal received")
+            trainer.stop_training()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        # Start training
+        training_thread = trainer.start_training()
+
+        # Monitor progress
+        while trainer.is_training:
+            try:
+                time.sleep(5)
+                summary = trainer.get_real_time_stats()
+
+                if summary.get('status') == 'active':
+                    episode = summary.get('current_episode', 0)
+                    reward = summary.get('latest_reward', 0)
+                    hybrid_metrics = summary.get('hybrid_metrics', {})
+
+                    mode_dist = hybrid_metrics.get('mode_distribution', {})
+                    logger.info(f"Episode {episode}: Reward={reward:.1f}, "
+                               f"LLM={mode_dist.get('llm', 0):.2f}, "
+                               f"RL={mode_dist.get('rl', 0):.2f}")
+
+            except KeyboardInterrupt:
+                logger.info("🛑 Stopping training...")
+                break
+            except Exception as e:
+                logger.warning(f"Monitoring error: {e}")
+
+        # Wait for completion
+        training_thread.join()
+
+        # Print final results
+        final_summary = trainer.get_training_summary()
+        logger.info("🏁 Hybrid Training Completed!")
+        logger.info(f"   Episodes: {final_summary['episodes_completed']}")
+        logger.info(f"   Total actions: {final_summary['total_actions']}")
+        logger.info(f"   Avg reward: {final_summary['performance']['avg_reward']:.2f}")
+
+        hybrid_summary = final_summary['hybrid_agent']
+        logger.info(f"   Mode distribution: {hybrid_summary['mode_distribution']}")
+        logger.info(f"   Success rates: {hybrid_summary['success_rates']}")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"❌ Hybrid LLM-RL training failed: {e}")
+        raise
+
+
 def main():
     """Main training entry point."""
     # Parse arguments
@@ -250,6 +394,10 @@ def main():
 
     # Setup logging
     setup_logging(args.log_dir)
+
+    # Check for advanced hybrid LLM-RL training mode
+    if args.enable_hybrid_llm_rl:
+        return run_hybrid_llm_rl_training(args)
 
     # Check for curriculum learning mode
     if args.enable_curriculum:

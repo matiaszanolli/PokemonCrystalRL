@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hybrid LLM-RL Training Monitor</title>
+    <link rel="stylesheet" href="/static/hybrid_styles.css">
+</head>
+<body>
+    <!-- Top Status Bar -->
+    <div class="status-bar">
+        <div class="status-left">
+            <span class="status-badge" id="training-status">⏸ IDLE</span>
+            <span class="status-item">Episode <span id="current-episode">0</span>/<span id="max-episodes">100</span></span>
+            <span class="status-item">Action <span id="current-action">0</span></span>
+        </div>
+        <div class="status-center">
+            <div class="mode-indicator" id="decision-mode">🤖 HYBRID</div>
+        </div>
+        <div class="status-right">
+            <span class="status-item">⚡ <span id="actions-per-sec">0.0</span>/s</span>
+            <span class="status-item">🔗 <span id="connection-status">OFFLINE</span></span>
+        </div>
+    </div>
+
+    <!-- Main Grid Layout -->
+    <div class="dashboard-grid">
+        <!-- Left Column: Game State & Decisions -->
+        <div class="left-column">
+            <!-- Game Screen -->
+            <div class="panel game-panel">
+                <div class="panel-header">
+                    <h3>Game State</h3>
+                    <div class="screen-controls">
+                        <button class="btn-icon" id="fullscreen-btn">⛶</button>
+                    </div>
+                </div>
+                <div class="game-container">
+                    <img id="game-screen" class="game-screen" alt="Game Screen">
+                    <div class="game-overlay">
+                        <div class="overlay-stat">
+                            <span class="label">Position:</span>
+                            <span id="player-position">0,0</span>
+                        </div>
+                        <div class="overlay-stat">
+                            <span class="label">Map:</span>
+                            <span id="current-map">0</span>
+                        </div>
+                        <div class="overlay-stat">
+                            <span class="label">HP:</span>
+                            <span id="player-hp">100/100</span>
+                        </div>
+                        <div class="overlay-stat">
+                            <span class="label">Badges:</span>
+                            <span id="player-badges">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Decision Flow -->
+            <div class="panel decision-panel">
+                <div class="panel-header">
+                    <h3>Decision Stream</h3>
+                    <div class="decision-legend">
+                        <span class="legend-item llm">🧠 LLM</span>
+                        <span class="legend-item rl">⚡ RL</span>
+                        <span class="legend-item hybrid">🔄 Hybrid</span>
+                        <span class="legend-item explore">🎯 Explore</span>
+                    </div>
+                </div>
+                <div class="decision-stream" id="decision-stream">
+                    <div class="no-data">Waiting for decisions...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Column: Metrics & Performance -->
+        <div class="center-column">
+            <!-- Key Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card reward">
+                    <div class="metric-icon">💰</div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="total-reward">0.0</div>
+                        <div class="metric-label">Total Reward</div>
+                        <div class="metric-change" id="reward-change">+0.0</div>
+                    </div>
+                </div>
+
+                <div class="metric-card llm-performance">
+                    <div class="metric-icon">🧠</div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="llm-success-rate">0%</div>
+                        <div class="metric-label">LLM Success Rate</div>
+                        <div class="metric-ratio" id="llm-decisions-ratio">0/0</div>
+                    </div>
+                </div>
+
+                <div class="metric-card rl-performance">
+                    <div class="metric-icon">⚡</div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="rl-success-rate">0%</div>
+                        <div class="metric-label">RL Success Rate</div>
+                        <div class="metric-ratio" id="rl-decisions-ratio">0/0</div>
+                    </div>
+                </div>
+
+                <div class="metric-card exploration">
+                    <div class="metric-icon">🎯</div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="exploration-rate">0%</div>
+                        <div class="metric-label">Exploration Rate</div>
+                        <div class="metric-ratio" id="exploration-ratio">0/0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Decision Mode Distribution -->
+            <div class="panel distribution-panel">
+                <div class="panel-header">
+                    <h3>Decision Distribution</h3>
+                    <div class="time-selector">
+                        <button class="time-btn active" data-period="1m">1m</button>
+                        <button class="time-btn" data-period="5m">5m</button>
+                        <button class="time-btn" data-period="episode">Episode</button>
+                    </div>
+                </div>
+                <div class="distribution-viz">
+                    <canvas id="distribution-chart" width="300" height="120"></canvas>
+                    <div class="distribution-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">LLM Weight:</span>
+                            <span class="stat-value" id="current-llm-weight">0.7</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">RL Weight:</span>
+                            <span class="stat-value" id="current-rl-weight">0.3</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Mode Switches:</span>
+                            <span class="stat-value" id="mode-switches">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Chart -->
+            <div class="panel chart-panel">
+                <div class="panel-header">
+                    <h3>Performance Trends</h3>
+                    <div class="chart-controls">
+                        <button class="chart-btn active" data-metric="reward">Reward</button>
+                        <button class="chart-btn" data-metric="success">Success Rate</button>
+                        <button class="chart-btn" data-metric="confidence">Confidence</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="performance-chart" width="400" height="150"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Advanced Analytics -->
+        <div class="right-column">
+            <!-- Temporal Memory Stats -->
+            <div class="panel memory-panel">
+                <div class="panel-header">
+                    <h3>Temporal Memory</h3>
+                    <div class="memory-status" id="memory-status">ACTIVE</div>
+                </div>
+                <div class="memory-stats">
+                    <div class="memory-stat">
+                        <div class="stat-number" id="buffer-size">0</div>
+                        <div class="stat-label">Buffer Size</div>
+                    </div>
+                    <div class="memory-stat">
+                        <div class="stat-number" id="episodes-stored">0</div>
+                        <div class="stat-label">Episodes Stored</div>
+                    </div>
+                    <div class="memory-stat">
+                        <div class="stat-number" id="avg-novelty">0.5</div>
+                        <div class="stat-label">Avg Novelty</div>
+                    </div>
+                </div>
+                <div class="memory-viz">
+                    <div class="memory-bar">
+                        <div class="memory-fill" id="memory-usage" style="width: 0%"></div>
+                    </div>
+                    <div class="memory-label">Memory Usage</div>
+                </div>
+            </div>
+
+            <!-- Curriculum Progress -->
+            <div class="panel curriculum-panel">
+                <div class="panel-header">
+                    <h3>Curriculum Learning</h3>
+                    <div class="curriculum-stage" id="curriculum-stage">TUTORIAL</div>
+                </div>
+                <div class="curriculum-progress">
+                    <div class="stage-indicator">
+                        <div class="stages">
+                            <div class="stage active" data-stage="tutorial">Tutorial</div>
+                            <div class="stage" data-stage="basic">Basic</div>
+                            <div class="stage" data-stage="intermediate">Intermediate</div>
+                            <div class="stage" data-stage="advanced">Advanced</div>
+                            <div class="stage" data-stage="expert">Expert</div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="curriculum-progress" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="curriculum-stats">
+                        <div class="curriculum-stat">
+                            <span class="label">Episodes:</span>
+                            <span id="curriculum-episodes">0/10</span>
+                        </div>
+                        <div class="curriculum-stat">
+                            <span class="label">Success Rate:</span>
+                            <span id="curriculum-success">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Diagnostics -->
+            <div class="panel diagnostics-panel">
+                <div class="panel-header">
+                    <h3>System Diagnostics</h3>
+                </div>
+                <div class="diagnostics-grid">
+                    <div class="diagnostic-item">
+                        <div class="diagnostic-label">LLM Response Time</div>
+                        <div class="diagnostic-value" id="llm-response-time">0ms</div>
+                        <div class="diagnostic-status ok" id="llm-status">OK</div>
+                    </div>
+                    <div class="diagnostic-item">
+                        <div class="diagnostic-label">RL Inference Time</div>
+                        <div class="diagnostic-value" id="rl-inference-time">0ms</div>
+                        <div class="diagnostic-status ok" id="rl-status">OK</div>
+                    </div>
+                    <div class="diagnostic-item">
+                        <div class="diagnostic-label">Memory Usage</div>
+                        <div class="diagnostic-value" id="memory-usage-value">0MB</div>
+                        <div class="diagnostic-status ok" id="memory-status-indicator">OK</div>
+                    </div>
+                    <div class="diagnostic-item">
+                        <div class="diagnostic-label">GPU Utilization</div>
+                        <div class="diagnostic-value" id="gpu-usage">0%</div>
+                        <div class="diagnostic-status ok" id="gpu-status">OK</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Log Stream -->
+            <div class="panel log-panel">
+                <div class="panel-header">
+                    <h3>Live Logs</h3>
+                    <div class="log-controls">
+                        <button class="btn-icon" id="clear-logs">🗑</button>
+                        <button class="btn-icon" id="pause-logs">⏸</button>
+                    </div>
+                </div>
+                <div class="log-stream" id="log-stream">
+                    <div class="log-entry info">
+                        <span class="log-timestamp">00:00:00</span>
+                        <span class="log-message">System initialized</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Modal -->
+    <div id="fullscreen-modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="modal-close" id="close-fullscreen">×</button>
+            <img id="fullscreen-image" class="fullscreen-image">
+        </div>
+    </div>
+
+    <script src="/static/hybrid_app.js"></script>
+</body>
+</html>

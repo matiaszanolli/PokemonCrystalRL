@@ -12,6 +12,7 @@ This module provides a comprehensive training system that integrates:
 import logging
 import time
 import threading
+import asyncio
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass
 
@@ -80,16 +81,19 @@ class HybridLLMRLTrainer:
         rom_path: str,
         config: TrainingConfig,
         save_state_library: Optional[SaveStateLibrary] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        websocket_handler = None
     ):
         self.rom_path = rom_path
         self.config = config
         self.save_state_library = save_state_library
         self.progress_callback = progress_callback
+        self.websocket_handler = websocket_handler
 
         # Training state
         self.current_episode = 0
         self.total_actions = 0
+        self.current_action = 0
         self.is_training = False
         self.training_thread: Optional[threading.Thread] = None
 
@@ -272,8 +276,8 @@ class HybridLLMRLTrainer:
 
             action_start_time = time.time()
 
-            # Get current game state
-            game_state = self.env.get_game_state()
+            # Get current game state (read directly from environment's internal method)
+            game_state = self.env._read_game_state()
 
             # Create action context
             action_context = {
@@ -289,12 +293,19 @@ class HybridLLMRLTrainer:
                 game_state, action_space, action_context
             )
 
-            # Execute action in environment
-            next_state, env_reward, done, info = self.env.step(action)
+            # Execute action in environment (handle gymnasium API)
+            step_result = self.env.step(action)
+            if len(step_result) == 5:
+                # Gymnasium API: (obs, reward, terminated, truncated, info)
+                next_state, env_reward, terminated, truncated, info = step_result
+                done = terminated or truncated
+            else:
+                # Legacy API: (obs, reward, done, info)
+                next_state, env_reward, done, info = step_result
 
             # Calculate comprehensive reward
-            reward = self.reward_calculator.calculate_reward(
-                game_state, next_state, action, done
+            reward, reward_breakdown = self.reward_calculator.calculate_reward(
+                next_state, game_state  # current_state, previous_state
             )
 
             # Update hybrid agent with reward
@@ -306,6 +317,11 @@ class HybridLLMRLTrainer:
             episode_modes[decision_info['mode']] += 1
             decision_times.append(decision_info['decision_time'])
             self.total_actions += 1
+            self.current_action = action_num
+
+            # Broadcast real-time updates
+            self._broadcast_training_update(action, reward, decision_info, next_state)
+            self._broadcast_decision_update(action, decision_info, reward)
 
             # Log detailed information periodically
             if action_num % self.config.log_interval == 0:
@@ -500,3 +516,136 @@ class HybridLLMRLTrainer:
                 'action_progress': self.total_actions / (self.config.max_episodes * self.config.max_actions_per_episode)
             }
         }
+
+    def _broadcast_training_update(self, action: int, reward: float, decision_info: Dict, game_state: Dict):
+        """Broadcast real-time training update via WebSocket."""
+        logger.info(f"🔗 _broadcast_training_update called: websocket_handler={self.websocket_handler is not None}")
+        if not self.websocket_handler:
+            logger.warning("No websocket handler available for broadcasting")
+            return
+
+        try:
+            # Calculate actions per second
+            actions_per_second = 0.0
+            if hasattr(self, '_last_action_time'):
+                current_time = time.time()
+                time_diff = current_time - self._last_action_time
+                if time_diff > 0:
+                    actions_per_second = 1.0 / time_diff
+            self._last_action_time = time.time()
+
+            # Get hybrid agent metrics
+            hybrid_summary = self.hybrid_agent.get_decision_summary()
+
+            # Prepare update data
+            update_data = {
+                'episode': self.current_episode,
+                'max_episodes': self.config.max_episodes,
+                'action': self.current_action,
+                'total_actions': self.total_actions,
+                'actions_per_second': actions_per_second,
+                'is_training': self.is_training,
+                'current_mode': decision_info.get('mode', 'hybrid'),
+                'latest_reward': reward,
+                'metrics': {
+                    'total_reward': sum(self.episode_rewards) if self.episode_rewards else 0,
+                    'reward_change': reward,
+                    'llm_success_rate': hybrid_summary.get('success_rates', {}).get('llm', 0),
+                    'rl_success_rate': hybrid_summary.get('success_rates', {}).get('rl', 0),
+                    'exploration_rate': hybrid_summary.get('mode_distribution', {}).get('exploration', 0),
+                    'llm_decisions': hybrid_summary.get('mode_distribution', {}).get('llm', 0) * hybrid_summary.get('total_decisions', 1),
+                    'rl_decisions': hybrid_summary.get('mode_distribution', {}).get('rl', 0) * hybrid_summary.get('total_decisions', 1),
+                    'hybrid_decisions': hybrid_summary.get('mode_distribution', {}).get('hybrid', 0) * hybrid_summary.get('total_decisions', 1),
+                    'exploration_decisions': hybrid_summary.get('mode_distribution', {}).get('exploration', 0) * hybrid_summary.get('total_decisions', 1),
+                    'total_decisions': hybrid_summary.get('total_decisions', 0),
+                    'llm_weight': hybrid_summary.get('current_weights', {}).get('llm_weight', 0.7),
+                    'rl_weight': hybrid_summary.get('current_weights', {}).get('rl_weight', 0.3),
+                    'mode_switches': hybrid_summary.get('mode_switches', 0),
+                    'avg_confidence': hybrid_summary.get('avg_confidences', {}).get(decision_info.get('mode', 'hybrid'), 0)
+                },
+                'temporal_memory': {
+                    'buffer_size': len(self.temporal_memory.experience_buffer) if self.temporal_memory else 0,
+                    'episodes_stored': len(self.temporal_memory.episodes) if self.temporal_memory else 0,
+                    'max_buffer_size': self.config.temporal_buffer_size,
+                    'avg_novelty': 0.5  # Placeholder - could be calculated from recent experiences
+                },
+                'curriculum': {
+                    'current_stage': self.curriculum_manager.get_current_stage().value if self.curriculum_manager else 'tutorial',
+                    'progress': min(1.0, self.current_episode / 10),  # Simplified progress calculation
+                    'episodes': self.current_episode,
+                    'max_episodes': 10,  # Simplified - could get from curriculum config
+                    'success_rate': 0.0  # Placeholder - could calculate from recent episodes
+                }
+            }
+
+            # Use simple sync broadcast to avoid asyncio threading issues
+            if hasattr(self.websocket_handler, 'broadcast_sync'):
+                logger.info(f"📡 Broadcasting training update: episode={update_data.get('episode', 'unknown')}")
+                self.websocket_handler.broadcast_sync(update_data)
+            elif hasattr(self.websocket_handler, 'broadcast_hybrid_update'):
+                # Fallback: use thread-safe async call
+                import threading
+                def async_broadcast():
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        loop.run_until_complete(self.websocket_handler.broadcast_hybrid_update(update_data))
+                        loop.close()
+                    except Exception as e:
+                        logger.warning(f"Async broadcast error: {e}")
+
+                # Run in separate thread to avoid blocking
+                thread = threading.Thread(target=async_broadcast, daemon=True)
+                thread.start()
+
+        except Exception as e:
+            logger.warning(f"Failed to broadcast training update: {e}")
+
+    def _broadcast_decision_update(self, action: int, decision_info: Dict, reward: float):
+        """Broadcast LLM/RL decision update via WebSocket."""
+        if not self.websocket_handler:
+            return
+
+        try:
+            # Map action to human-readable format
+            action_map = {0: 'UP', 1: 'DOWN', 2: 'LEFT', 3: 'RIGHT', 4: 'A', 5: 'B', 6: 'START', 7: 'SELECT'}
+            action_name = action_map.get(action, f'Action {action}')
+
+            decision_data = {
+                'mode': decision_info.get('mode', 'hybrid'),
+                'action': action,
+                'action_name': action_name,
+                'confidence': decision_info.get('confidence', 0.0),
+                'reasoning': f"Mode: {decision_info.get('mode', 'hybrid')}, Confidence: {decision_info.get('confidence', 0.0):.2f}",
+                'reward': reward,
+                'timestamp': time.time()
+            }
+
+            # Async broadcast
+            if hasattr(self.websocket_handler, 'broadcast_decision'):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self.websocket_handler.broadcast_decision(decision_data))
+                loop.close()
+
+        except Exception as e:
+            logger.warning(f"Failed to broadcast decision update: {e}")
+
+    def _broadcast_episode_completed(self, episode: int, reward: float, actions: int, modes: Dict):
+        """Broadcast episode completion via WebSocket."""
+        if not self.websocket_handler:
+            return
+
+        try:
+            # Log message
+            message = f"Episode {episode} completed: Reward={reward:.1f}, Actions={actions}, Modes={modes}"
+
+            # Async broadcast
+            if hasattr(self.websocket_handler, 'broadcast_log_entry'):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self.websocket_handler.broadcast_log_entry('success', message))
+                loop.close()
+
+        except Exception as e:
+            logger.warning(f"Failed to broadcast episode completion: {e}")
