@@ -28,6 +28,7 @@ This is a Pokemon Crystal reinforcement learning platform that combines LLM-base
 
 ### ⚠️ **IMPORTANT ARCHITECTURAL CHANGES** (September 2024)
 - **`trainer/` directory REMOVED** - Legacy compatibility layer eliminated for cleaner architecture
+  - **Note**: `tests/trainer/` still exists for testing training components
 - **Descriptive file naming** - Eliminated confusing duplicates:
   - `core/reward_calculator.py` → `core/game_state_extractor.py` (game state extraction utility)
   - `training/components/reward_calculator.py` → `training/components/training_reward_tracker.py` (training pipeline tracker)
@@ -92,24 +93,21 @@ python3 examples/tournament_demo.py
 # Run all tests
 python -m pytest tests/ -v
 
+# Run with coverage
+python -m pytest tests/ --cov=. --cov-report=html
+
 # Run specific test categories
 python -m pytest tests/core/ tests/trainer/ tests/monitoring/ -v
 python -m pytest tests/integration/ -v
 
-# Run tests with markers for current systems
+# Run tests with markers
 python -m pytest -m "unit" -v
 python -m pytest -m "integration" -v
 python -m pytest -m "web_monitoring" -v
 
-# Test specific systems
+# Run specific test file or method
 python -m pytest tests/core/test_adaptive_strategy_system.py -v
-python -m pytest tests/trainer/test_llm_multi_turn_context.py -v
-python -m pytest tests/monitoring/test_game_streamer.py -v
-python -m pytest tests/trainer/test_curriculum_learning.py -v
-
-# Run single test method
 python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
-python -m pytest tests/trainer/test_curriculum_learning.py::TestCurriculumManager::test_record_episode_result_advancement -v
 ```
 
 ### Development Setup
@@ -123,15 +121,6 @@ pip install -e .
 # Code formatting and linting
 black .
 flake8
-
-# Run single test file
-python -m pytest tests/core/test_specific_file.py -v
-
-# Run specific test method
-python -m pytest tests/core/test_file.py::TestClass::test_method -v
-
-# Run tests with coverage
-python -m pytest tests/ --cov=. --cov-report=html
 ```
 
 ### LLM Setup (Required for LLM features)
@@ -249,7 +238,7 @@ python3 examples/run_hybrid_llm_rl_training.py roms/pokemon_crystal.gbc \
   - **System diagnostics** - Response times, memory usage, GPU utilization
   - **WebSocket-powered live updates** with 60fps dashboard refresh
 - Located in `web_dashboard/` with unified server architecture
-- **REST API**: Complete programmatic interface at `/api/v1/` with endpoints for:
+- **REST API**: Complete programmatic interface at `/api/v1/` - see [API.md](API.md) for full documentation
   - Training session management (`/training/sessions`)
   - Multi-agent control (`/agents`)
   - Plugin system management (`/plugins`)
@@ -268,11 +257,17 @@ python3 examples/run_hybrid_llm_rl_training.py roms/pokemon_crystal.gbc \
 - Strategic context building for prompts
 
 ### Reward System
+- **Component-based architecture** - Modular reward components in `rewards/components/`
+  - `progress.py` - Health, level, and badge rewards
+  - `movement.py` - Exploration, movement, and blocked movement penalties
+  - `interaction.py` - Battle, dialogue, money, and progression rewards
+- Main calculator (`rewards/calculator.py` - 124 lines) orchestrates components
 - Multi-factor rewards: health, leveling, badges, money, exploration, battles
 - Progressive scaling with bigger rewards for major milestones
 - Smart health logic that only applies when player has Pokemon
 - Early game focus with special rewards for getting first Pokemon
 - **Plugin-based rewards** - Modular reward calculators with different focuses
+- **Recent refactoring (2025-10-04)**: Removed 556 lines of duplicate code (81% reduction)
 
 ### Save State Library & Curriculum Learning
 
@@ -321,7 +316,12 @@ python3 -m training.curriculum_learning
 Edit `config/memory_addresses.py` to add new memory locations and update `core/memory_map.py` for derived calculations.
 
 ### Customizing Rewards
-Modify `rewards/calculator.py` or the PokemonRewardCalculator class to add custom reward logic.
+The reward system uses a component-based architecture. To customize rewards:
+1. Modify existing components in `rewards/components/` (progress, movement, interaction)
+2. Create new reward components by extending `RewardComponent` base class
+3. Register new components in `PokemonRewardCalculator.__init__()` in `rewards/calculator.py`
+
+The main calculator file (`rewards/calculator.py`) should only contain orchestration logic - keep component implementations in separate files.
 
 ### Extending LLM Prompts
 Update prompt building methods in LLM trainer classes to customize AI decision-making context.
@@ -371,6 +371,7 @@ This project is in active development with major systems completed (2024-2025):
 
 ### Current Development Branch
 Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.
+Last updated: October 2025
 
 ### Critical Requirements
 - Legal Pokemon Crystal ROM file placed in the `roms/` directory
@@ -439,4 +440,3 @@ Currently on `learn_to_play` branch with ongoing improvements. Main branch is `m
 **Issue**: Memory debug shows empty data
 - **Check**: PyBoy instance accessibility and save state loading
 - **Solution**: Ensure save state file exists and loads properly
-- Always priorize improving existing code rather than duplicating logic.

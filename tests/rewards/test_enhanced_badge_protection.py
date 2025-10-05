@@ -140,8 +140,10 @@ class TestEnhancedBadgeProtection:
             'player_level': 5
         }
 
-        reward = self.calculator._calculate_badge_reward(current, previous)
-        assert reward == 0.0
+        # Test through the component-based calculator interface
+        total_reward, details = self.calculator.calculate_reward(current, previous)
+        # Badge reward should be 0 (blocked), only time penalty present
+        assert details.get('badge_earned', 0.0) == 0.0
 
     def test_main_calculator_blocks_no_level(self):
         """Main calculator should block badge rewards when player_level = 0."""
@@ -160,8 +162,10 @@ class TestEnhancedBadgeProtection:
             'player_level': 0
         }
 
-        reward = self.calculator._calculate_badge_reward(current, previous)
-        assert reward == 0.0
+        # Test through the component-based calculator interface
+        total_reward, details = self.calculator.calculate_reward(current, previous)
+        # Badge reward should be 0 (blocked), only time penalty present
+        assert details.get('badge_earned', 0.0) == 0.0
 
     def test_main_calculator_blocks_memory_corruption(self):
         """Main calculator should block badge rewards with memory corruption indicators."""
@@ -180,11 +184,16 @@ class TestEnhancedBadgeProtection:
             'player_level': 0
         }
 
-        reward = self.calculator._calculate_badge_reward(current, previous)
-        assert reward == 0.0
+        # Test through the component-based calculator interface
+        total_reward, details = self.calculator.calculate_reward(current, previous)
+        # Badge reward should be 0 (blocked), only time penalty present
+        assert details.get('badge_earned', 0.0) == 0.0
 
     def test_main_calculator_allows_valid_badges(self):
         """Main calculator should allow rewards for valid badge progression."""
+        self.calculator.last_screen_state = 'overworld'
+        self.calculator.prev_screen_state = 'overworld'
+
         current = {
             'badges_total': 1,
             'badges': 1,
@@ -200,11 +209,16 @@ class TestEnhancedBadgeProtection:
             'player_level': 15
         }
 
-        reward = self.calculator._calculate_badge_reward(current, previous)
-        assert reward == 500.0  # 1 badge * 500.0
+        # Test through the component-based calculator interface
+        total_reward, details = self.calculator.calculate_reward(current, previous)
+        # Should include badge reward
+        assert details.get('badge_earned', 0.0) == 500.0
 
     def test_milestone_prevention(self):
         """Both systems should prevent duplicate badge rewards for same milestone."""
+        self.calculator.last_screen_state = 'overworld'
+        self.calculator.prev_screen_state = 'overworld'
+
         current = {
             'badges_total': 1,
             'badges': 1,
@@ -221,12 +235,12 @@ class TestEnhancedBadgeProtection:
         }
 
         # First call should give reward
-        reward1 = self.calculator._calculate_badge_reward(current, previous)
-        assert reward1 == 500.0
+        total_reward1, details1 = self.calculator.calculate_reward(current, previous)
+        assert details1.get('badge_earned', 0.0) == 500.0
 
         # Second call with same milestone should give no reward
-        reward2 = self.calculator._calculate_badge_reward(current, previous)
-        assert reward2 == 0.0
+        total_reward2, details2 = self.calculator.calculate_reward(current, previous)
+        assert details2.get('badge_earned', 0.0) == 0.0
 
     def test_realistic_corruption_scenario(self):
         """Test realistic memory corruption scenario from logs."""
@@ -252,7 +266,8 @@ class TestEnhancedBadgeProtection:
 
         # Both systems should block this
         component_reward, _ = self.component.calculate(current, previous)
-        calculator_reward = self.calculator._calculate_badge_reward(current, previous)
+        total_reward, details = self.calculator.calculate_reward(current, previous)
+        calculator_badge_reward = details.get('badge_earned', 0.0)
 
         assert component_reward == 0.0
-        assert calculator_reward == 0.0
+        assert calculator_badge_reward == 0.0

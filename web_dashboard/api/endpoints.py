@@ -186,6 +186,30 @@ class UnifiedApiEndpoints:
             return GameStateModel()
 
         try:
+            # Check for HybridLLMRLTrainer with environment
+            if hasattr(self.trainer, 'env') and self.trainer.env:
+                try:
+                    # Get current game state from environment
+                    game_state = self.trainer.env._read_game_state()
+
+                    # Extract position
+                    position = {"x": game_state.get('x', 0), "y": game_state.get('y', 0)}
+
+                    return GameStateModel(
+                        current_map=game_state.get('map_id', 0),
+                        player_position=position,
+                        money=game_state.get('money', 0),
+                        badges_earned=game_state.get('badges', 0),
+                        party_count=game_state.get('party_count', 0),
+                        player_level=game_state.get('level', 0),
+                        hp_current=game_state.get('hp_current', 0),
+                        hp_max=game_state.get('hp_max', 0),
+                        in_battle=game_state.get('in_battle', False),
+                        facing_direction=game_state.get('facing_direction', 0)
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Could not get game state from hybrid trainer env: {e}")
+
             # Get game state from statistics tracker
             tracker = None
             if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
@@ -258,7 +282,32 @@ class UnifiedApiEndpoints:
             return TrainingStatsModel()
 
         try:
-            # Try both possible attribute names for compatibility
+            # Check for HybridLLMRLTrainer
+            if hasattr(self.trainer, 'total_actions') and hasattr(self.trainer, 'current_episode'):
+                # Calculate session duration
+                start_time = getattr(self.trainer, 'start_time', time.time())
+                session_duration = time.time() - start_time
+
+                # Get episode metrics if available
+                episode_metrics = getattr(self.trainer, 'episode_metrics', [])
+                total_reward = sum(ep.get('total_reward', 0) for ep in episode_metrics[-20:])
+                recent_rewards = [ep.get('total_reward', 0) for ep in episode_metrics[-10:]]
+
+                # Calculate actions per second
+                actions_per_second = self.trainer.total_actions / max(session_duration, 1.0)
+
+                return TrainingStatsModel(
+                    total_actions=self.trainer.total_actions,
+                    actions_per_second=actions_per_second,
+                    llm_decisions=getattr(self.trainer, 'llm_decisions_count', 0),
+                    total_reward=total_reward,
+                    session_duration=session_duration,
+                    success_rate=0.0,  # Could be calculated from episode success rates
+                    exploration_rate=getattr(self.trainer, 'exploration_rate', 0.0),
+                    recent_rewards=recent_rewards
+                )
+
+            # Try both possible attribute names for compatibility with other trainer types
             tracker = None
             if hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker:
                 tracker = self.trainer.stats_tracker
@@ -288,6 +337,23 @@ class UnifiedApiEndpoints:
             return MemoryDebugModel()
 
         try:
+            # Check for HybridLLMRLTrainer with environment
+            if hasattr(self.trainer, 'env') and self.trainer.env:
+                try:
+                    # Get PyBoy instance from environment
+                    pyboy_instance = getattr(self.trainer.env, 'pyboy', None)
+                    if pyboy_instance:
+                        # Get current game state as memory debug info
+                        game_state = self.trainer.env._read_game_state()
+                        return MemoryDebugModel(
+                            memory_addresses=game_state,
+                            memory_read_success=True,
+                            pyboy_available=True,
+                            cache_info={"source": "hybrid_trainer_env", "trainer_type": "HybridLLMRLTrainer"}
+                        )
+                except Exception as e:
+                    self.logger.debug(f"Could not get memory debug from hybrid trainer: {e}")
+
             # Try to get PyBoy instance - check multiple possible attribute paths
             pyboy_instance = None
             memory_reader = None
@@ -374,21 +440,25 @@ class UnifiedApiEndpoints:
 
         try:
             if self.trainer:
-                # Check multiple ways to determine if training is active
-                training_active = (
-                    (hasattr(self.trainer, 'training_active') and self.trainer.training_active) or
-                    # Infer from statistics tracker activity
-                    (hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker and
-                     self.trainer.stats_tracker.get_current_stats().get('total_actions', 0) > 0) or
-                    (hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker and
-                     self.trainer.statistics_tracker.get_current_stats().get('total_actions', 0) > 0)
-                )
+                # Check for HybridLLMRLTrainer
+                if hasattr(self.trainer, 'is_training') and hasattr(self.trainer, 'total_actions'):
+                    training_active = self.trainer.is_training or self.trainer.total_actions > 0
+                # Check multiple ways to determine if training is active for other trainer types
+                else:
+                    training_active = (
+                        (hasattr(self.trainer, 'training_active') and self.trainer.training_active) or
+                        # Infer from statistics tracker activity
+                        (hasattr(self.trainer, 'stats_tracker') and self.trainer.stats_tracker and
+                         self.trainer.stats_tracker.get_current_stats().get('total_actions', 0) > 0) or
+                        (hasattr(self.trainer, 'statistics_tracker') and self.trainer.statistics_tracker and
+                         self.trainer.statistics_tracker.get_current_stats().get('total_actions', 0) > 0)
+                    )
 
             # Check for web monitor - try multiple attribute names
             if hasattr(self.trainer, 'web_monitor') and self.trainer.web_monitor:
                 websocket_connections = getattr(self.trainer.web_monitor, 'active_connections', 0)
             elif hasattr(self.trainer, 'websocket_handler') and self.trainer.websocket_handler:
-                websocket_connections = getattr(self.trainer.websocket_handler, 'connection_count', 0)
+                websocket_connections = len(getattr(self.trainer.websocket_handler, 'connected_clients', set()))
 
         except Exception as e:
             self.logger.warning(f"Could not get system status: {e}")
