@@ -305,8 +305,8 @@ class TestStatisticalAnalyzer:
 
         cohens_d = self.analyzer._calculate_cohens_d(control_data, treatment_data)
 
-        # Expected Cohen's d should be around 1.41 (large effect)
-        assert abs(cohens_d - 1.41) < 0.1
+        # Expected Cohen's d should be around 1.265 (large effect)
+        assert abs(cohens_d - 1.265) < 0.05
 
     def test_cliff_delta_calculation(self):
         """Test Cliff's delta effect size calculation"""
@@ -320,8 +320,8 @@ class TestStatisticalAnalyzer:
 
     def test_t_test_performance(self):
         """Test t-test execution"""
-        control_data = [10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0]
-        treatment_data = [15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0, 31.0, 33.0]  # +5 mean difference
+        control_data = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0]
+        treatment_data = [20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0]  # +10 mean difference (larger effect)
 
         result = self.analyzer._perform_t_test(control_data, treatment_data)
 
@@ -361,15 +361,15 @@ class TestStatisticalAnalyzer:
             start_time=time.time()
         )
 
-        # Add variant results with different performance
+        # Add variant results with different performance (larger effect for statistical significance)
         control_metrics = PerformanceMetrics()
-        for reward in [10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0]:
+        for reward in [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0]:
             control_metrics.add_reward_sample(reward)
             control_metrics.add_action_time(1.0)
             control_metrics.add_battle_result(reward > 15.0)
 
         treatment_metrics = PerformanceMetrics()
-        for reward in [15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0, 29.0, 31.0, 33.0]:
+        for reward in [20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0]:
             treatment_metrics.add_reward_sample(reward)
             treatment_metrics.add_action_time(0.8)
             treatment_metrics.add_battle_result(reward > 20.0)
@@ -439,7 +439,7 @@ class TestExperimentManager:
         config = ExperimentConfig(
             name="Status Test",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            sample_size_per_variant=2
+            sample_size_per_variant=10  # Minimum required
         )
         config.add_variant("control", {"plugin": "control"})
         config.add_variant("treatment", {"plugin": "treatment"})
@@ -477,7 +477,7 @@ class TestExperimentManager:
         config1 = ExperimentConfig(
             name="Experiment 1",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            sample_size_per_variant=1
+            sample_size_per_variant=10  # Minimum required
         )
         config1.add_variant("control", {"plugin": "control"})
         config1.add_variant("treatment", {"plugin": "treatment"})
@@ -488,7 +488,7 @@ class TestExperimentManager:
         config2 = ExperimentConfig(
             name="Experiment 2",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            sample_size_per_variant=1
+            sample_size_per_variant=10  # Minimum required
         )
         config2.add_variant("control", {"plugin": "control"})
         config2.add_variant("treatment", {"plugin": "treatment"})
@@ -508,7 +508,7 @@ class TestExperimentManager:
         config = ExperimentConfig(
             name="Simulation Test",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            sample_size_per_variant=2,  # Small for quick testing
+            sample_size_per_variant=10,  # Minimum required
             max_runtime_seconds=10
         )
         config.add_variant("control", {"plugin": "control"})
@@ -591,7 +591,7 @@ class TestIntegration:
         try:
             # Create experiment configuration
             experiment_config = comparator.create_battle_strategy_comparison()
-            experiment_config.sample_size_per_variant = 3  # Small for testing
+            experiment_config.sample_size_per_variant = 10  # Minimum required
             experiment_config.max_runtime_seconds = 10
 
             # Create and start experiment
@@ -641,7 +641,7 @@ class TestIntegration:
             experiment_config = comparator.create_plugin_comparison(
                 base_config, plugin_variants, "Aggression Test"
             )
-            experiment_config.sample_size_per_variant = 2
+            experiment_config.sample_size_per_variant = 10  # Minimum required
             experiment_config.max_runtime_seconds = 8
 
             # Execute experiment

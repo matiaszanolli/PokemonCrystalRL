@@ -858,16 +858,21 @@ class TestPluginSystemIntegration:
     @patch('time.time')
     def test_plugin_performance_tracking(self, mock_time):
         """Test plugin performance tracking across multiple calls"""
-        mock_time.return_value = 1000.0
+        current_time = [1000.0]  # Use list for mutable state
+
+        def mock_time_fn():
+            return current_time[0]
+
+        mock_time.side_effect = mock_time_fn
 
         plugin = TestBattleStrategyImpl()
         plugin.initialize()
 
         # Simulate multiple plugin calls
         for i in range(10):
-            mock_time.return_value = 1000.0 + i * 0.1
-            start_time = mock_time.return_value
+            start_time = current_time[0]
             plugin.recommend_move({}, [])
+            current_time[0] += 0.1  # Advance time by 0.1 seconds
             plugin._track_performance("recommend_move", start_time)
 
         stats = plugin.performance_stats

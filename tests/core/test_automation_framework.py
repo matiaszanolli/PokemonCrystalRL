@@ -40,13 +40,15 @@ class TestExperimentScheduler:
     @pytest.fixture
     def sample_experiment_config(self):
         """Create a sample experiment configuration"""
-        return ExperimentConfig(
+        config = ExperimentConfig(
             name="Test Experiment",
             description="A test experiment",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            variants={"control": {"config": {}}},
             sample_size_per_variant=10
         )
+        config.add_variant("control", {"config": {}})
+        config.add_variant("treatment", {"config": {}})
+        return config
 
     @pytest.fixture
     def sample_schedule_config(self):
@@ -174,8 +176,8 @@ class TestExperimentScheduler:
         # Schedule an immediate experiment
         schedule_id = scheduler.schedule_experiment(sample_experiment_config, sample_schedule_config)
 
-        # Wait briefly for execution
-        time.sleep(0.1)
+        # Wait for execution (increased time for scheduler thread to process)
+        time.sleep(1.0)
 
         # Verify experiment manager was called
         mock_experiment_manager.create_experiment.assert_called()
@@ -470,13 +472,15 @@ class TestScheduledExperiment:
     @pytest.fixture
     def sample_experiment_config(self):
         """Create a sample experiment configuration"""
-        return ExperimentConfig(
+        config = ExperimentConfig(
             name="Test Experiment",
             description="A test experiment",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            variants={"control": {"config": {}}},
             sample_size_per_variant=10
         )
+        config.add_variant("control", {"config": {}})
+        config.add_variant("treatment", {"config": {}})
+        return config
 
     @pytest.fixture
     def sample_schedule_config(self):

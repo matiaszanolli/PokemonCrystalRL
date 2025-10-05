@@ -67,8 +67,12 @@ class StrategicContextBuilder:
         # Pattern recognition
         self.stuck_patterns = []
         self.successful_patterns = []
+        self.recent_patterns = {}  # Track recent behavioral patterns
         self.location_memory = {}  # Track what we've learned about locations
-        
+
+        # Strategy insights
+        self.strategy_insights = {}
+
         # Action definitions
         self.action_definitions = self._initialize_action_definitions()
         

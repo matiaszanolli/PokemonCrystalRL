@@ -482,25 +482,35 @@ class StatisticalAnalyzer:
         # Find variant with best performance on primary metrics
         variant_scores = {}
 
+        # Get list of variants
+        variant_names = list(experiment_result.variant_results.keys())
+        if len(variant_names) < 2:
+            return None, 0.0
+
+        # Assume first variant is control (common convention)
+        # Effect size > 0 means treatment (second variant) is better
+        # Effect size < 0 means control (first variant) is better
         for variant_name, metrics in experiment_result.variant_results.items():
+            # Start with actual metric values
             score = 0.0
-            significant_metrics = 0
+            count = 0
 
-            # Score based on primary metrics
-            for metric_name, test_result in primary_results.items():
-                if test_result.is_significant and test_result.effect_size > 0:
-                    score += abs(test_result.effect_size)
-                    significant_metrics += 1
+            # Get the actual metric value for this variant
+            if hasattr(metrics, 'total_reward') and metrics.total_reward > 0:
+                score += metrics.total_reward
+                count += 1
 
-            if significant_metrics > 0:
-                variant_scores[variant_name] = score / significant_metrics
+            variant_scores[variant_name] = score / max(count, 1)
 
         if not variant_scores:
             return None, 0.0
 
-        # Get best variant
+        # Get best variant based on actual performance
         winner = max(variant_scores.keys(), key=lambda k: variant_scores[k])
-        confidence = min(0.99, variant_scores[winner])  # Cap at 99%
+
+        # Calculate confidence from effect sizes
+        total_effect = sum(abs(r.effect_size) for r in primary_results.values() if r.is_significant)
+        confidence = min(0.99, total_effect / max(len(primary_results), 1))  # Cap at 99%
 
         return winner, confidence
 

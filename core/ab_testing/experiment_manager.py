@@ -459,8 +459,9 @@ class ExperimentManager(EventSubscriber):
         for experiment_id in active_experiments:
             self.stop_experiment(experiment_id)
 
-        # Wait for threads to complete
-        for thread in self.experiment_threads.values():
+        # Wait for threads to complete (make copy of dict values to avoid runtime modification issues)
+        threads = list(self.experiment_threads.values())
+        for thread in threads:
             if thread.is_alive():
                 thread.join(timeout=5.0)
 

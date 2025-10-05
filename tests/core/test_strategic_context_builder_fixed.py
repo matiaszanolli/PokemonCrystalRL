@@ -243,15 +243,18 @@ class TestStrategicContextBuilderAdvanced:
     def test_prompt_building_quality(self, advanced_builder, complex_analysis):
         """Test LLM prompt building"""
         consequences = {'a': ActionConsequence('a', 'Attack', 'medium', 'high', 'high')}
+        emergency_actions = []
         goals = ['Win gym battle', 'Maintain Pokemon health']
 
-        prompts = advanced_builder._build_prompts(complex_analysis, consequences, goals)
+        prompts = advanced_builder._build_prompts(complex_analysis, consequences, emergency_actions, goals)
 
         assert isinstance(prompts, dict)
-        assert 'context_prompt' in prompts
-        assert 'decision_prompt' in prompts
-        assert len(prompts['context_prompt']) > 50  # Should be substantial
-        assert len(prompts['decision_prompt']) > 30
+        assert 'context' in prompts
+        assert 'situation' in prompts
+        assert 'guidance' in prompts
+        assert 'complete' in prompts
+        assert len(prompts['context']) > 50  # Should be substantial
+        assert len(prompts['situation']) > 30
 
     def test_adaptive_action_integration(self, advanced_builder, complex_analysis):
         """Test integration with adaptive strategy system"""
