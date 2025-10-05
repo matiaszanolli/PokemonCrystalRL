@@ -35,7 +35,9 @@ class TestExperimentScheduler:
     @pytest.fixture
     def scheduler(self, mock_experiment_manager):
         """Create an ExperimentScheduler instance for testing"""
-        return ExperimentScheduler(mock_experiment_manager)
+        # Configure with short check interval for faster testing
+        config = {'check_interval_seconds': 0.1}
+        return ExperimentScheduler(mock_experiment_manager, config=config)
 
     @pytest.fixture
     def sample_experiment_config(self):

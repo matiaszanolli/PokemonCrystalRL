@@ -615,11 +615,16 @@ class AdaptiveStrategySystem:
         """Evaluate performance and adapt strategy (for compatibility with tests)"""
         episode_reward = metrics.get('episode_reward', 0)
         llm_usage_rate = metrics.get('llm_usage_rate', 0.5)
-        
+
         # Record outcome based on metrics
         led_to_progress = episode_reward > 10.0
         was_effective = episode_reward > 0
         self.record_outcome(episode_reward, led_to_progress, was_effective)
+
+    def update_performance_metrics(self, agent: str, reward: float):
+        """Update performance metrics for an agent (compatibility method for tests)"""
+        # Convert to evaluate_performance format
+        self.evaluate_performance({'episode_reward': reward, 'agent': agent})
     
     def get_strategy_stats(self) -> Dict[str, Any]:
         """Get statistics about strategy performance"""
