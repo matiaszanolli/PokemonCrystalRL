@@ -129,17 +129,25 @@ sequenceDiagram
 ```
 
 ### 3. Error Handling Flow
+
+**Note**: As of October 2025, the error handling system has been refactored into a modular package at `monitoring/error_handling/` with separate modules for types, decorators, circuit breaker, memory monitor, and the main handler. See CLAUDE.md for details.
+
 ```mermaid
 sequenceDiagram
     participant Component
     participant ErrorHandler
+    participant CircuitBreaker
     participant Logger
     participant Monitor
+    participant DataBus
     participant Admin
 
     Component->>ErrorHandler: Report error
+    ErrorHandler->>CircuitBreaker: Record error
+    CircuitBreaker-->>ErrorHandler: Check if broken
     ErrorHandler->>Logger: Log error
-    ErrorHandler->>Monitor: Update status
+    ErrorHandler->>DataBus: Publish error notification
+    DataBus->>Monitor: Update status
     Monitor->>Admin: Notify if critical
 ```
 

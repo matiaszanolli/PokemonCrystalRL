@@ -65,7 +65,8 @@ class TestStrategicContextBuilderCore:
         assert hasattr(context_builder, 'game_state_analyzer')
         assert hasattr(context_builder, 'goal_planner')
         assert hasattr(context_builder, 'adaptive_strategy')
-        assert isinstance(context_builder.decision_history, list)
+        assert hasattr(context_builder, 'action_history')
+        assert hasattr(context_builder, 'reward_history')
 
     def test_action_definitions_structure(self, context_builder):
         """Test action definitions structure and content"""
@@ -80,7 +81,7 @@ class TestStrategicContextBuilderCore:
         for action in expected_actions:
             assert action in action_defs
             assert 'description' in action_defs[action]
-            assert 'contexts' in action_defs[action]
+            assert 'typical_outcome' in action_defs[action]
 
     def test_build_context_basic_functionality(self, context_builder, sample_analysis):
         """Test basic build_context functionality"""
@@ -88,7 +89,7 @@ class TestStrategicContextBuilderCore:
         context_builder.game_state_analyzer.analyze.return_value = sample_analysis
 
         # Mock goal planner to return simple goals
-        mock_goals = [Mock(id="test_goal", name="Test Goal", description="Test", progress=0.5)]
+        mock_goals = [Mock(id="test_goal", name="Test Goal", description="Test", progress=0.5, progress_percentage=50.0)]
         context_builder.goal_planner.evaluate_goals.return_value = mock_goals
 
         game_state = {'player_hp': 75, 'player_max_hp': 100}
@@ -102,7 +103,7 @@ class TestStrategicContextBuilderCore:
         assert context.current_analysis == sample_analysis
         assert isinstance(context.action_consequences, dict)
         assert isinstance(context.strategic_goals, list)
-        assert len(context.decision_history) >= 0
+        assert len(context.recent_actions) >= 0
 
     def test_action_consequence_prediction(self, context_builder, sample_analysis):
         """Test action consequence prediction"""
@@ -117,7 +118,7 @@ class TestStrategicContextBuilderCore:
                 consequence = consequences[action]
                 assert isinstance(consequence, ActionConsequence)
                 assert consequence.action == action
-                assert isinstance(consequence.predicted_outcome, str)
+                assert isinstance(consequence.likely_outcome, str)
                 assert isinstance(consequence.risk_level, str)
 
     def test_pattern_recognition(self, context_builder, sample_analysis):
@@ -159,8 +160,8 @@ class TestStrategicContextBuilderCore:
         """Test strategic goal determination"""
         # Mock goal planner to return iterable goals
         mock_goals = [
-            Mock(id="goal1", name="Reach City", description="Get to next city", progress=0.3),
-            Mock(id="goal2", name="Level Up", description="Level up Pokemon", progress=0.7)
+            Mock(id="goal1", name="Reach City", description="Get to next city", progress=0.3, progress_percentage=30.0),
+            Mock(id="goal2", name="Level Up", description="Level up Pokemon", progress=0.7, progress_percentage=70.0)
         ]
         context_builder.goal_planner.evaluate_goals.return_value = mock_goals
 
@@ -185,8 +186,8 @@ class TestStrategicContextBuilderCore:
             context_builder.build_context(game_state, action, i * 0.5)
 
         # Verify history is being tracked
-        assert len(context_builder.decision_history) > 0
-        assert len(context_builder.decision_history) <= context_builder.max_history
+        assert len(context_builder.action_history) > 0
+        assert len(context_builder.action_history) <= context_builder.max_history
 
 
 class TestStrategicContextBuilderAdvanced:
@@ -272,7 +273,7 @@ class TestStrategicContextBuilderAdvanced:
     def test_goal_statistics_tracking(self, advanced_builder, complex_analysis):
         """Test goal achievement statistics"""
         # Mock goal with progress tracking
-        mock_goal = Mock(id="test_goal", progress=0.5, name="Test Goal")
+        mock_goal = Mock(id="test_goal", progress=0.5, progress_percentage=50.0, name="Test Goal", description="Test Goal")
         advanced_builder.goal_planner.evaluate_goals.return_value = [mock_goal]
 
         goals = advanced_builder._determine_strategic_goals(complex_analysis)
@@ -416,7 +417,7 @@ class TestStrategicContextBuilderEdgeCases:
             edge_case_builder.build_context(game_state, 'up', 0.1)
 
         # Should limit history size
-        assert len(edge_case_builder.decision_history) <= edge_case_builder.max_history
+        assert len(edge_case_builder.action_history) <= edge_case_builder.max_history
 
     def test_component_failure_resilience(self, edge_case_builder):
         """Test resilience to component failures"""
@@ -441,14 +442,14 @@ class TestActionConsequenceDataclass:
         """Test ActionConsequence creation and validation"""
         consequence = ActionConsequence(
             action='up',
-            predicted_outcome='Move north',
+            likely_outcome='Move north',
             risk_level='low',
             reward_potential='medium',
             strategic_value='high'
         )
 
         assert consequence.action == 'up'
-        assert consequence.predicted_outcome == 'Move north'
+        assert consequence.likely_outcome == 'Move north'
         assert consequence.risk_level == 'low'
         assert consequence.reward_potential == 'medium'
         assert consequence.strategic_value == 'high'
@@ -458,14 +459,14 @@ class TestActionConsequenceDataclass:
         # Test with minimal data
         minimal_consequence = ActionConsequence(
             action='a',
-            predicted_outcome='Press A button',
+            likely_outcome='Press A button',
             risk_level='unknown',
             reward_potential='unknown',
             strategic_value='unknown'
         )
 
         assert minimal_consequence.action == 'a'
-        assert isinstance(minimal_consequence.predicted_outcome, str)
+        assert isinstance(minimal_consequence.likely_outcome, str)
 
 
 class TestDecisionContextDataclass:
@@ -497,19 +498,24 @@ class TestDecisionContextDataclass:
 
         context = DecisionContext(
             current_analysis=sample_analysis,
+            recent_actions=[],
+            recent_rewards=[],
+            stuck_patterns=[],
+            successful_patterns=[],
             action_consequences=consequences,
+            emergency_actions=[],
             strategic_goals=['Level up Pokemon'],
-            decision_history=[],
-            llm_prompts={'context': 'Test context'},
-            strategy_insights={'current': 'balanced'}
+            situation_prompt='Test situation',
+            context_prompt='Test context',
+            guidance_prompt='Test guidance',
+            complete_prompt='Test complete'
         )
 
         assert context.current_analysis == sample_analysis
         assert context.action_consequences == consequences
         assert 'Level up Pokemon' in context.strategic_goals
-        assert isinstance(context.decision_history, list)
-        assert isinstance(context.llm_prompts, dict)
-        assert isinstance(context.strategy_insights, dict)
+        assert isinstance(context.recent_actions, list)
+        assert isinstance(context.recent_rewards, list)
 
 
 if __name__ == "__main__":

@@ -111,9 +111,23 @@ python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrate
 ```
 
 ### Development Setup
+
+**IMPORTANT**: Always use the `pokemon-3.11.11` pyenv virtualenv for all Python commands.
+
 ```bash
+# If virtualenv is broken (missing pip), recreate it
+pyenv virtualenv-delete pokemon-3.11.11
+pyenv virtualenv 3.11.11 pokemon-3.11.11
+pyenv activate pokemon-3.11.11
+
+# Activate virtualenv (if not already active)
+pyenv activate pokemon-3.11.11
+
 # Install dependencies
 pip install -r requirements.txt
+
+# Install pytest and coverage tools
+pip install pytest pytest-cov
 
 # Install for development (uses setup.py)
 pip install -e .
@@ -121,6 +135,12 @@ pip install -e .
 # Code formatting and linting
 black .
 flake8
+
+# Run tests
+python3 -m pytest tests/ -vv
+
+# Run tests with coverage
+python3 -m pytest tests/ --cov=. --cov-report=html
 ```
 
 ### LLM Setup (Required for LLM features)
@@ -256,6 +276,61 @@ python3 examples/run_hybrid_llm_rl_training.py roms/pokemon_crystal.gbc \
 - Memory reading utilities in `utils/memory_reader.py`
 - Game state extracted includes HP, level, badges, party data, money, etc.
 - Memory mapping system in `core/memory_map.py` provides derived calculations
+
+### Error Handling System (`monitoring/error_handling/`)
+Modular error handling system with centralized error management, circuit breaking, and recovery strategies.
+
+**Package Structure**:
+- **`types.py`** - Error enums (ErrorSeverity, ErrorCategory, RecoveryStrategy) and data structures (ErrorContext, ErrorEvent)
+- **`decorators.py`** - `@error_boundary` decorator and `SafeOperation` context manager for safe code execution
+- **`circuit_breaker.py`** - Circuit breaker for preventing cascading failures (configurable thresholds and timeouts)
+- **`memory_monitor.py`** - Memory usage tracking, garbage collection, and threshold-based callbacks
+- **`handler.py`** - Main `ErrorHandler` singleton for centralized error management
+
+**Key Features**:
+- **Centralized error handling** with singleton ErrorHandler pattern
+- **Error categorization** by severity (CRITICAL, HIGH, ERROR, MEDIUM, WARNING, INFO) and category (SYSTEM, NETWORK, DATABASE, GAME, TRAINING, MEMORY, PERFORMANCE)
+- **Circuit breaker protection** - Automatically disables components experiencing high error rates
+- **Recovery strategies** - Pluggable recovery mechanisms (RETRY, RESTART, RESET, GRACEFUL_SHUTDOWN, FALLBACK)
+- **Component health tracking** - Monitor registered components and trigger recovery callbacks
+- **Error deduplication** - Prevents duplicate error logging within time windows
+- **Notification system** - Batch error notifications via data bus
+- **Memory monitoring** - Track memory usage and trigger garbage collection
+- **Database integration** - Optional error recording to database
+
+**Usage Examples**:
+```python
+# Import (both old and new styles work)
+from monitoring.error_handler import ErrorHandler, ErrorSeverity  # Old style
+from monitoring.error_handling import ErrorHandler, ErrorSeverity  # New style (recommended)
+
+# Using error boundary decorator
+from monitoring.error_handling import error_boundary
+
+@error_boundary(max_retries=3, category=ErrorCategory.GAME)
+def risky_operation():
+    # Code that might fail
+    pass
+
+# Using SafeOperation context manager
+from monitoring.error_handling import SafeOperation
+
+with SafeOperation("my_component", "data_processing"):
+    # Protected code
+    process_data()
+
+# Manual error handling
+handler = ErrorHandler.get_instance()
+try:
+    risky_code()
+except Exception as e:
+    handler.handle_error(
+        e,
+        severity=ErrorSeverity.HIGH,
+        category=ErrorCategory.TRAINING,
+        component="trainer"
+    )
+```
 
 ### Web Monitoring & REST API
 - **Integrated web dashboards** at http://localhost:8080 (or custom port with --web-port):
@@ -418,6 +493,23 @@ Last updated: October 2025
 - Memory corruption protection and validation systems are in place
 - Web monitoring is integrated directly into training systems
 - Hybrid training combines multiple AI approaches
+
+#### Modular Architecture (2025 Refactoring)
+The codebase has been refactored into modular packages for better maintainability:
+
+**Modular Packages** (backward compatible re-exports):
+- **`core/intelligence/`** - Game intelligence modules (location, progression, battle, inventory, orchestrator)
+  - Old import: `from core.game_intelligence import GameIntelligence`
+  - New import: `from core.intelligence import GameIntelligence`
+- **`plugins/exploration/`** - Exploration pattern plugins (systematic sweep, spiral search, wall following, random walk)
+  - Old import: `from plugins.exploration_patterns import SystematicSweepPattern`
+  - New import: `from plugins.exploration import SystematicSweepPattern`
+- **`monitoring/error_handling/`** - Error handling system (types, decorators, circuit breaker, memory monitor, handler)
+  - Old import: `from monitoring.error_handler import ErrorHandler`
+  - New import: `from monitoring.error_handling import ErrorHandler`
+- **`rewards/components/`** - Reward calculation components (modular reward system)
+
+**Benefits**: Each module has single responsibility, independent testability, and clearer separation of concerns. All old imports still work for backward compatibility.
 
 ## Web Dashboard Troubleshooting
 

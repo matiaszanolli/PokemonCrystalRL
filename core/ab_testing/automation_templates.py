@@ -71,7 +71,7 @@ class AutomationTemplates:
         })
 
         # 2. Exploration Pattern Testing (offset by 2 hours)
-        exploration_config = self.config_comparator.create_exploration_pattern_test()
+        exploration_config = self.config_comparator.create_exploration_pattern_comparison()
         exploration_config.name = f"{base_name} - Exploration Patterns"
         exploration_config.sample_size_per_variant = sample_size // 2  # Faster testing
 
@@ -100,7 +100,7 @@ class AutomationTemplates:
         })
 
         # 3. Plugin Performance Comparison (daily)
-        plugin_config = self.config_comparator.create_plugin_comparison()
+        plugin_config = self.config_comparator.create_battle_strategy_comparison()
         plugin_config.name = f"{base_name} - Plugin Performance"
         plugin_config.sample_size_per_variant = sample_size * 2  # More thorough testing
 
@@ -145,7 +145,7 @@ class AutomationTemplates:
             # Create A/B test comparing baseline vs new config
             experiment_config = ExperimentConfig(
                 name=f"Regression Test {i+1} - {test_config.get('name', f'Config {i+1}')}",
-                experiment_type=ExperimentType.AGENT_COMPARISON,
+                experiment_type=ExperimentType.PLUGIN_COMPARISON,
                 description=f"Regression test comparing baseline against {test_config.get('name', 'new configuration')}",
                 variants={
                     'baseline': baseline_config,
@@ -194,50 +194,64 @@ class AutomationTemplates:
         Returns:
             List of hyperparameter test configurations
         """
+        if parameter_ranges is None or not parameter_ranges:
+            raise ValueError("parameter_ranges must be a non-empty dictionary")
+        if base_config is None:
+            raise ValueError("base_config is required")
+
         sweep_tests = []
 
-        # Generate all parameter combinations
+        # Generate all parameter combinations using itertools.product
+        import itertools
         param_names = list(parameter_ranges.keys())
         param_values = list(parameter_ranges.values())
 
-        # Simple combinatorial generation (could use itertools.product for complex cases)
+        # Full combinatorial generation
         test_count = 0
-        for param_name in param_names:
-            for value in parameter_ranges[param_name]:
-                test_config = base_config.copy()
+        for combination in itertools.product(*param_values):
+            test_config = base_config.copy()
+            for param_name, value in zip(param_names, combination):
                 test_config[param_name] = value
 
-                experiment_config = ExperimentConfig(
-                    name=f"Hyperparameter Sweep - {param_name}={value}",
-                    experiment_type=ExperimentType.PLUGIN_COMPARISON,
-                    description=f"Testing {param_name} = {value}",
-                    variants={
-                        'baseline': base_config,
-                        f'{param_name}_{value}': test_config
-                    },
-                    sample_size_per_variant=sample_size,
-                    max_runtime_seconds=1200,  # 20 minutes
-                    primary_metrics=['total_reward'],
-                    confidence_level=0.90  # Slightly lower for exploratory testing
-                )
+            # Create descriptive name from all parameters
+            param_str = "_".join([f"{name}={val}" for name, val in zip(param_names, combination)])
+            description_str = ", ".join([f"{name} = {val}" for name, val in zip(param_names, combination)])
 
-                # Stagger execution to avoid overload
-                schedule_config = ScheduleConfig(
-                    schedule_type=ScheduleType.DELAYED,
-                    delay_seconds=test_count * 300,  # 5 minute intervals
-                    auto_analyze=True,
-                    auto_archive=True,
-                    max_concurrent=1
-                )
+            experiment_config = ExperimentConfig(
+                name=f"Hyperparameter Sweep - {param_str}",
+                experiment_type=ExperimentType.PLUGIN_COMPARISON,
+                description=f"Testing {description_str}",
+                variants={
+                    'baseline': base_config,
+                    f'sweep_{test_count}': test_config
+                },
+                sample_size_per_variant=sample_size,
+                max_runtime_seconds=1200,  # 20 minutes
+                primary_metrics=['total_reward'],
+                secondary_metrics=['actions_per_second', 'battle_win_rate'],
+                confidence_level=0.90,  # Slightly lower for exploratory testing
+                minimum_effect_size=0.1
+            )
 
-                sweep_tests.append({
-                    'name': f'Sweep {param_name}={value}',
-                    'experiment_config': experiment_config,
-                    'schedule_config': schedule_config,
-                    'description': f'Test hyperparameter {param_name} = {value}'
-                })
+            # Stagger execution to avoid overload
+            schedule_config = ScheduleConfig(
+                schedule_type=ScheduleType.DELAYED,
+                delay_seconds=test_count * 300,  # 5 minute intervals
+                auto_analyze=True,
+                auto_archive=True,
+                max_concurrent=1,
+                retry_on_failure=True,
+                max_retries=3
+            )
 
-                test_count += 1
+            sweep_tests.append({
+                'name': f'Sweep {param_str}',
+                'experiment_config': experiment_config,
+                'schedule_config': schedule_config,
+                'description': f'Test hyperparameter {description_str}'
+            })
+
+            test_count += 1
 
         return sweep_tests
 
@@ -280,7 +294,7 @@ class AutomationTemplates:
         })
 
         # 2. Comprehensive performance validation (triggered by poor quick check results)
-        comprehensive_config = self.config_comparator.create_plugin_comparison()
+        comprehensive_config = self.config_comparator.create_battle_strategy_comparison()
         comprehensive_config.name = "Performance Monitor - Comprehensive"
         comprehensive_config.sample_size_per_variant = 50
         comprehensive_config.max_runtime_seconds = 3600  # 1 hour
@@ -373,30 +387,45 @@ class AutomationTemplates:
 
     def create_custom_workflow(self,
                               workflow_name: str,
-                              experiments: List[ExperimentConfig],
-                              dependencies: List[List[int]] = None,
-                              intervals: List[int] = None) -> List[Dict[str, Any]]:
+                              experiments: List[Dict[str, Any]],
+                              dependencies: Dict[str, List[str]] = None,
+                              intervals: Dict[str, int] = None) -> List[Dict[str, Any]]:
         """
         Create a custom workflow with specified experiments and dependencies.
 
         Args:
             workflow_name: Name for the workflow
-            experiments: List of experiment configurations
-            dependencies: List of dependency lists (experiment indices)
-            intervals: List of delay intervals in seconds
+            experiments: List of experiment dicts with 'name' and 'config' keys
+            dependencies: Dict mapping experiment name to list of dependency names
+            intervals: Dict mapping experiment name to delay interval in seconds
 
         Returns:
             Custom workflow configuration
         """
         if dependencies is None:
-            dependencies = [[] for _ in experiments]
+            dependencies = {}
         if intervals is None:
-            intervals = [0 for _ in experiments]
+            intervals = {}
 
         workflow = []
+        exp_name_to_idx = {exp['name']: i for i, exp in enumerate(experiments)}
 
-        for i, (experiment_config, deps, interval) in enumerate(zip(experiments, dependencies, intervals)):
-            experiment_config.name = f"{workflow_name} - Step {i+1}: {experiment_config.name}"
+        for i, experiment_dict in enumerate(experiments):
+            exp_name = experiment_dict['name']
+            exp_config = experiment_dict.get('config', {})
+
+            # Create ExperimentConfig from dict
+            experiment_config = ExperimentConfig(
+                name=f"{workflow_name} - Step {i+1}: {exp_name}",
+                experiment_type=ExperimentType.PLUGIN_COMPARISON,
+                description=f"Step {i+1} of {workflow_name}",
+                variants={'default': exp_config},
+                sample_size_per_variant=10
+            )
+
+            # Get dependencies for this experiment
+            deps = dependencies.get(exp_name, [])
+            interval = intervals.get(exp_name, 0)
 
             # Determine schedule type based on dependencies and interval
             if deps or interval > 0:
@@ -407,8 +436,9 @@ class AutomationTemplates:
             # Create condition for dependencies
             condition = None
             if deps:
-                completed_deps = " and ".join([f"'{workflow_name} - Step {d+1}' in completed_experiments" for d in deps])
-                condition = completed_deps
+                dep_indices = [exp_name_to_idx.get(dep_name, -1) for dep_name in deps]
+                completed_deps = " and ".join([f"'{workflow_name} - Step {idx+1}' in completed_experiments" for idx in dep_indices if idx >= 0])
+                condition = completed_deps if completed_deps else None
 
             schedule_config = ScheduleConfig(
                 schedule_type=schedule_type,

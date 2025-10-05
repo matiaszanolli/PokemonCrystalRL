@@ -44,8 +44,8 @@ class TestExperimentScheduler:
             name="Test Experiment",
             description="A test experiment",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            variants=[{"name": "control", "config": {}}],
-            sample_size=10
+            variants={"control": {"config": {}}},
+            sample_size_per_variant=10
         )
 
     @pytest.fixture
@@ -359,7 +359,7 @@ class TestAutomationTemplates:
         assert isinstance(workflow, dict)
         assert 'name' in workflow
         assert 'stress' in workflow['name'].lower()
-        assert workflow['experiment_config'].sample_size == 100
+        assert workflow['experiment_config'].sample_size_per_variant == 100
 
     def test_custom_workflow(self, templates):
         """Test custom workflow creation"""
@@ -400,7 +400,7 @@ class TestAutomationTemplates:
         )
 
         assert len(workflows) > 0
-        assert workflows[0]['experiment_config'].sample_size == 1
+        assert workflows[0]['experiment_config'].sample_size_per_variant == 1
 
     def test_template_configuration_consistency(self, templates):
         """Test that template configurations are consistent"""
@@ -412,7 +412,7 @@ class TestAutomationTemplates:
             assert config.name is not None
             assert config.description is not None
             assert config.experiment_type is not None
-            assert config.sample_size > 0
+            assert config.sample_size_per_variant > 0
 
             # All workflows should have proper schedule configs
             schedule = workflow['schedule_config']
@@ -474,8 +474,8 @@ class TestScheduledExperiment:
             name="Test Experiment",
             description="A test experiment",
             experiment_type=ExperimentType.PLUGIN_COMPARISON,
-            variants=[{"name": "control", "config": {}}],
-            sample_size=10
+            variants={"control": {"config": {}}},
+            sample_size_per_variant=10
         )
 
     @pytest.fixture
