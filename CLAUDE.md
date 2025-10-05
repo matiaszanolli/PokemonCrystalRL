@@ -89,6 +89,9 @@ python3 examples/tournament_demo.py
 **Reward system stability**: The reward calculator includes a capped penalty for location revisits to prevent runaway negative rewards. Extended training sessions should show stable ~-0.5 reward per action when the agent is stuck, not escalating penalties.
 
 ### Testing
+
+**Current Status:** 13/27 tests passing (48%) - See [TESTING_ROADMAP.md](TESTING_ROADMAP.md) for detailed status and refactoring plan
+
 ```bash
 # Run all tests
 python -m pytest tests/ -v
@@ -109,6 +112,10 @@ python -m pytest -m "web_monitoring" -v
 python -m pytest tests/core/test_adaptive_strategy_system.py -v
 python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
 ```
+
+**Known Issues:**
+- 8 integration tests in `test_complex_behavioral_workflows.py` need event system refactoring
+- See [TESTING_ROADMAP.md](TESTING_ROADMAP.md) for prioritized fix plan
 
 ### Development Setup
 
