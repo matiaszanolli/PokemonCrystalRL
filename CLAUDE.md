@@ -159,10 +159,34 @@ ollama pull smollm2:1.7b
 - **Configuration validation** - Ensure plugin configs are valid before activation
 
 ### Official Plugin Implementations
-- **Battle Strategies**: Aggressive, Defensive, Balanced with move recommendation and switch assessment
-- **Exploration Patterns**: Systematic sweep, spiral search, wall following, random walk
-- **Reward Calculators**: Progression-focused, battle-focused, exploration-focused, balanced
-- **Plugin coordination** - Multiple plugins work together with priority-based selection
+
+#### Battle Strategies (`plugins/battle_strategies.py`)
+- **Aggressive, Defensive, Balanced** - Move recommendation and switch assessment strategies
+
+#### Exploration Patterns (`plugins/exploration/`)
+Modular exploration pattern implementations with hot-swappable patterns:
+- **SystematicSweepPattern** (`systematic_sweep.py`) - Horizontal sweeping for thorough map coverage
+- **SpiralSearchPattern** (`spiral_search.py`) - Expanding outward search from center point
+- **WallFollowingPattern** (`wall_following.py`) - Boundary exploration following walls (right/left configurable)
+- **RandomWalkPattern** (`random_walk.py`) - Biased random walk toward unexplored areas
+
+All patterns available via backward-compatible imports:
+```python
+# New style (recommended)
+from plugins.exploration import SystematicSweepPattern, SpiralSearchPattern
+
+# Old style (still supported)
+from plugins.exploration_patterns import SystematicSweepPattern, SpiralSearchPattern
+```
+
+#### Reward Calculators (`rewards/components/`)
+Modular component-based reward system:
+- **Progression-focused, battle-focused, exploration-focused, balanced** reward calculators
+- Component architecture in `rewards/components/` with specialized reward components
+
+#### Plugin Coordination
+- Multiple plugins work together with priority-based selection
+- Hot-swappable plugins for runtime configuration changes
 
 ### Tournament Mode - Competitive AI Battles (`core/tournament/`)
 - **TournamentManager** - Complete tournament lifecycle management with A/B testing integration
