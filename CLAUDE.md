@@ -199,11 +199,21 @@ python3 examples/run_hybrid_llm_rl_training.py roms/pokemon_crystal.gbc \
   --max-episodes 50 --enable-web --curriculum-config custom_curriculum.json
 ```
 
-#### **Game Intelligence Module** (`core/game_intelligence.py`)
-- **BattleIntelligence**: Advanced combat analysis with type effectiveness, move evaluation
-- **LocationIntelligence**: Map understanding, navigation optimization, area classification
-- **ProgressIntelligence**: Story progression tracking, objective detection, phase analysis
-- **GameStateAnalyzer**: Comprehensive game state interpretation with contextual analysis
+#### **Game Intelligence Module** (`core/intelligence/`)
+- **Modular architecture** with focused, maintainable modules:
+  - `location.py` - Location analysis, context, and strategic recommendations (136 lines)
+  - `progression.py` - Game phase tracking and objective determination (85 lines)
+  - `battle.py` - Battle strategy, type effectiveness, move recommendations (205 lines)
+  - `inventory.py` - Item management and usage strategies (208 lines)
+  - `orchestrator.py` - GameIntelligence coordinator (164 lines)
+- **Main Classes**:
+  - `LocationAnalyzer`: Map understanding, navigation optimization, area classification
+  - `ProgressTracker`: Story progression tracking, objective detection, phase analysis
+  - `BattleStrategy`: Advanced combat analysis with type effectiveness, move evaluation
+  - `InventoryManager`: Intelligent item usage and inventory management
+  - `GameIntelligence`: Main coordinator for comprehensive game state analysis
+- **Backward compatible**: `core/game_intelligence.py` re-exports all classes
+- **Recent refactoring (2025-10-04)**: Split 763-line monolith into 5 focused modules
 
 #### **Decision Analysis System** (`core/decision_analysis/`)
 - **Decision Database**: Persistent storage of AI decisions with outcome tracking
