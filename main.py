@@ -62,8 +62,55 @@ def setup_logging(log_dir: str) -> None:
         ]
     )
 
-def parse_arguments() -> argparse.Namespace:
-    """Parse command line arguments."""
+def parse_arguments_from_dict(config: Optional[Dict] = None) -> argparse.Namespace:
+    """
+    Parse arguments from dictionary for programmatic access (testing).
+
+    Args:
+        config: Dictionary of configuration values. If None, parses from command line.
+
+    Returns:
+        Parsed arguments namespace
+
+    Example:
+        >>> args = parse_arguments_from_dict({
+        ...     'rom_path': 'test.gbc',
+        ...     'max_actions': 10,
+        ...     'headless': True
+        ... })
+    """
+    parser = _create_argument_parser()
+
+    if config is None:
+        return parser.parse_args()
+
+    # Convert config dict to argument list
+    arg_list = []
+
+    # Add positional argument
+    if 'rom_path' in config:
+        arg_list.append(config['rom_path'])
+
+    # Add optional arguments
+    for key, value in config.items():
+        if key == 'rom_path':
+            continue  # Already added
+
+        # Convert underscore to hyphen for CLI args
+        arg_name = f"--{key.replace('_', '-')}"
+
+        # Handle boolean flags
+        if isinstance(value, bool):
+            if value:
+                arg_list.append(arg_name)
+        else:
+            arg_list.extend([arg_name, str(value)])
+
+    return parser.parse_args(arg_list)
+
+
+def _create_argument_parser() -> argparse.ArgumentParser:
+    """Create and return the argument parser (extracted for reusability)."""
     parser = argparse.ArgumentParser(description="Pokemon Crystal RL Training")
     
     # Required arguments
@@ -121,6 +168,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--log-dir", default="logs", help="Directory for log files")
     parser.add_argument("--quiet", action="store_true", help="Disable progress output")
 
+    return parser
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments (CLI entry point)."""
+    parser = _create_argument_parser()
     return parser.parse_args()
 
 def initialize_training_systems(args: argparse.Namespace) -> Dict:

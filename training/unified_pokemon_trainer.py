@@ -877,7 +877,16 @@ class UnifiedPokemonTrainer:
         if self.emulation_manager:
             return self.emulation_manager.get_instance()
         return None
-    
+
+    @property
+    def is_shutdown(self) -> bool:
+        """Check if trainer is shutdown (for E2E testing)."""
+        return not self.running and self._shutdown_event.is_set()
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get training statistics (alias for E2E testing)."""
+        return self.get_current_stats()
+
     def graceful_shutdown(self):
         """Backward compatibility method."""
         self.stop_training()
