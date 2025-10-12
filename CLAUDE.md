@@ -6,6 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Pokemon Crystal reinforcement learning platform that combines LLM-based decision making with traditional RL training. The system uses PyBoy emulation to train AI agents to play Pokemon Crystal, featuring hybrid LLM-RL training, memory mapping, and real-time web monitoring.
 
+## Quick Reference - Most Used Commands
+
+```bash
+# Testing (ALWAYS use full path to pytest)
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/core/test_ab_testing_framework.py -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ -v --tb=no  # Cleaner output
+
+# Training (ALWAYS use save state!)
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 2000 --enable-web
+
+# LLM Training with monitoring
+python3 main.py roms/pokemon_crystal.gbc --save-state roms/pokemon_crystal.gbc.state --max-actions 500 --llm-model smollm2:1.7b --llm-interval 10 --enable-web
+
+# Clean Python cache (if imports break)
+find . -type d -name __pycache__ -exec rm -r {} + && find . -type f -name "*.pyc" -delete && pip install -e .
+
+# Check Ollama models
+ollama list
+```
+
 ## Core Architecture
 
 ### Primary Entry Points
@@ -92,29 +113,40 @@ python3 examples/tournament_demo.py
 
 **Current Status:** 13/27 tests passing (48%) - See [TESTING_ROADMAP.md](TESTING_ROADMAP.md) for detailed status and refactoring plan
 
+**Test Organization**:
+- **Unit Tests**: Fast, isolated component tests (~500+ planned)
+- **Integration Tests**: Component interaction tests (69 tests, 4435 lines)
+- **E2E Tests**: Full workflow validation - See [E2E_TESTING_PROPOSAL.md](E2E_TESTING_PROPOSAL.md) for implementation plan
+
 ```bash
-# Run all tests
-python -m pytest tests/ -v
+# Run all tests (IMPORTANT: Use full pyenv path)
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ -v
 
 # Run with coverage
-python -m pytest tests/ --cov=. --cov-report=html
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ --cov=. --cov-report=html
 
 # Run specific test categories
-python -m pytest tests/core/ tests/trainer/ tests/monitoring/ -v
-python -m pytest tests/integration/ -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/core/ tests/trainer/ tests/monitoring/ -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/integration/ -v
 
 # Run tests with markers
-python -m pytest -m "unit" -v
-python -m pytest -m "integration" -v
-python -m pytest -m "web_monitoring" -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest -m "unit" -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest -m "integration" -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest -m "web_monitoring" -v
+
+# Run E2E tests (when implemented)
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/e2e -m "e2e_smoke" -v  # Quick smoke tests
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/e2e -m "e2e_medium" -v  # Medium tests
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/e2e -m "e2e_slow" -v  # Long-running tests
 
 # Run specific test file or method
-python -m pytest tests/core/test_adaptive_strategy_system.py -v
-python -m pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/core/test_adaptive_strategy_system.py -v
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/core/test_adaptive_strategy_system.py::TestAdaptiveStrategySystem::test_strategy_switching -v
 ```
 
 **Known Issues:**
 - 8 integration tests in `test_complex_behavioral_workflows.py` need event system refactoring
+- No true end-to-end tests currently exist (proposal in [E2E_TESTING_PROPOSAL.md](E2E_TESTING_PROPOSAL.md))
 - See [TESTING_ROADMAP.md](TESTING_ROADMAP.md) for prioritized fix plan
 
 ### Development Setup
@@ -133,7 +165,7 @@ pyenv activate pokemon-3.11.11
 # Install dependencies
 pip install -r requirements.txt
 
-# Install pytest and coverage tools
+# Install pytest and coverage tools (already in requirements.txt)
 pip install pytest pytest-cov
 
 # Install for development (uses setup.py)
@@ -143,11 +175,17 @@ pip install -e .
 black .
 flake8
 
-# Run tests
-python3 -m pytest tests/ -vv
+# Run tests (IMPORTANT: Use ~/.pyenv/versions/pokemon-3.11.11/bin/pytest for consistency)
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ -v
 
 # Run tests with coverage
-python3 -m pytest tests/ --cov=. --cov-report=html
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ --cov=. --cov-report=html
+
+# Run specific test file
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/core/test_adaptive_strategy_system.py -v
+
+# Run tests with verbose output and no traceback (for cleaner CI output)
+~/.pyenv/versions/pokemon-3.11.11/bin/pytest tests/ -v --tb=no
 ```
 
 ### LLM Setup (Required for LLM features)
@@ -214,6 +252,39 @@ Modular component-based reward system:
 #### Plugin Coordination
 - Multiple plugins work together with priority-based selection
 - Hot-swappable plugins for runtime configuration changes
+
+### A/B Testing Framework (`core/ab_testing/`)
+**Production-ready experimental framework for comparing AI configurations**
+
+- **ExperimentManager** - Complete experiment lifecycle with concurrent execution control
+- **StatisticalAnalyzer** - Rigorous statistical analysis (t-tests, Cohen's d, confidence intervals)
+- **AutomationFramework** - 6 pre-built workflow templates for common testing scenarios
+- **Event Integration** - Publishes experiment events for real-time monitoring
+- **REST API** - Full programmatic control via `/api/v1/experiments` endpoints
+
+**Pre-built Automation Templates**:
+1. **Hyperparameter Sweep** - Systematic parameter grid search
+2. **Weekend Stress Test** - Long-duration stability testing
+3. **Regression Testing Suite** - Validate changes don't break existing functionality
+4. **Custom Workflows** - Build your own experiment sequences
+
+**Usage**:
+```bash
+# Run A/B testing demos
+python3 examples/ab_testing_demo.py
+python3 examples/ab_testing_automation_demo.py
+python3 examples/ab_testing_web_demo.py
+
+# API-based experiment control
+python3 examples/ab_testing_api_test.py
+```
+
+**Key Features**:
+- Concurrent experiment limit (default: 3)
+- Automatic statistical significance testing
+- Minimum sample size validation (10 per variant)
+- Thread-safe experiment tracking
+- Winner determination based on configurable metrics
 
 ### Tournament Mode - Competitive AI Battles (`core/tournament/`)
 - **TournamentManager** - Complete tournament lifecycle management with A/B testing integration
@@ -426,6 +497,43 @@ python3 -m training.curriculum_learning
 - Curriculum config in `curriculum_config.json` with 5-stage progression
 - Supports curriculum learning and adaptive strategy switching
 
+## Important Development Notes
+
+### Pyenv Virtual Environment
+This project **requires** the `pokemon-3.11.11` pyenv virtual environment. Always prefix Python commands with the full path:
+- `~/.pyenv/versions/pokemon-3.11.11/bin/pytest` (not just `pytest`)
+- `~/.pyenv/versions/pokemon-3.11.11/bin/python` (not just `python3`)
+
+This ensures consistency and avoids issues with system Python or other virtual environments.
+
+### Event System Singleton Pattern
+**CRITICAL**: The event system uses a singleton pattern. Always use `get_event_bus()` instead of creating a new `EventBus()` instance:
+```python
+# Correct
+from core.event_system import get_event_bus
+event_bus = get_event_bus()
+
+# Wrong - creates separate instance
+from core.event_system import EventBus
+event_bus = EventBus()  # Don't do this!
+```
+
+### Backward Compatible Imports
+The codebase maintains backward compatibility for imports during the modular refactoring:
+```python
+# Both work (new style preferred):
+from core.intelligence import GameIntelligence
+from core.game_intelligence import GameIntelligence  # Still works
+
+# Both work:
+from plugins.exploration import SystematicSweepPattern
+from plugins.exploration_patterns import SystematicSweepPattern  # Still works
+
+# Both work:
+from monitoring.error_handling import ErrorHandler
+from monitoring.error_handler import ErrorHandler  # Still works
+```
+
 ## Development Patterns
 
 ### Adding New Memory Addresses
@@ -487,7 +595,7 @@ This project is in active development with major systems completed (2024-2025):
 
 ### Current Development Branch
 Currently on `learn_to_play` branch with ongoing improvements. Main branch is `main`.
-Last updated: October 2025
+Last updated: October 2025 (2025-10-11)
 
 ### Critical Requirements
 - Legal Pokemon Crystal ROM file placed in the `roms/` directory
@@ -573,3 +681,71 @@ The codebase has been refactored into modular packages for better maintainabilit
 **Issue**: Memory debug shows empty data
 - **Check**: PyBoy instance accessibility and save state loading
 - **Solution**: Ensure save state file exists and loads properly
+
+## Common Development Pitfalls
+
+### Testing Issues
+
+**Flaky Event System Tests**
+- **Problem**: Events not being received in tests despite being published
+- **Cause**: Multiple event bus instances instead of singleton
+- **Fix**: Always use `get_event_bus()` and add cleanup fixture:
+```python
+@pytest.fixture(autouse=True)
+def reset_event_bus():
+    event_bus = get_event_bus()
+    event_bus.subscribers.clear()
+    yield
+    event_bus.subscribers.clear()
+```
+
+**Statistical Test Failures**
+- **Problem**: A/B testing framework tests fail with significance errors
+- **Cause**: Sample sizes too small (minimum is 10 per variant)
+- **Fix**: Use `sample_size_per_variant: 10` or higher in test configs
+
+**Time-based Test Issues**
+- **Problem**: Tests depending on time.time() failing
+- **Cause**: Immutable mock values
+- **Fix**: Use mutable state in time mocks:
+```python
+time_state = {"current": 0.0}
+mock_time.side_effect = lambda: time_state["current"]
+# Then update: time_state["current"] += 1.0
+```
+
+### Integration Issues
+
+**Import Errors After Refactoring**
+- **Problem**: `ModuleNotFoundError` for recently moved files
+- **Cause**: Stale `__pycache__` or `.pyc` files
+- **Fix**: Clean Python cache and reinstall:
+```bash
+find . -type d -name __pycache__ -exec rm -r {} +
+find . -type f -name "*.pyc" -delete
+pip install -e .
+```
+
+**LLM Decisions Not Executing**
+- **Problem**: LLM makes decisions but game character doesn't move
+- **Cause**: Action string to integer conversion bug (fixed in Oct 2024)
+- **Location**: `training/components/llm_decision_engine.py` has proper action mapping
+- **Verify**: Check logs for "Action mapping: {action_string} -> {action_int}"
+
+**Reward System Giving Huge Negative/Positive Values**
+- **Problem**: Rewards in thousands instead of -0.5 to +500 range
+- **Cause**: Training without save state - memory reads garbage data
+- **Fix**: Always use `--save-state roms/pokemon_crystal.gbc.state` flag
+
+### File Structure Confusion
+
+**Reward Calculator Files**
+The project has THREE different reward-related files with distinct purposes:
+- `rewards/calculator.py` - Main reward calculation logic (use this for game rewards)
+- `core/game_state_extractor.py` - Extracts game state from memory (not a reward calculator)
+- `training/components/training_reward_tracker.py` - Tracks rewards during training pipeline
+
+**Trainer Directory Removed**
+- `trainer/` directory was removed in September 2024
+- Use `training/` directory instead
+- Exception: `tests/trainer/` still exists for testing training components
